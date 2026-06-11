@@ -1,4 +1,3 @@
 {
-  "buildCommand": "git lfs pull && next build",
   "framework": "nextjs"
 }
