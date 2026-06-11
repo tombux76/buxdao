@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-deep: #07080c;
+  --bg-elevated: #0f1117;
+  --bg-surface: #161922;
+  --bg-panel: #1c2030;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-gold: rgba(232, 185, 35, 0.42);
+  --border-gold-strong: rgba(232, 185, 35, 0.68);
+  --text: #f0f2f8;
+  --muted: #8b93a8;
+  --accent-gold: #e8b923;
+  --accent-cyan: #00e5ff;
+  --accent-purple: #8b5cf6;
+  --accent-green: #14f195;
+  --sidebar-width: 260px;
+  --header-height: 56px;
+  --bottom-nav-height: 64px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg-deep: var(--bg-deep);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-panel: var(--bg-panel);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-gold: var(--border-gold);
+  --color-border-gold-strong: var(--border-gold-strong);
+  --color-foreground: var(--text);
+  --color-muted: var(--muted);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-green: var(--accent-green);
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-syne), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(1200px 700px at 0% -20%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
+    radial-gradient(900px 600px at 100% 0%, rgba(0, 229, 255, 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, #0a0b10 0%, var(--bg-deep) 100%);
+  color: var(--text);
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 40s linear infinite;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.tile-border {
+  border: 3px solid var(--border-gold);
+  transition: border-color 0.2s ease;
+}
+
+.tile-border:hover {
+  border-color: var(--border-gold-strong);
+}
+
+.glass-panel {
+  background: rgba(28, 32, 44, 0.88);
+  border: 3px solid var(--border-gold);
+  backdrop-filter: blur(12px);
+  transition: border-color 0.2s ease;
+}
+
+.glass-panel:hover {
+  border-color: var(--border-gold-strong);
+}
+
+.accent-glow-gold {
+  box-shadow: 0 0 40px rgba(232, 185, 35, 0.12);
+}
+
+.accent-glow-cyan {
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.12);
+}
+
+.accent-glow-purple {
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.12);
+}
+
+.accent-glow-green {
+  box-shadow: 0 0 40px rgba(20, 241, 149, 0.12);
+}
+
+/* Wordmark PNG has black backing — keep yellow outlines visible in dark UI */
+.brand-wordmark {
+  color-scheme: light;
+  display: block;
+  height: auto;
 }

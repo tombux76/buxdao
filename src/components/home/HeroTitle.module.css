@@ -1,0 +1,85 @@
+.block {
+  max-width: 38rem;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.28em;
+  row-gap: 0.55em;
+  margin: 0;
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+/* Each word is one flex item — never breaks mid-word */
+.word {
+  display: inline-flex;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.letter {
+  position: relative;
+  display: inline-block;
+  transform: scaleY(1.75);
+  transform-origin: center bottom;
+  animation: letterFloat 4s ease-in-out infinite;
+}
+
+.letter::after {
+  content: "";
+  position: absolute;
+  top: 12%;
+  right: -0.06em;
+  height: 72%;
+  width: 0.34em;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.95), rgba(139, 92, 246, 0.12));
+  filter: blur(6px);
+  pointer-events: none;
+  animation: trailPulse 3s ease-in-out infinite;
+}
+
+.subtitle {
+  margin: 1.25rem 0 0;
+  max-width: 36rem;
+  font-size: clamp(0.95rem, 1.8vw, 1.125rem);
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+@keyframes letterFloat {
+  0%,
+  100% {
+    transform: scaleY(1.75) translateY(0);
+  }
+  50% {
+    transform: scaleY(1.75) translateY(-4px);
+  }
+}
+
+@keyframes trailPulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    filter: blur(5px);
+    width: 0.28em;
+  }
+  50% {
+    opacity: 1;
+    filter: blur(9px);
+    width: 0.44em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .letter,
+  .letter::after {
+    animation: none;
+  }
+}
