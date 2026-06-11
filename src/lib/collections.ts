@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { collectionConfigs, type CollectionConfig } from "@/content/site";
+import { fetchGraveMarketCollectionStats } from "@/lib/gravemarket";
 import { fetchCollectionSupply } from "@/lib/helius";
 import {
   fetchMagicEdenCollection,
@@ -36,29 +37,16 @@ function withStats(
   return { ...config, ...EMPTY_STATS, ...stats };
 }
 
-async function resolveSupply(
+async function enrichFromMagicEdenAndHelius(
   config: CollectionConfig,
-  meSupply?: number,
-): Promise<number | null> {
-  const heliusSupply = await fetchCollectionSupply(config.collectionMint);
-  if (heliusSupply != null) {
-    return heliusSupply;
-  }
-
-  if (meSupply != null && meSupply > 0) {
-    return meSupply;
-  }
-
-  return null;
-}
-
-async function enrichCollection(config: CollectionConfig): Promise<CollectionWithStats> {
+): Promise<CollectionWithStats> {
   const [stats, metadata] = await Promise.all([
     fetchMagicEdenStats(config.magicEdenSymbol),
     fetchMagicEdenCollection(config.magicEdenSymbol),
   ]);
 
-  const supply = await resolveSupply(config, metadata?.totalSupply);
+  const heliusSupply = await fetchCollectionSupply(config.collectionMint);
+  const supply = heliusSupply ?? metadata?.totalSupply ?? null;
   const listed = stats?.listedCount;
 
   if (!stats) {
@@ -77,6 +65,16 @@ async function enrichCollection(config: CollectionConfig): Promise<CollectionWit
     listed: formatCount(listed),
     percentListed: formatPercentListed(listed, supply),
   });
+}
+
+async function enrichCollection(config: CollectionConfig): Promise<CollectionWithStats> {
+  const graveMarketStats = await fetchGraveMarketCollectionStats(config.id);
+
+  if (graveMarketStats) {
+    return withStats(config, graveMarketStats);
+  }
+
+  return enrichFromMagicEdenAndHelius(config);
 }
 
 export const getCollectionsWithStats = cache(async (): Promise<CollectionWithStats[]> => {

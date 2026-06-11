@@ -19,7 +19,7 @@ export default function MerchPage() {
         title={merchContent.title}
         description={merchContent.subtitle}
       />
-      <Card className="border-l-2 border-l-accent-gold">
+      <Card className="border-l-2 border-l-accent-gold p-5">
         <p className="text-sm text-muted">{merchContent.note}</p>
       </Card>
 

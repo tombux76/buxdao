@@ -11,7 +11,7 @@ export default function HubPage() {
         description={hubContent.subtitle}
       />
 
-      <Card className="border-l-2 border-l-[#5865F2]">
+      <Card className="border-l-2 border-l-[#5865F2] p-5">
         <p className="text-sm text-[#5865F2]">{hubContent.verifyBanner}</p>
         <a
           href={site.social.discord}
@@ -27,7 +27,7 @@ export default function HubPage() {
         <SectionHeader eyebrow="Setup" title="How it works" />
         <div className="grid gap-4 md:grid-cols-2">
           {hubContent.steps.map((step) => (
-            <Card key={step.step}>
+            <Card key={step.step} className="p-5">
               <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-accent-purple/20 font-mono text-sm text-accent-purple">
                 {step.step}
               </div>
@@ -38,7 +38,7 @@ export default function HubPage() {
         </div>
       </section>
 
-      <Card glow="purple" className="space-y-4">
+      <Card glow="purple" className="space-y-4 p-5">
         <h3 className="text-lg font-semibold">Your dashboard</h3>
         <p className="text-sm text-muted">{hubContent.note}</p>
 

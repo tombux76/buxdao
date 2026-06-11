@@ -14,7 +14,7 @@ export default function GamesPage() {
         title="Play in the ecosystem"
         description="Casino games embedded on BUXDAO — card games on dedicated platforms."
       />
-      <Card className="border-l-2 border-l-accent-cyan">
+      <Card className="border-l-2 border-l-accent-cyan p-5">
         <p className="text-sm text-muted">
           Casino games will embed here via iframe. Gameplay and wallet integration coming in a
           later phase.

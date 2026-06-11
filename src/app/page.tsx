@@ -32,7 +32,7 @@ export default function HomePage() {
       </section>
 
       <section>
-        <Card glow="purple">
+        <Card glow="purple" className="p-5">
           <h2 className="text-xl font-semibold">{whiteLabel.title}</h2>
           <p className="mt-3 max-w-2xl text-sm text-muted">{whiteLabel.body}</p>
           <a

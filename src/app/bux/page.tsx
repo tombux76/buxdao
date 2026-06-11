@@ -13,7 +13,7 @@ export default function BuxPage() {
     <div className="space-y-12">
       <section>
         <h1 className="text-3xl font-bold md:text-4xl">{buxPage.headline}</h1>
-        <Card className="mt-6 space-y-4">
+        <Card className="mt-6 space-y-4 p-5">
           {buxPage.principles.map((line) => (
             <p key={line} className="text-sm text-muted">
               {line}
@@ -23,7 +23,7 @@ export default function BuxPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <Card glow="gold">
+        <Card glow="gold" className="p-5">
           <h2 className="mb-4 text-xl font-semibold">Token metrics</h2>
           <dl className="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -56,7 +56,7 @@ export default function BuxPage() {
           </p>
         </Card>
 
-        <Card>
+        <Card className="p-5">
           <h2 className="mb-4 text-xl font-semibold">Revenue sources</h2>
           <ul className="space-y-4">
             {buxPage.revenueSources.map((source) => (
@@ -75,7 +75,7 @@ export default function BuxPage() {
           title="Top holders"
           description={buxPage.leaderboardNote}
         />
-        <Card>
+        <Card className="p-5">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row">
             <select
               value={viewType}

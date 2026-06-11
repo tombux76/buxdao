@@ -17,7 +17,7 @@ export function Card({ children, className = "", glow = "none", style }: CardPro
   return (
     <div
       style={style}
-      className={`glass-panel rounded-2xl p-5 ${glowClasses[glow]} ${className}`}
+      className={`glass-panel rounded-2xl ${glowClasses[glow]} ${className}`}
     >
       {children}
     </div>

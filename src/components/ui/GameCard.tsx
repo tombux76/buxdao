@@ -38,20 +38,20 @@ export function GameCard({ game }: GameCardProps) {
   );
 
   if (game.status === "soon" || game.href === "#") {
-    return <Card className="opacity-75">{inner}</Card>;
+    return <Card className="p-5 opacity-75">{inner}</Card>;
   }
 
   if (game.external) {
     return (
       <a href={game.href} target="_blank" rel="noopener noreferrer" className="block">
-        <Card glow="purple">{inner}</Card>
+        <Card glow="purple" className="p-5">{inner}</Card>
       </a>
     );
   }
 
   return (
     <Link href={game.href} className="block">
-      <Card glow="cyan">{inner}</Card>
+      <Card glow="cyan" className="p-5">{inner}</Card>
     </Link>
   );
 }

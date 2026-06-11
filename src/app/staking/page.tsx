@@ -13,7 +13,7 @@ export default function StakingPage() {
         title={stakingContent.title}
         description={stakingContent.subtitle}
       />
-      <Card className="border-l-2 border-l-accent-cyan">
+      <Card className="border-l-2 border-l-accent-cyan p-5">
         <p className="text-sm text-muted">{stakingContent.lockIntro}</p>
         <ul className="mt-3 space-y-1 text-sm text-foreground">
           {stakingContent.lockBonuses.map((bonus) => (
@@ -26,7 +26,7 @@ export default function StakingPage() {
       </Card>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {collections.map((collection) => (
-          <Card key={collection.id}>
+          <Card key={collection.id} className="p-5">
             <div className="mb-4 flex items-center gap-3">
               <div className="tile-border relative h-14 w-14 overflow-hidden rounded-xl">
                 <Image
