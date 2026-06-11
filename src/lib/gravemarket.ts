@@ -9,6 +9,13 @@ export type GraveMarketCollectionStats = {
   percentListed: string;
 };
 
+function toOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return value;
+  }
+  return null;
+}
+
 function formatSolAmount(sol?: number | null): string {
   if (sol == null || Number.isNaN(sol) || sol <= 0) {
     return "— SOL";
@@ -72,14 +79,15 @@ export async function fetchGraveMarketCollectionStats(
       return null;
     }
 
-    const supply = detail.total_supply ?? stats.total_items ?? null;
-    const listed = stats.listed_count ?? detail.total_listed ?? null;
-    const totalVolume =
-      stats.total_volume_all_time ?? stats.total_volume ?? detail.total_volume ?? null;
+    const supply = toOptionalNumber(detail.total_supply ?? stats.total_items);
+    const listed = toOptionalNumber(stats.listed_count ?? detail.total_listed);
+    const totalVolume = toOptionalNumber(
+      stats.total_volume_all_time ?? stats.total_volume ?? detail.total_volume,
+    );
 
     return {
-      floor: formatSolAmount(stats.floor_price ?? detail.floor_price),
-      volume24h: formatSolAmount(stats.volume_24h),
+      floor: formatSolAmount(toOptionalNumber(stats.floor_price ?? detail.floor_price)),
+      volume24h: formatSolAmount(toOptionalNumber(stats.volume_24h)),
       totalVolume: formatSolAmount(totalVolume),
       supply: formatCount(supply),
       listed: formatCount(listed),
