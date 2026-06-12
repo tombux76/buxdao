@@ -22,10 +22,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const metadataBaseUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
   title: `${site.name} — ${site.tagline}`,
   description: site.description,
-  metadataBase: new URL(site.url),
+  metadataBase: new URL(metadataBaseUrl),
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "120x120" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
