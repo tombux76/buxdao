@@ -1,6 +1,5 @@
 import { GameCard } from "@/components/ui/GameCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { Card } from "@/components/ui/Card";
 import { games } from "@/content/site";
 
 export default function GamesPage() {
@@ -12,14 +11,8 @@ export default function GamesPage() {
       <SectionHeader
         eyebrow="Games"
         title="Play in the ecosystem"
-        description="Casino games embedded on BUXDAO — card games on dedicated platforms."
+        description="BUX Casino games run on-site with $BUX. Card games open on dedicated platforms."
       />
-      <Card className="border-l-2 border-l-accent-cyan p-5">
-        <p className="text-sm text-muted">
-          Casino games will embed here via iframe. Gameplay and wallet integration coming in a
-          later phase.
-        </p>
-      </Card>
 
       <section>
         <SectionHeader eyebrow="Casino" title="BUX Casino" description="Play with $BUX." />

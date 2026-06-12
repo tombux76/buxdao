@@ -261,7 +261,7 @@ export const games: Game[] = [
   {
     id: "blackjack",
     name: "Blackjack",
-    status: "live",
+    status: "soon",
     description: "Classic 21 — hit, stand, and beat the dealer.",
     tokens: ["$BUX"],
     href: "/games/blackjack",

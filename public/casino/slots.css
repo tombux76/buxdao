@@ -1,0 +1,2578 @@
+/* Slots Page - same font as app header (Changa One) */
+.slots-page {
+    font-family: "Changa One", system-ui, sans-serif;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100svh;
+    max-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-top: 72px;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100vw;
+}
+
+.slots-page::-webkit-scrollbar {
+    display: none;
+}
+
+.slots-page .navbar {
+    z-index: 1000;
+    position: fixed;
+}
+
+/* Orientation Prompt */
+.orientation-prompt {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.orientation-prompt.show {
+    display: none !important; /* never show – wallet browsers can't rotate */
+}
+
+.orientation-content {
+    text-align: center;
+    color: var(--text-primary);
+}
+
+.orientation-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(90deg); }
+}
+
+.orientation-content h2 {
+    font-size: 32px;
+    margin-bottom: 16px;
+}
+
+.orientation-content p {
+    font-size: 18px;
+    color: var(--text-secondary);
+}
+
+/* Slots Container - same as roulette-container: flex 1, min-height 0, overflow hidden */
+.slots-container {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+    max-width: none;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+    background-image: linear-gradient(rgba(10, 10, 15, 0.72), rgba(10, 10, 15, 0.72)), url('/images/casino-bg2.jpg');
+    background-size: cover;
+    background-position: center top;
+}
+
+/* Mobile/tablet: allow grid rows to shrink so page fits in one viewheight (no scroll) */
+@media (max-height: 900px) {
+    .slot-machine-wrapper {
+        min-height: 0;
+    }
+    .slot-machine-wrapper .game-stats-bar,
+    .slot-machine-wrapper .slot-machine-main,
+    .slot-machine-wrapper .controls-panel {
+        min-height: 0;
+    }
+    .slot-machine-wrapper .controls-panel {
+        min-height: 44px;
+    }
+}
+
+/* Short viewport: reduce padding/gaps so slots fit in one viewheight */
+@media (max-height: 700px) {
+    .slot-machine-wrapper {
+        gap: 0;
+    }
+    .slot-machine-wrapper .game-stats-bar {
+        padding: 4px 8px;
+    }
+    .slot-machine-wrapper .slot-machine-main {
+        padding: 4px 8px;
+    }
+    .slot-machine-wrapper .controls-panel {
+        padding: 6px 8px;
+        min-height: 40px;
+    }
+}
+
+@media (max-width: 600px) {
+    .slots-container {
+        background-position: left top;
+    }
+}
+
+/* Mobile portrait: less gap under header; controls above browser bar */
+@media (max-width: 600px) and (orientation: portrait) {
+    .slots-page {
+        padding-top: 56px;
+        padding-bottom: max(env(safe-area-inset-bottom), 56px);
+    }
+    .slots-container {
+        padding: 2px 6px max(8px, env(safe-area-inset-bottom));
+    }
+    .slot-machine-wrapper .controls-panel {
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+}
+
+/* Mobile / short viewport: no gap above stats, below buttons, or right of content; reels keep height */
+@media (max-width: 600px) and (max-height: 700px) {
+    .slots-page {
+        padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    }
+    .slots-container {
+        padding: 0 !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    .slot-machine-wrapper {
+        display: grid !important;
+        grid-template-rows: 1fr 1fr auto !important;
+        gap: 2px !important;
+    }
+    .slot-machine-wrapper .game-stats-bar {
+        align-self: start !important;
+        padding: 4px 6px !important;
+    }
+    .slot-machine-wrapper .controls-panel {
+        align-self: end !important;
+        padding: 4px 6px 0 !important;
+    }
+}
+
+.slot-machine-wrapper {
+    width: 100%;
+    max-width: 100vw;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 2px;
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    padding: 0;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.slots-title {
+    display: none;
+}
+
+/* Game Stats Bar - Header + 2x2 grid - Takes 1/3 of viewport */
+.game-stats-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(20, 20, 28, 0.75);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 3px 6px;
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    grid-row: 1;
+    margin: 0;
+}
+
+/* Game Totals Header */
+.game-totals-header {
+    text-align: center;
+    width: 100%;
+    margin-bottom: 1px;
+    flex-shrink: 0;
+}
+
+.game-totals-header-text {
+    font-size: clamp(12px, 2.5vw, 16px);
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+}
+
+/* Grand Totals Row (Universal Stats) */
+.grand-totals-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+}
+
+.grand-total-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+}
+
+.grand-total-item .grand-total-label {
+    font-size: clamp(11px, 2vw, 14px);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+}
+
+.grand-total-item .grand-total-value {
+    font-size: clamp(14px, 2.5vw, 18px);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+/* Horizontal divider under Grand Totals (Universal Stats) */
+.game-totals-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border-color);
+    margin-bottom: 4px;
+    flex-shrink: 0;
+}
+
+/* 2x2 grid - Compacted */
+.game-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+}
+
+/* All stat items centered in their grid cells - each takes exactly 50% width */
+.game-stats-grid > .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 1px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1px;
+}
+
+/* Player stats grid - grand totals are now in separate section above */
+
+/* Top Left: Balance */
+.game-stats-grid > .stat-item:nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+}
+
+/* Top Right: Total Won */
+.game-stats-grid > .stat-item:nth-child(2) {
+    grid-row: 1;
+    grid-column: 2;
+}
+
+/* Bottom Left: Spins Remaining */
+.game-stats-grid > .stat-item:nth-child(3) {
+    grid-row: 2;
+    grid-column: 1;
+}
+
+/* Buttons container in bottom right - MUST be explicitly positioned */
+.game-stats-grid > .stat-item-buttons {
+    grid-row: 2 !important;
+    grid-column: 2 !important;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.stat-item-buttons button {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.game-stats-bar .btn-win-percent-desktop {
+    flex: 0 0 auto;
+    min-width: auto;
+    margin-left: 0;
+    width: auto;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+    height: 100%; /* Take full height of parent to ensure alignment */
+}
+
+.stat-label {
+    font-size: clamp(11px, 2vw, 14px);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.stat-value {
+    font-size: clamp(14px, 2.5vw, 18px);
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* Slot Machine Main - Takes 1/3 of viewport */
+.slot-machine-main {
+    position: relative;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    overflow: hidden;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100vw;
+    grid-row: 2;
+    margin: 0;
+}
+
+.reels-container {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 0;
+    align-items: stretch;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    flex: 1;
+}
+
+.reel-wrapper {
+    flex: 1;
+    max-width: none;
+    position: relative;
+    min-width: 0;
+    height: 100%;
+    max-height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: stretch;
+}
+
+.reel {
+    width: 100%;
+    height: 100%;
+    min-height: 120px;
+    max-height: 100%;
+    background: linear-gradient(180deg, #2A2A3A 0%, #1F1F2E 50%, #2A2A3A 100%);
+    border: 2px solid #3A3A4A;
+    border-radius: 12px;
+    overflow: visible;
+    position: relative;
+    box-shadow: 
+        inset 0 10px 30px rgba(255, 255, 255, 0.1),
+        inset 0 -10px 30px rgba(0, 0, 0, 0.3),
+        0 4px 20px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+    clip-path: inset(-80% 0 -80% 0); /* Increased to show much more symbols above and below */
+}
+
+
+/* Winline indicator */
+.reel::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--gradient-1);
+    z-index: 10;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.8);
+    transform: translateY(-50%);
+}
+
+.reel::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: 0;
+    right: 0;
+    bottom: -50%;
+    pointer-events: none;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.4) 0%,
+        rgba(0, 0, 0, 0.2) 15%,
+        transparent 35%,
+        transparent 65%,
+        rgba(0, 0, 0, 0.2) 85%,
+        rgba(0, 0, 0, 0.4) 100%
+    );
+    z-index: 5;
+    border-radius: 20px;
+    box-shadow: 
+        inset 0 15px 25px rgba(255, 255, 255, 0.05),
+        inset 0 -15px 25px rgba(0, 0, 0, 0.2);
+}
+
+.reel-strip {
+    position: absolute;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.1s linear;
+    top: 0;
+    left: 0;
+    will-change: transform;
+}
+
+.reel-symbol {
+    width: 100%;
+    height: 100%;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    box-sizing: border-box;
+    font-size: 0; /* Hide any text fallback */
+    color: transparent; /* Hide any text fallback */
+    overflow: visible !important;
+}
+
+.symbol-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+/* Hide alt text when image fails to load */
+.reel-symbol::before {
+    content: '';
+    display: none;
+}
+
+.symbol-image::after {
+    content: '';
+    display: none;
+}
+
+.reel.spinning .reel-strip {
+    animation: spin 0.1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: translateY(var(--spin-start, 0px)); }
+    to { transform: translateY(calc(var(--spin-start, 0px) - 100px)); }
+}
+
+.reel.stopping {
+    animation: none;
+}
+
+/* Win Display */
+.win-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: transparent;
+    padding: 32px 48px;
+    border-radius: 16px;
+    text-align: center;
+    z-index: 100;
+    animation: winPulse 0.5s ease-out;
+}
+
+@keyframes winPulse {
+    0% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+.win-display h2 {
+    color: #F59E0B;
+    font-size: 48px;
+    font-weight: 800;
+    margin: 0;
+    text-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+}
+
+.win-display p {
+    display: none;
+}
+
+.win-symbols {
+    display: none;
+}
+
+.win-symbol-image {
+    display: none;
+}
+
+/* Mobile Stats Sidebar (hidden on desktop) */
+.mobile-stats-sidebar {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    max-width: 30%;
+    flex: 0 0 30%;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.mobile-stat-item {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.mobile-stat-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mobile-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+    min-width: 0;
+}
+
+/* Controls Panel - Takes 1/3 of viewport - Top row: inputs side-by-side, Bottom row: 3 buttons */
+.controls-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 4px;
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    margin: 0;
+    overflow: hidden;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    grid-row: 3;
+}
+
+.inputs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    grid-column: 1 / 4;
+    grid-row: 1;
+    width: 100%;
+    min-height: 0;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 2px;
+}
+
+.control-group label {
+    font-size: clamp(12px, 2vw, 15px);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.control-group input {
+    font-family: "Changa One", system-ui, sans-serif;
+    padding: 6px 8px;
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: clamp(15px, 3vw, 19px);
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    text-align: center;
+    min-height: 0;
+}
+
+.control-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.control-group select.control-select {
+    font-family: "Changa One", system-ui, sans-serif;
+    padding: 6px 8px;
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: clamp(15px, 3vw, 19px);
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    text-align: center;
+    min-height: 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='%239ca3af'%3E%3Cpath d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+}
+
+.control-group select.control-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.button-group {
+    display: contents;
+}
+
+/* Buy button - bottom row, column 1 (33% width) */
+#purchase-spins {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+/* Spin button - bottom row, column 2 (33% width) */
+.spin-button-subtitle {
+    font-size: 0.6em;
+    font-weight: 400;
+    display: block;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+#spin-button {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+/* Collect button - bottom row, column 3 (33% width) */
+#withdraw-button {
+    grid-column: 3;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.btn {
+    width: 100%;
+    height: 100%;
+    padding: 4px 8px;
+    font-size: clamp(14px, 2.2vw, 17px);
+    font-weight: 700;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    line-height: 1.2;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--gradient-1);
+    color: white;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+.btn-spin {
+    background: var(--gradient-2);
+    color: white;
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 800;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+    flex-direction: column;
+    line-height: 1.1;
+}
+
+.btn-spin:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.btn-withdraw {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+}
+
+.btn-withdraw:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.btn-win-percent {
+    font-family: "Changa One", system-ui, sans-serif;
+    background: var(--bg-card);
+    color: #F59E0B;
+    border: 2px solid #F59E0B;
+    padding: 8px 16px;
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 12px;
+    width: auto;
+    flex: 0 0 auto;
+    align-self: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-win-percent:hover {
+    background: rgba(245, 158, 11, 0.1);
+    transform: translateY(-1px);
+}
+
+.btn-win-percent-desktop {
+    font-family: "Changa One", system-ui, sans-serif;
+    background: var(--bg-card);
+    color: #F59E0B;
+    border: 2px solid #F59E0B;
+    padding: 8px 16px;
+    font-size: 16px;
+    height: 40px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    width: auto;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: auto;
+}
+
+.btn-win-percent-desktop:hover {
+    background: rgba(245, 158, 11, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Leaderboard Button - Match win % button style */
+.btn-leaderboard-desktop {
+    background: var(--bg-card);
+    color: #F59E0B;
+    border: 2px solid #F59E0B;
+    padding: 8px 16px;
+    font-size: 14px;
+    height: 36px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    width: auto;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-leaderboard-desktop:hover {
+    background: rgba(245, 158, 11, 0.1);
+    transform: translateY(-1px);
+}
+
+.btn-leaderboard-desktop svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Grand Totals - Header centered, then 2x2 grid, then divider line */
+.game-stats-bar .stat-item-grand-totals {
+    flex: 0 0 100%;
+    order: -1; /* Put at the very top */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.stat-item-grand-totals .stat-label {
+    text-align: center;
+    width: 100%;
+}
+
+/* Grand Totals - 2 column layout, each column has label over value, both columns centered */
+.grand-totals {
+    display: flex;
+    flex-direction: row;
+    gap: 24px;
+    justify-content: center;
+    align-items: stretch;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.grand-total-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+    flex: 0 0 auto; /* Don't grow, just take needed space */
+}
+
+.grand-total-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.grand-total-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Thin horizontal line under Game Totals stats section */
+.grand-totals-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border-color);
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+/* Prize Modal */
+.prize-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.prize-modal.show {
+    display: flex;
+}
+
+/* Leaderboard Modal */
+.leaderboard-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.leaderboard-modal.show {
+    display: flex;
+}
+
+.leaderboard-modal-content {
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    max-width: 800px;
+    width: 100%;
+    max-width: calc(100vw - 20px);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.leaderboard-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.leaderboard-modal-header h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.leaderboard-modal-body {
+    padding: 20px;
+}
+
+.leaderboard-sort {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.leaderboard-sort label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.leaderboard-sort select {
+    padding: 8px 12px;
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.leaderboard-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.leaderboard-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.leaderboard-rank {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
+    min-width: 40px;
+}
+
+.leaderboard-wallet {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.leaderboard-stats {
+    display: flex;
+    gap: 24px;
+}
+
+.leaderboard-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.leaderboard-stat .stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.leaderboard-stat .stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Themed message modal (buy/collect success & errors) */
+.message-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 10001;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.message-modal.show {
+    display: flex;
+}
+
+.message-modal-content {
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+.message-modal.success .message-modal-content {
+    border-color: var(--primary-color, #8b5cf6);
+    box-shadow: 0 0 0 1px var(--primary-color, #8b5cf6);
+}
+
+.message-modal.error .message-modal-content {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 1px #dc2626;
+}
+
+.message-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.message-modal.success .message-modal-header {
+    background: rgba(139, 92, 246, 0.12);
+}
+
+.message-modal.error .message-modal-header {
+    background: rgba(220, 38, 38, 0.12);
+}
+
+.message-modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.message-modal-body {
+    padding: 20px;
+}
+
+#message-modal-text {
+    margin: 0 0 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.message-modal-tx-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--primary-color, #8b5cf6);
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.message-modal-tx-link:hover {
+    text-decoration: underline;
+}
+
+.message-modal-footer {
+    padding: 0 20px 20px;
+}
+
+.message-modal-footer .btn {
+    width: 100%;
+    padding: 12px 20px;
+}
+
+.prize-modal-content {
+    background: var(--bg-primary);
+    border-radius: 16px;
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    opacity: 1;
+}
+
+.prize-modal-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 16px;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 32px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.close-modal-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.prize-modal-body {
+    padding: 0 24px 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.prize-info {
+    margin-bottom: 20px;
+    color: var(--text-primary);
+    font-size: 16px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.prize-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    flex: 1;
+    min-height: 0;
+}
+
+.prize-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+}
+
+.prize-item {
+    font-size: 18px;
+    color: var(--text-primary);
+    padding: 8px 0;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.prize-symbol-image {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    display: inline-block;
+}
+
+.prize-footer {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.prize-small-print {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+/* Exit Home Button */
+.exit-home-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.exit-home-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+}
+
+.exit-home-btn svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Wallet Button */
+/* Music Toggle Button */
+.music-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+    width: 40px;
+    height: 40px;
+    position: relative;
+    pointer-events: auto;
+    z-index: 10;
+}
+
+.music-toggle-btn:hover {
+    border-color: var(--primary-color);
+    transform: scale(1.05);
+}
+
+.music-toggle-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    fill: currentColor;
+    position: relative;
+    z-index: 1;
+}
+
+/* When music is OFF: little red cross in corner of button */
+.music-toggle-btn:not(.active) {
+    position: relative;
+}
+
+.music-toggle-btn:not(.active)::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 10px;
+    height: 10px;
+    background: linear-gradient(135deg, transparent 42%, #ef4444 42%, #ef4444 58%, transparent 58%),
+                linear-gradient(-135deg, transparent 42%, #ef4444 42%, #ef4444 58%, transparent 58%);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.music-toggle-btn:not(.active) #music-icon-off {
+    position: relative;
+}
+
+.music-toggle-btn:not(.active) #music-icon-off line {
+    stroke: #ef4444;
+    stroke-width: 2.5;
+}
+
+.wallet-button-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wallet-connect-btn {
+    padding: 8px 20px;
+    background: var(--gradient-1);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.wallet-connect-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.wallet-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.wallet-info span {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.wallet-disconnect-btn {
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.wallet-disconnect-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* Desktop - Scale up with increased padding */
+@media (min-width: 1025px) {
+    .slots-page {
+        height: 100vh;
+        height: 100svh;
+        overflow: hidden;
+    }
+    
+    .slots-container {
+        padding: 0 !important;
+        padding-top: 80px !important;
+        flex: 1 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+    }
+    
+    .slot-machine-wrapper {
+        gap: 20px !important;
+        padding: 0 !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+        flex: 1 !important;
+        grid-template-rows: 1fr 1fr 1fr !important;
+    }
+    
+    .game-stats-bar {
+        padding: 16px 20px !important;
+        gap: 12px !important;
+        border-radius: 12px !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+        flex-shrink: 0 !important;
+        overflow-y: auto !important;
+    }
+    
+    .game-totals-header-text {
+        font-size: 16px;
+    }
+    
+    .grand-total-item .grand-total-label {
+        font-size: 12px;
+    }
+    
+    .grand-total-item .grand-total-value {
+        font-size: 20px;
+    }
+    
+    .stat-label {
+        font-size: 12px;
+    }
+    
+    .stat-value {
+        font-size: 18px;
+    }
+    
+    .slot-machine-main {
+        padding: 20px !important;
+        gap: 20px !important;
+        border-radius: 16px !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+        flex-shrink: 0 !important;
+    }
+    
+    .reels-container {
+        gap: 20px !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+    }
+    
+    .controls-panel {
+        padding: 16px 20px !important;
+        gap: 16px !important;
+        border-radius: 12px !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+        flex-shrink: 0 !important;
+    }
+    
+    .control-group label {
+        font-size: 14px;
+    }
+    
+    .control-group input {
+        padding: 12px 16px;
+        font-size: 18px;
+    }
+    
+    .btn {
+        padding: 16px 24px;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+    
+    .btn-win-percent-desktop,
+    .btn-leaderboard-desktop {
+        padding: 10px 20px;
+        font-size: 14px;
+        height: auto;
+    }
+}
+
+/* Responsive - Mobile Portrait (skip when width<=600 so small mobile gets correct layout) */
+@media (max-width: 1024px) and (min-width: 601px) {
+    .slots-container {
+        padding: 8px;
+        padding-top: 100px; /* Increased to prevent stats bar from being hidden */
+    }
+    
+    .slot-machine-wrapper {
+        gap: 12px;
+        transform: none;
+        flex-direction: column;
+        height: 100%;
+        justify-content: flex-start;
+    }
+    
+    .slots-title {
+        font-size: 18px;
+        margin-bottom: 8px;
+    }
+    
+    /* Show desktop stats bar on mobile, 2 rows: Balance+Spins top, Total Won+win% bottom, ALIGNED */
+    .game-stats-bar {
+        display: flex !important;
+        padding: 10px;
+        gap: 10px;
+        flex-wrap: wrap !important;
+        flex-shrink: 0;
+        width: 100%;
+    }
+    
+    /* Balance on top left */
+    .game-stats-bar .stat-item:nth-child(1) {
+        flex: 0 0 calc(50% - 5px) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        order: 1 !important;
+    }
+    
+    /* Spins Remaining on top right */
+    .game-stats-bar .stat-item:nth-child(2) {
+        flex: 0 0 calc(50% - 5px) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        order: 2 !important;
+    }
+    
+    /* Total Won centered below Balance (same column, second row) */
+    .game-stats-bar .stat-item:nth-child(3) {
+        flex: 0 0 calc(50% - 5px) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        order: 3 !important;
+    }
+    
+    /* win% button centered below Spins (same column, second row) */
+    .game-stats-bar .btn-win-percent-desktop {
+        flex: 0 0 calc(50% - 5px) !important;
+        padding: 10px 16px !important;
+        font-size: 18px !important; /* Bigger but not too big */
+        font-weight: 700 !important;
+        margin: 0 auto !important; /* Center horizontally */
+        align-self: center !important;
+        order: 4 !important;
+        width: fit-content !important;
+        max-width: 100% !important;
+    }
+    
+    .game-stats-bar .stat-label {
+        font-size: 14px !important; /* Bigger */
+        font-weight: 600 !important;
+    }
+    
+    .game-stats-bar .stat-value {
+        font-size: 20px !important; /* Bigger */
+        font-weight: 700 !important;
+    }
+    
+    /* Hide mobile stats sidebar */
+    .mobile-stats-sidebar {
+        display: none !important;
+    }
+    
+    .slot-machine-main {
+        padding: 12px;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0;
+        align-items: stretch;
+        justify-content: flex-start;
+        flex: 1 1 0% !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        height: auto;
+        max-height: none;
+    }
+    
+    .reels-container {
+        gap: 8px;
+        margin-bottom: 0;
+        flex: 1;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        max-width: 100%;
+        width: 100%;
+        height: 100%;
+    }
+    
+    .reel-wrapper {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        height: 100% !important;
+        max-height: 100% !important;
+    }
+    
+    .reel-symbol {
+        font-size: 0; /* Hide text, images will show */
+    }
+    
+    .symbol-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    /* Controls panel fills remaining space but doesn't overflow */
+    .controls-panel {
+        padding: 12px !important; /* Reduced padding to fit */
+        gap: 12px !important; /* Reduced gap to fit */
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        max-height: 100%;
+        overflow-y: auto;
+        justify-content: flex-start;
+    }
+    
+    /* Stack inputs vertically on mobile */
+    .inputs-row {
+        flex-direction: column;
+        gap: 12px !important; /* Reduced spacing to fit */
+    }
+    
+    .control-group {
+        width: 100%;
+        min-width: 0;
+        flex-direction: column; /* Stack label above input */
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .control-group label {
+        font-size: 20px !important; /* Bigger but fits on screen */
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-weight: 700 !important;
+    }
+    
+    .control-group input {
+        padding: 12px 10px !important; /* Reduced padding to fit */
+        font-size: 22px !important; /* Bigger but fits on screen */
+        width: 100%;
+        min-width: 0;
+        font-weight: 600 !important;
+    }
+    
+    /* Stack buttons vertically on mobile - fill available space */
+    .button-group {
+        flex-direction: column;
+        gap: 10px !important;
+        width: 100%;
+        flex: 1;
+        min-height: 0;
+    }
+    
+    .btn {
+        width: 100% !important;
+        padding: 0 !important; /* Remove padding, use flex to fill */
+        flex: 1 !important; /* Fill available space */
+        font-size: 24px !important; /* Bigger but fits on screen */
+        font-weight: 800 !important;
+        min-height: 60px !important;
+    }
+    
+    .btn-spin {
+        font-size: 24px !important;
+        font-weight: 800 !important;
+    }
+    
+    .btn-primary {
+        font-size: 24px !important;
+        font-weight: 800 !important;
+    }
+    
+    .btn-withdraw {
+        font-size: 24px !important;
+        font-weight: 800 !important;
+    }
+}
+
+@media (max-width: 768px) and (min-width: 601px) {
+    /* Hide orientation prompt - we support portrait now */
+    .orientation-prompt {
+        display: none !important;
+    }
+    
+    .slots-container {
+        display: flex;
+        padding: 5px;
+        padding-top: 90px; /* Increased to prevent stats bar from being hidden */
+        overflow-x: hidden; /* Prevent horizontal scroll */
+    }
+    
+    .slot-machine-wrapper {
+        gap: 12px;
+        max-height: none;
+        overflow: visible;
+        transform: none;
+        height: 100%;
+        justify-content: flex-start;
+        padding: 0; /* Remove padding to prevent overflow */
+    }
+    
+    .slots-title {
+        font-size: 14px;
+    }
+    
+    /* Mobile: Same grid structure, just smaller */
+    .game-stats-bar {
+        grid-template-rows: 30% 70% !important;
+        padding: 6px 8px !important;
+        gap: 4px !important;
+        min-height: 100px !important;
+    }
+    
+    .game-stats-grid {
+        gap: 6px !important;
+    }
+    
+    .stat-item-grand-totals .grand-totals {
+        gap: 16px !important;
+    }
+    
+    .stat-item-buttons {
+        flex-direction: row !important;
+        gap: 6px !important;
+    }
+    
+    .btn-win-percent-desktop,
+    .btn-leaderboard-desktop {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+    }
+    
+    .btn-leaderboard-desktop svg {
+        width: 16px !important;
+        height: 16px !important;
+    }
+    
+    .game-stats-bar .stat-label {
+        font-size: 12px !important;
+        font-weight: 600 !important;
+    }
+    
+    .game-stats-bar .stat-value {
+        font-size: 18px !important;
+        font-weight: 700 !important;
+    }
+    
+    .slot-machine-main {
+        padding: 10px;
+        gap: 0;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch;
+        flex: 1 1 0% !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        height: auto;
+        max-height: none;
+    }
+    
+    .reels-container {
+        gap: 6px;
+        margin-bottom: 0;
+        flex: 1;
+        max-width: 100%;
+        width: 100%;
+        height: 100%;
+    }
+    
+    .reel-wrapper {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        height: 100% !important;
+        max-height: 100% !important;
+    }
+    
+    .reel-symbol {
+        font-size: 0; /* Hide text, images will show */
+    }
+    
+    .symbol-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .mobile-stats-sidebar {
+        display: none !important;
+    }
+    
+    .controls-panel {
+        padding: 4px !important;
+        gap: 4px !important;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        grid-template-rows: 1fr 1fr !important;
+        flex: 1;
+        min-height: 0;
+        justify-content: flex-start; /* Changed from space-around */
+    }
+    
+    /* Stack inputs vertically */
+    .inputs-row {
+        flex-direction: column;
+        gap: 18px; /* Increased spacing */
+    }
+    
+    .control-group {
+        width: 100%;
+        min-width: 0;
+        flex-direction: column; /* Stack label above input */
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .control-group label {
+        font-size: 16px; /* Increased text size */
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-weight: 600;
+    }
+    
+    .control-group input {
+        padding: 12px 10px; /* Increased padding */
+        font-size: 18px; /* Increased text size */
+        width: 100%;
+        min-width: 0;
+    }
+    
+    /* Stack buttons vertically */
+    .button-group {
+        flex-direction: column;
+        gap: 14px; /* Increased spacing */
+        width: 100%;
+    }
+    
+    .btn {
+        width: 100%;
+        padding: 22px 10px; /* Increased height */
+        font-size: 22px; /* Increased text size */
+        font-weight: 800;
+    }
+    
+    .btn-spin {
+        font-size: 18px;
+        font-weight: 800;
+    }
+    
+    .btn-primary {
+        font-size: 18px;
+        font-weight: 800;
+    }
+    
+    .btn-withdraw {
+        font-size: 18px;
+        font-weight: 800;
+    }
+    
+    .win-display {
+        padding: 12px 20px;
+    }
+    
+    .win-display h2 {
+        font-size: 18px;
+    }
+    
+    .win-display p {
+        font-size: 14px;
+    }
+    
+    .win-symbol-image {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+@media (max-width: 480px) and (min-width: 401px) {
+    .slots-container {
+        padding: 5px;
+        padding-top: 85px; /* Increased to prevent stats bar from being hidden */
+        overflow-x: hidden; /* Prevent horizontal scroll */
+    }
+    
+    .slot-machine-wrapper {
+        gap: 10px;
+        height: 100%;
+        justify-content: flex-start;
+        padding: 0; /* Remove padding to prevent overflow */
+    }
+    
+    .slots-title {
+        font-size: 18px;
+    }
+    
+    .game-stats-bar {
+        grid-template-rows: 30% 70% !important;
+        padding: 4px 6px !important;
+        gap: 3px !important;
+        min-height: 90px !important;
+    }
+    
+    .game-stats-grid {
+        gap: 4px !important;
+    }
+    
+    .stat-item-grand-totals .grand-totals {
+        gap: 12px !important;
+    }
+    
+    .stat-item-buttons {
+        flex-direction: row !important;
+        gap: 4px !important;
+    }
+    
+    .btn-win-percent-desktop,
+    .btn-leaderboard-desktop {
+        padding: 5px 10px !important;
+        font-size: 11px !important;
+    }
+    
+    .btn-leaderboard-desktop svg {
+        width: 14px !important;
+        height: 14px !important;
+    }
+    
+    .game-stats-bar .stat-label {
+        font-size: 10px !important;
+        font-weight: 600 !important;
+    }
+    
+    .game-stats-bar .stat-value {
+        font-size: 16px !important;
+        font-weight: 700 !important;
+    }
+    
+    .slot-machine-main {
+        padding: 8px;
+        gap: 0;
+        flex: 1 1 0% !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        height: auto;
+    }
+    
+    .reels-container {
+        gap: 4px;
+        margin-bottom: 0;
+        height: 100%;
+        flex: 1;
+    }
+    
+    .reel-wrapper {
+        height: 100% !important;
+        max-height: 100% !important;
+    }
+    
+    .reel-symbol {
+        font-size: 0; /* Hide text, images will show */
+    }
+    
+    .symbol-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .controls-panel {
+        padding: 4px !important;
+        gap: 4px !important;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        grid-template-rows: 1fr 1fr !important;
+        flex: 1;
+        min-height: 0;
+    }
+    
+    .control-group {
+        flex-direction: column; /* Stack label above input */
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .control-group label {
+        font-size: 16px !important; /* Bigger but fits on screen */
+        font-weight: 700 !important;
+    }
+    
+    .control-group input {
+        padding: 8px 6px !important; /* Reduced padding to fit */
+        font-size: 18px !important; /* Bigger but fits on screen */
+        width: 100%;
+        font-weight: 600 !important;
+    }
+    
+    .inputs-row {
+        gap: 10px !important; /* Reduced spacing to fit */
+    }
+    
+    .button-group {
+        gap: 8px !important; /* Reduced spacing to fit */
+    }
+    
+    .btn {
+        padding: 14px 8px !important; /* Reduced height to fit on screen */
+        font-size: 20px !important; /* Bigger but fits on screen */
+        font-weight: 800 !important;
+    }
+    
+    .btn-spin {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+    }
+    
+    .btn-primary {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+    }
+    
+    .btn-withdraw {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+    }
+}
+
+/* Very small viewports - optimize for Phantom browser (600px or less height) */
+@media (max-height: 600px) {
+    .slots-container {
+        padding: 2px !important;
+        padding-top: 70px !important;
+    }
+    
+    .slot-machine-wrapper {
+        gap: 4px !important;
+        padding: 0 2px !important;
+    }
+    
+    /* Leaderboard modal for very small screens */
+    .leaderboard-modal {
+        padding: 4px !important;
+    }
+    
+    .leaderboard-modal-content {
+        max-height: 95vh !important;
+        border-radius: 8px !important;
+    }
+    
+    .leaderboard-modal-header {
+        padding: 8px !important;
+    }
+    
+    .leaderboard-modal-header h2 {
+        font-size: 14px !important;
+    }
+    
+    .leaderboard-modal-body {
+        padding: 8px !important;
+    }
+    
+    .leaderboard-sort {
+        margin-bottom: 8px !important;
+        gap: 4px !important;
+    }
+    
+    .leaderboard-sort label {
+        font-size: 10px !important;
+    }
+    
+    .leaderboard-sort select {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+    }
+    
+    .leaderboard-item {
+        padding: 8px !important;
+        gap: 6px !important;
+    }
+    
+    .leaderboard-rank {
+        font-size: 14px !important;
+    }
+    
+    .leaderboard-wallet {
+        font-size: 11px !important;
+    }
+    
+    .leaderboard-stats {
+        gap: 6px !important;
+    }
+    
+    .leaderboard-stat .stat-label {
+        font-size: 9px !important;
+    }
+    
+    .leaderboard-stat .stat-value {
+        font-size: 12px !important;
+    }
+    
+    .game-stats-bar {
+        padding: 4px 6px !important;
+        gap: 2px !important;
+        min-height: 100px !important;
+        border-radius: 6px !important;
+    }
+    
+    .game-totals-header-text {
+        font-size: 9px !important;
+        margin-bottom: 1px !important;
+    }
+    
+    .game-stats-grid {
+        gap: 2px !important;
+    }
+    
+    .game-stats-grid > .stat-item {
+        gap: 1px !important;
+    }
+    
+    .grand-total-label {
+        font-size: 9px !important;
+    }
+    
+    .grand-total-value {
+        font-size: 12px !important;
+    }
+    
+    .stat-label {
+        font-size: 9px !important;
+    }
+    
+    .stat-value {
+        font-size: 14px !important;
+    }
+    
+    .btn-win-percent-desktop,
+    .btn-leaderboard-desktop {
+        padding: 4px 8px !important;
+        font-size: 10px !important;
+        height: 28px !important;
+    }
+    
+    .btn-leaderboard-desktop svg {
+        width: 12px !important;
+        height: 12px !important;
+    }
+    
+    .slot-machine-main {
+        padding: 4px !important;
+        gap: 4px !important;
+        border-radius: 8px !important;
+    }
+    
+    .reels-container {
+        gap: 4px !important;
+        height: 100% !important;
+        flex: 1 !important;
+    }
+    
+    .reel-wrapper {
+        height: 100% !important;
+        max-height: 100% !important;
+    }
+    
+    .reel {
+        min-height: 0 !important;
+        border-radius: 8px !important;
+        border-width: 1px !important;
+    }
+    
+    .controls-panel {
+        padding: 6px !important;
+        gap: 6px !important;
+        border-radius: 8px !important;
+    }
+    
+    .control-group {
+        gap: 8px !important;
+    }
+    
+    .control-group label {
+        font-size: 12px !important;
+    }
+    
+    .control-group input {
+        padding: 6px 8px !important;
+        font-size: 14px !important;
+    }
+    
+    .inputs-row {
+        gap: 6px !important;
+    }
+    
+    .button-group {
+        gap: 6px !important;
+    }
+    
+    .btn {
+        padding: 8px 6px !important;
+        font-size: 14px !important;
+        min-height: 40px !important;
+    }
+}
+
+/* Hide scrollbars */
+.slots-page::-webkit-scrollbar {
+    display: none;
+}
+
+.slots-page {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Mobile responsive for prize modal */
+@media (max-width: 768px) {
+    .prize-modal {
+        padding: 10px;
+    }
+    
+    .prize-modal-content {
+        max-width: 100%;
+        max-height: 95vh;
+    }
+    
+    .prize-modal-header {
+        padding: 12px;
+    }
+    
+    .prize-modal-body {
+        padding: 0 16px 16px;
+    }
+    
+    .prize-info {
+        font-size: 14px;
+        margin-bottom: 16px;
+    }
+    
+    .prize-columns {
+        gap: 16px;
+    }
+    
+    .prize-item {
+        font-size: 14px;
+        padding: 6px 0;
+    }
+    
+    .prize-symbol-image {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .win-symbol-image {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .prize-footer {
+        margin-top: 16px;
+        padding-top: 12px;
+    }
+    
+    .prize-small-print {
+        font-size: 11px;
+    }
+    
+    /* Leaderboard modal responsive */
+    .leaderboard-modal {
+        padding: 10px;
+    }
+    
+    .leaderboard-modal-content {
+        max-width: 100%;
+        max-height: 95vh;
+        border-radius: 12px;
+    }
+    
+    .leaderboard-modal-header {
+        padding: 12px;
+    }
+    
+    .leaderboard-modal-header h2 {
+        font-size: 18px;
+    }
+    
+    .leaderboard-modal-body {
+        padding: 12px;
+    }
+    
+    .leaderboard-sort {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    
+    .leaderboard-sort label {
+        font-size: 12px;
+    }
+    
+    .leaderboard-sort select {
+        width: 100%;
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    .leaderboard-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 12px;
+    }
+    
+    .leaderboard-rank {
+        font-size: 16px;
+    }
+    
+    .leaderboard-wallet {
+        font-size: 12px;
+        width: 100%;
+        word-break: break-all;
+    }
+    
+    .leaderboard-stats {
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+    
+    .leaderboard-stat {
+        flex-direction: row;
+        justify-content: space-between;
+        width: 100%;
+    }
+    
+    .leaderboard-stat .stat-label {
+        font-size: 11px;
+    }
+    
+    .leaderboard-stat .stat-value {
+        font-size: 14px;
+    }
+}
+
+/* OVERRIDE 1024/768/480px for mobile: no gaps, full width. body selector so we win. */
+@media (max-width: 600px) {
+    body.slots-page {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+    body.slots-page .slots-container {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    body.slots-page .slot-machine-wrapper {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        grid-template-rows: 1fr 1fr auto !important;
+        flex-direction: row !important;
+        gap: 2px !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+    body.slots-page .slot-machine-wrapper .game-stats-bar {
+        align-self: start !important;
+    }
+    body.slots-page .slot-machine-wrapper .slot-machine-main {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        flex: 1 1 0 !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel {
+        align-self: end !important;
+        overflow: visible !important;
+        padding: 4px 6px 0 !important;
+        padding-bottom: 0 !important;
+        flex: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+    }
+}
+
+/* Force larger game text everywhere - overrides all media queries */
+.slots-page .game-stats-bar .game-totals-header-text {
+    font-size: clamp(14px, 2.5vw, 20px) !important;
+}
+.slots-page .game-stats-bar .grand-total-item .grand-total-label,
+.slots-page .game-stats-bar .grand-total-label {
+    font-size: clamp(12px, 2vw, 16px) !important;
+}
+.slots-page .game-stats-bar .grand-total-item .grand-total-value,
+.slots-page .game-stats-bar .grand-total-value {
+    font-size: clamp(15px, 2.5vw, 22px) !important;
+}
+.slots-page .game-stats-bar .stat-label {
+    font-size: clamp(12px, 2vw, 16px) !important;
+}
+.slots-page .game-stats-bar .stat-value {
+    font-size: clamp(15px, 2.5vw, 22px) !important;
+}
+.slots-page .controls-panel .control-group label {
+    font-size: clamp(13px, 2vw, 17px) !important;
+}
+.slots-page .controls-panel .control-group input,
+.slots-page .controls-panel .control-group select.control-select {
+    font-size: clamp(16px, 3vw, 22px) !important;
+}
+.slots-page .controls-panel .btn,
+.slots-page .controls-panel .btn-spin {
+    font-size: clamp(24px, 3vw, 38px) !important;
+}
+.slots-page .btn-win-percent,
+.slots-page .game-stats-bar .btn-win-percent-desktop {
+    font-size: 18px !important;
+}
+.slots-page .mobile-stat-label {
+    font-size: 14px !important;
+}
+.slots-page .mobile-stat-value {
+    font-size: 20px !important;
+}
+
+/* Mobile: body same width as header – override base .slots-container max-width: 1200px */
+@media (max-width: 768px) {
+    body.slots-page {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    body.slots-page .slots-container {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+}
+
+/* Force full width: grid column must be 1fr so it doesn't shrink to content; content must not shrink */
+.slot-machine-wrapper {
+    grid-template-columns: 1fr !important;
+    min-width: 100% !important;
+    width: 100% !important;
+}
+.slots-container {
+    min-width: 100% !important;
+}
+.slot-machine-main {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    flex: 1 1 0% !important;
+    box-sizing: border-box !important;
+}
+.slot-machine-main .reels-container {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    flex: 1 1 0% !important;
+    box-sizing: border-box !important;
+}
+.slot-machine-main .reels-container .reel-wrapper {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+}

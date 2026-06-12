@@ -1,0 +1,142 @@
+/* Load after slots.css - mobile only: no gap below buttons, full width. Use 100% in iframe so we fill the iframe. */
+@media (max-width: 768px) {
+    /* Force full width: 100% so inside iframe we fill the iframe; 100vw when standalone */
+    html:has(body.slots-page),
+    html.slots-embedded {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+    body.slots-page {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+    body.slots-page .slots-container {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    body.slots-page .slot-machine-wrapper {
+        display: grid !important;
+        grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto !important;
+        flex-direction: row !important;
+        gap: 0 2px !important;
+        row-gap: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+    body.slots-page .slot-machine-wrapper .game-stats-bar {
+        align-self: start !important;
+        flex-shrink: 0 !important;
+        padding: 4px 6px !important;
+        gap: 2px !important;
+        min-height: 0 !important;
+    }
+    body.slots-page .slot-machine-wrapper .slot-machine-main {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        flex: 1 1 0 !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel {
+        align-self: end !important;
+        overflow: visible !important;
+        padding: 8px 8px 10px !important;
+        flex: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        gap: 8px !important;
+        grid-template-rows: auto auto !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .inputs-row {
+        gap: 6px !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .control-group {
+        gap: 4px !important;
+        padding: 2px !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .control-group label {
+        font-size: 11px !important;
+        line-height: 1.2 !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .control-group input,
+    body.slots-page .slot-machine-wrapper .controls-panel .control-group select.control-select {
+        padding: 10px 10px !important;
+        font-size: 15px !important;
+        min-height: 44px !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .control-group select.control-select {
+        padding-right: 24px !important;
+        background-position: right 8px center !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .btn,
+    body.slots-page .slot-machine-wrapper .controls-panel .btn-spin {
+        padding: 12px 10px !important;
+        font-size: 15px !important;
+        line-height: 1.2 !important;
+        min-height: 48px !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .btn-spin {
+        font-size: 18px !important;
+    }
+    body.slots-page .slot-machine-wrapper .controls-panel .spin-button-subtitle {
+        font-size: 0.55em !important;
+        margin-top: 2px !important;
+        line-height: 1 !important;
+    }
+    body.slots-page .slot-machine-wrapper .game-stats-bar .stat-item-buttons button,
+    body.slots-page .slot-machine-wrapper .game-stats-bar .btn-win-percent-desktop {
+        font-size: 9px !important;
+        min-height: 36px !important;
+        padding: 8px 10px !important;
+    }
+    /* Really small screens: shrink control panel so stats + reels get more room */
+    @media (max-height: 600px) {
+        body.slots-page .slot-machine-wrapper .controls-panel {
+            padding: 4px 6px 6px !important;
+            gap: 4px !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .inputs-row {
+            gap: 3px !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .control-group {
+            gap: 2px !important;
+            padding: 0 !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .control-group label {
+            font-size: 10px !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .control-group input,
+        body.slots-page .slot-machine-wrapper .controls-panel .control-group select.control-select {
+            padding: 5px 6px !important;
+            font-size: 13px !important;
+            min-height: 32px !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .btn,
+        body.slots-page .slot-machine-wrapper .controls-panel .btn-spin {
+            padding: 6px 8px !important;
+            font-size: 13px !important;
+            min-height: 36px !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .btn-spin {
+            font-size: 15px !important;
+        }
+        body.slots-page .slot-machine-wrapper .controls-panel .spin-button-subtitle {
+            font-size: 0.5em !important;
+            margin-top: 0 !important;
+        }
+    }
+}
