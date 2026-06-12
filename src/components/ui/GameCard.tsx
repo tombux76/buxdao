@@ -26,7 +26,11 @@ function GameThumbnail({ game }: { game: Game }) {
           unoptimized
           sizes="80px"
           className={
-            game.category === "casino" ? "object-contain p-1.5" : "object-cover"
+            game.category === "casino"
+              ? game.id === "slots"
+                ? "object-contain scale-125"
+                : "object-contain p-1.5"
+              : "object-cover"
           }
         />
       ) : (
