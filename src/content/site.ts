@@ -228,6 +228,7 @@ export type Game = {
   href: string;
   external?: boolean;
   category: "casino" | "cards";
+  thumbnail?: string;
 };
 
 export const games: Game[] = [
@@ -239,6 +240,7 @@ export const games: Game[] = [
     tokens: ["$BUX"],
     href: "/games/slots",
     category: "casino",
+    thumbnail: "/casino/images/slots.png",
   },
   {
     id: "roulette",
@@ -248,6 +250,7 @@ export const games: Game[] = [
     tokens: ["$BUX"],
     href: "/games/roulette",
     category: "casino",
+    thumbnail: "/casino/images/roulette.png",
   },
   {
     id: "coinflip",
@@ -257,6 +260,7 @@ export const games: Game[] = [
     tokens: ["$BUX"],
     href: "/games/coinflip",
     category: "casino",
+    thumbnail: "/casino/images/coinflip.png",
   },
   {
     id: "blackjack",
@@ -266,26 +270,31 @@ export const games: Game[] = [
     tokens: ["$BUX"],
     href: "/games/blackjack",
     category: "casino",
+    thumbnail: "/casino/images/blackjack.png",
   },
   {
     id: "spades",
     name: "BUX Spades",
     status: "live",
-    description: "Community spades tables on a dedicated platform.",
-    tokens: ["SOL"],
+    description:
+      "Fully customisable game play options\nSolo or partners\nPlay with friends or against bots",
+    tokens: [],
     href: "https://www.bux-spades.pro",
     external: true,
     category: "cards",
+    thumbnail: "/products/spades.png",
   },
   {
     id: "poker",
     name: "BUX Poker",
     status: "soon",
-    description: "Texas hold'em — launching soon.",
-    tokens: ["SOL"],
+    description:
+      "Cross community poker platform\nTournament and league options\nDiscord integration",
+    tokens: [],
     href: "https://www.bux-poker.pro",
     external: true,
     category: "cards",
+    thumbnail: "/products/poker.png",
   },
 ];
 
