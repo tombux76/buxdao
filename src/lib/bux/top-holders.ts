@@ -10,10 +10,11 @@ export type HolderRow = {
   nfts: string;
   bux: string;
   value: string;
-  sortValue: number;
   buxBalance: number;
   nftCount: number;
 };
+
+type SortableHolderRow = HolderRow & { sortValue: number };
 
 export type TopHoldersResult = {
   holders: HolderRow[];
@@ -107,7 +108,7 @@ export async function fetchTopHolders(
     }
   }
 
-  const rows: HolderRow[] = Array.from(byKey.values()).map((h) => {
+  const rows: SortableHolderRow[] = Array.from(byKey.values()).map((h) => {
     const nftCount =
       collectionId === "all" ? h.totalNfts : (h.nftCounts[collectionId] ?? 0);
     const buxSol = h.buxBalance * tokenValueSol;
@@ -140,9 +141,7 @@ export async function fetchTopHolders(
 
   filtered.sort((a, b) => b.sortValue - a.sortValue);
 
-  const holders: HolderRow[] = filtered.slice(0, 100).map(
-    ({ sortValue, ...row }) => row,
-  );
+  const holders = filtered.slice(0, 100).map(({ sortValue: _sortValue, ...row }) => row);
 
   return {
     holders,
