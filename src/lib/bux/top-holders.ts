@@ -1,7 +1,7 @@
 import { collectionConfigs } from "@/content/site";
 import { fetchGraveMarketFloorSol } from "@/lib/gravemarket";
 import { getWalletDiscordMap } from "@/lib/bux/discord";
-import { buildRawHolders } from "@/lib/bux/helius-holders";
+import { buildRawHolders, isHiddenWallet } from "@/lib/bux/helius-holders";
 import { fetchTokenMetrics } from "@/lib/bux/metrics";
 
 export type HolderRow = {
@@ -83,6 +83,9 @@ export async function fetchTopHolders(
   const byKey = new Map<string, AggregatedHolder>();
 
   for (const holder of rawHolders) {
+    if (isHiddenWallet(holder.wallet)) {
+      continue;
+    }
     const discordId = walletToDiscord.get(holder.wallet.toLowerCase()) ?? null;
     const key = discordId ?? holder.wallet;
     const existing = byKey.get(key);

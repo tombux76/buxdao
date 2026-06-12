@@ -81,6 +81,8 @@ export type CollectionConfig = {
   graveMarketUrl: string;
   graveStakeUrl: string;
   stakeLive: boolean;
+  /** GraveStake pool wallet — staked NFTs are attributed to depositors, not this wallet */
+  stakingWallet?: string;
   /** Daily $BUX staking yield per NFT */
   dailyBuxYield: number;
 };
@@ -157,6 +159,7 @@ export const collectionConfigs: CollectionConfig[] = [
     graveMarketUrl: "https://gravemarket.io/collection/celebrity-catz",
     graveStakeUrl: "https://gravestake.io/p/celebrity-catz",
     stakeLive: true,
+    stakingWallet: "7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR",
     dailyBuxYield: 20,
   },
 ];

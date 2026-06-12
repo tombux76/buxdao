@@ -1,6 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { collectionConfigs, tokenConfig } from "@/content/site";
+import { collectionConfigs, tokenConfig, type CollectionConfig } from "@/content/site";
+import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
 
 const HELIUS_RPC = "https://mainnet.helius-rpc.com";
 const BUX_DECIMALS = 9;
@@ -12,6 +13,7 @@ type TokenAccountSlice = {
 };
 
 type NftOwnerItem = {
+  id?: string;
   ownership?: { owner?: string };
 };
 
@@ -111,11 +113,17 @@ export async function fetchAllBuxTokenAccounts(): Promise<TokenAccountSlice[]> {
   return accounts;
 }
 
-export async function fetchNftCountsByOwner(collectionMint: string): Promise<Map<string, number>> {
+async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
+  const collectionMint = config.collectionMint;
   if (!collectionMint) {
     return counts;
   }
+
+  const stakingWallet = config.stakingWallet?.toLowerCase();
+  const depositorMap = stakingWallet
+    ? await fetchStakingDepositors(config.stakingWallet!)
+    : null;
 
   let page = 1;
   while (page <= 50) {
@@ -128,10 +136,26 @@ export async function fetchNftCountsByOwner(collectionMint: string): Promise<Map
 
     const items = result?.items ?? [];
     for (const item of items) {
-      const owner = item.ownership?.owner;
-      if (owner) {
-        counts.set(owner, (counts.get(owner) ?? 0) + 1);
+      const onChainOwner = item.ownership?.owner;
+      const mint = item.id;
+      if (!onChainOwner || !mint) {
+        continue;
       }
+
+      let attributedOwner = onChainOwner;
+
+      if (stakingWallet && onChainOwner.toLowerCase() === stakingWallet) {
+        attributedOwner = depositorMap?.get(mint) ?? "";
+        if (!attributedOwner) {
+          continue;
+        }
+      }
+
+      if (isHiddenWallet(attributedOwner)) {
+        continue;
+      }
+
+      counts.set(attributedOwner, (counts.get(attributedOwner) ?? 0) + 1);
     }
 
     if (items.length < 1000) {
@@ -169,12 +193,15 @@ export async function buildRawHolders(): Promise<RawHolder[]> {
   const nftResults = await Promise.all(
     collectionConfigs.map(async (config) => ({
       id: config.id,
-      ownerCounts: await fetchNftCountsByOwner(config.collectionMint),
+      ownerCounts: await fetchResolvedNftCountsByOwner(config),
     })),
   );
 
   for (const { id, ownerCounts } of nftResults) {
     for (const [owner, count] of ownerCounts) {
+      if (isHiddenWallet(owner)) {
+        continue;
+      }
       const holder = getOrCreate(owner);
       holder.nftCounts[id] = (holder.nftCounts[id] ?? 0) + count;
       holder.totalNfts += count;
@@ -184,7 +211,17 @@ export async function buildRawHolders(): Promise<RawHolder[]> {
   return Array.from(holderMap.values());
 }
 
+export function isHiddenWallet(wallet: string): boolean {
+  return isExemptWallet(wallet);
+}
+
 export function isExemptWallet(wallet: string): boolean {
   const lower = wallet.toLowerCase();
   return tokenConfig.exemptWallets.some((w) => w.toLowerCase() === lower);
+}
+
+/** Staking pool wallets — hidden from leaderboards, NFTs attributed to depositors */
+export function isStakingWallet(wallet: string): boolean {
+  const lower = wallet.toLowerCase();
+  return collectionConfigs.some((c) => c.stakingWallet?.toLowerCase() === lower);
 }
