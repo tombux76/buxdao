@@ -10,8 +10,14 @@ type GameCardProps = {
 };
 
 function GameThumbnail({ game }: { game: Game }) {
+  const isCasino = game.category === "casino";
+
   return (
-    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border bg-bg-deep sm:h-20 sm:w-20">
+    <div
+      className={`relative h-16 w-16 shrink-0 overflow-hidden sm:h-20 sm:w-20 ${
+        isCasino ? "bg-transparent" : "rounded-lg border border-border bg-bg-deep"
+      }`}
+    >
       {game.thumbnail ? (
         <Image
           src={game.thumbnail}
