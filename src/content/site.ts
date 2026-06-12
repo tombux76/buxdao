@@ -357,6 +357,10 @@ export const buxPage = {
       description: "2% of all monthly lottery ticket sales.",
     },
     {
+      title: "Casino & raffles",
+      description: "Micro fees from BUX Casino games and on-site raffles.",
+    },
+    {
       title: "Services",
       description: "Profits from dev and artwork produced for other projects.",
     },
