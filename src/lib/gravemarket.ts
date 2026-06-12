@@ -59,6 +59,23 @@ function getClient(): GravemarketClient | null {
   return new GravemarketClient({ apiKey });
 }
 
+/** Raw floor price in SOL for holder value calculations. */
+export async function fetchGraveMarketFloorSol(slug: string): Promise<number | null> {
+  const client = getClient();
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const statsResponse = await client.collections.stats(slug);
+    const stats = statsResponse.stats;
+    const floor = toOptionalNumber(stats?.floor_price);
+    return floor != null && floor > 0 ? floor : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch collection stats from GraveMarket by slug (matches gravemarket.io/collection/{slug}). */
 export async function fetchGraveMarketCollectionStats(
   slug: string,

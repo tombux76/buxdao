@@ -2,13 +2,12 @@ import { cache } from "react";
 import { collectionConfigs, type CollectionConfig } from "@/content/site";
 import { fetchGraveMarketCollectionStats } from "@/lib/gravemarket";
 import { fetchCollectionSupply } from "@/lib/helius";
-import {
-  fetchMagicEdenCollection,
-  fetchMagicEdenStats,
-  formatCount,
-  formatPercentListed,
-  formatSol,
-} from "@/lib/magic-eden";
+function formatCount(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) {
+    return "—";
+  }
+  return value.toLocaleString();
+}
 
 type CollectionStatsFields = {
   floor: string;
@@ -37,44 +36,25 @@ function withStats(
   return { ...config, ...EMPTY_STATS, ...stats };
 }
 
-async function enrichFromMagicEdenAndHelius(
-  config: CollectionConfig,
-): Promise<CollectionWithStats> {
-  const [stats, metadata] = await Promise.all([
-    fetchMagicEdenStats(config.magicEdenSymbol),
-    fetchMagicEdenCollection(config.magicEdenSymbol),
+async function enrichCollection(config: CollectionConfig): Promise<CollectionWithStats> {
+  const [graveMarketStats, heliusSupply] = await Promise.all([
+    fetchGraveMarketCollectionStats(config.id),
+    fetchCollectionSupply(config.collectionMint),
   ]);
 
-  const heliusSupply = await fetchCollectionSupply(config.collectionMint);
-  const supply = heliusSupply ?? metadata?.totalSupply ?? null;
-  const listed = stats?.listedCount;
-
-  if (!stats) {
+  if (graveMarketStats) {
     return withStats(config, {
-      supply: formatCount(supply),
-      listed: formatCount(listed),
-      percentListed: formatPercentListed(listed, supply),
+      ...graveMarketStats,
+      supply:
+        graveMarketStats.supply === "—"
+          ? formatCount(heliusSupply)
+          : graveMarketStats.supply,
     });
   }
 
   return withStats(config, {
-    floor: formatSol(stats.floorPrice),
-    volume24h: "— SOL",
-    totalVolume: formatSol(stats.volumeAll),
-    supply: formatCount(supply),
-    listed: formatCount(listed),
-    percentListed: formatPercentListed(listed, supply),
+    supply: formatCount(heliusSupply),
   });
-}
-
-async function enrichCollection(config: CollectionConfig): Promise<CollectionWithStats> {
-  const graveMarketStats = await fetchGraveMarketCollectionStats(config.id);
-
-  if (graveMarketStats) {
-    return withStats(config, graveMarketStats);
-  }
-
-  return enrichFromMagicEdenAndHelius(config);
 }
 
 export const getCollectionsWithStats = cache(async (): Promise<CollectionWithStats[]> => {

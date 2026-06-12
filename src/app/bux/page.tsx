@@ -1,13 +1,67 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
 import { buxPage, tokenConfig } from "@/content/site";
 
+type TokenMetrics = {
+  totalSupply: number;
+  publicSupply: number;
+  exemptSupply: number;
+  liquidityPool: number;
+  solPrice: number;
+  tokenValue: number;
+  tokenValueUsd: number;
+};
+
+type HolderRow = {
+  discord_id: string;
+  discord_username: string;
+  nfts: string;
+  bux: string;
+  value: string;
+};
+
+function formatSupply(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatSol(value: number): string {
+  if (value < 0.01) {
+    return value.toFixed(6);
+  }
+  return value.toFixed(2);
+}
+
 export default function BuxPage() {
   const [viewType, setViewType] = useState("bux,nfts");
   const [collection, setCollection] = useState("all");
+  const [metrics, setMetrics] = useState<TokenMetrics | null>(null);
+  const [holders, setHolders] = useState<HolderRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      fetch("/api/token-metrics").then((r) => (r.ok ? r.json() : Promise.reject(new Error("Metrics failed")))),
+      fetch(`/api/top-holders?type=${encodeURIComponent(viewType)}&collection=${encodeURIComponent(collection)}`).then(
+        (r) => (r.ok ? r.json() : Promise.reject(new Error("Holders failed"))),
+      ),
+    ])
+      .then(([metricsData, holdersData]) => {
+        setMetrics(metricsData as TokenMetrics);
+        setHolders((holdersData as { holders: HolderRow[] }).holders ?? []);
+      })
+      .catch((err: Error) => {
+        setError(err.message);
+        setHolders([]);
+      })
+      .finally(() => setLoading(false));
+  }, [viewType, collection]);
 
   return (
     <div className="space-y-12">
@@ -28,27 +82,39 @@ export default function BuxPage() {
           <dl className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <dt className="text-muted">Total supply</dt>
-              <dd className="font-mono text-lg">{buxPage.mockMetrics.totalSupply}</dd>
+              <dd className="font-mono text-lg">
+                {metrics ? formatSupply(metrics.totalSupply) : loading ? "…" : "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Public supply</dt>
-              <dd className="font-mono text-lg">{buxPage.mockMetrics.publicSupply}</dd>
+              <dd className="font-mono text-lg">
+                {metrics ? formatSupply(metrics.publicSupply) : loading ? "…" : "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Exempt supply</dt>
-              <dd className="font-mono text-lg">{buxPage.mockMetrics.exemptSupply}</dd>
+              <dd className="font-mono text-lg">
+                {metrics ? formatSupply(metrics.exemptSupply) : loading ? "…" : "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Liquidity pool</dt>
-              <dd className="font-mono text-lg">{buxPage.mockMetrics.liquidityPool} SOL</dd>
+              <dd className="font-mono text-lg">
+                {metrics ? `${formatSol(metrics.liquidityPool)} SOL` : loading ? "…" : "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">Token value</dt>
-              <dd className="font-mono text-lg">{buxPage.mockMetrics.tokenValueSol} SOL</dd>
+              <dd className="font-mono text-lg">
+                {metrics ? `${formatSol(metrics.tokenValue)} SOL` : loading ? "…" : "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">USD value</dt>
-              <dd className="font-mono text-lg">${buxPage.mockMetrics.tokenValueUsd}</dd>
+              <dd className="font-mono text-lg">
+                {metrics ? `$${metrics.tokenValueUsd.toFixed(4)}` : loading ? "…" : "—"}
+              </dd>
             </div>
           </dl>
           <p className="mt-4 break-all font-mono text-[10px] text-muted">
@@ -119,23 +185,37 @@ export default function BuxPage() {
                 </tr>
               </thead>
               <tbody>
-                {buxPage.mockLeaderboard.map((row) => (
-                  <tr key={row.rank} className="border-b border-border/50 last:border-0">
-                    <td className="py-3 pr-4 font-mono text-accent-gold">#{row.rank}</td>
-                    <td className="py-3 pr-4">{row.discord}</td>
-                    {(viewType === "bux,nfts" || viewType === "nfts") && (
-                      <td className="py-3 pr-4 font-mono">{row.nfts}</td>
-                    )}
-                    {(viewType === "bux,nfts" || viewType === "bux") && (
-                      <td className="py-3 pr-4 font-mono">{row.bux}</td>
-                    )}
-                    <td className="py-3 font-mono">{row.value}</td>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted">
+                      Loading holders…
+                    </td>
                   </tr>
-                ))}
+                ) : holders.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted">
+                      {error ? "Could not load holder data." : "No holders found."}
+                    </td>
+                  </tr>
+                ) : (
+                  holders.map((row, index) => (
+                    <tr key={row.discord_id} className="border-b border-border/50 last:border-0">
+                      <td className="py-3 pr-4 font-mono text-accent-gold">#{index + 1}</td>
+                      <td className="py-3 pr-4">{row.discord_username}</td>
+                      {(viewType === "bux,nfts" || viewType === "nfts") && (
+                        <td className="py-3 pr-4 font-mono">{row.nfts}</td>
+                      )}
+                      {(viewType === "bux,nfts" || viewType === "bux") && (
+                        <td className="py-3 pr-4 font-mono">{row.bux}</td>
+                      )}
+                      <td className="py-3 font-mono">{row.value}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-          <p className="mt-4 text-xs text-muted">Mock data — will connect to holder API.</p>
+          {error && <p className="mt-4 text-xs text-red-400">{error}</p>}
         </Card>
       </section>
     </div>
