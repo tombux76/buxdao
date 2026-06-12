@@ -1,7 +1,7 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { tokenConfig } from "@/content/site";
 import { getSolPrice } from "@/lib/sol-price";
-import { buildRawHolders, isExemptWallet } from "@/lib/bux/helius-holders";
+import { buildRawHolders, isExemptWallet, type RawHolder } from "@/lib/bux/helius-holders";
 
 export type TokenMetrics = {
   totalSupply: number;
@@ -32,8 +32,8 @@ async function fetchLiquidityPoolSol(): Promise<number> {
   return tokenConfig.liquidityOffsetSol + onChainSol;
 }
 
-export async function fetchTokenMetrics(): Promise<TokenMetrics | null> {
-  const holders = await buildRawHolders();
+export async function fetchTokenMetrics(holdersInput?: RawHolder[]): Promise<TokenMetrics | null> {
+  const holders = holdersInput ?? (await buildRawHolders());
   if (holders.length === 0 && !process.env.HELIUS_API_KEY) {
     return null;
   }

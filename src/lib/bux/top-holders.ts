@@ -64,9 +64,9 @@ export async function fetchTopHolders(
   type: string,
   collection: string,
 ): Promise<TopHoldersResult | null> {
-  const [rawHolders, metrics, floors, discordMaps] = await Promise.all([
-    buildRawHolders(),
-    fetchTokenMetrics(),
+  const rawHolders = await buildRawHolders();
+  const [metrics, floors, discordMaps] = await Promise.all([
+    fetchTokenMetrics(rawHolders),
     getFloorPrices(),
     getWalletDiscordMap(),
   ]);

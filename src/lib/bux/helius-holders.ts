@@ -166,11 +166,17 @@ export async function buildRawHolders(): Promise<RawHolder[]> {
     holder.buxBalance += account.amount;
   }
 
-  for (const config of collectionConfigs) {
-    const ownerCounts = await fetchNftCountsByOwner(config.collectionMint);
+  const nftResults = await Promise.all(
+    collectionConfigs.map(async (config) => ({
+      id: config.id,
+      ownerCounts: await fetchNftCountsByOwner(config.collectionMint),
+    })),
+  );
+
+  for (const { id, ownerCounts } of nftResults) {
     for (const [owner, count] of ownerCounts) {
       const holder = getOrCreate(owner);
-      holder.nftCounts[config.id] = (holder.nftCounts[config.id] ?? 0) + count;
+      holder.nftCounts[id] = (holder.nftCounts[id] ?? 0) + count;
       holder.totalNfts += count;
     }
   }
