@@ -10,14 +10,21 @@
   },
   "dependencies": {
     "@solanadeads/gravemarket": "^0.2.3",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-solflare": "^0.6.32",
+    "@solana/web3.js": "^1.98.4",
     "lucide-react": "^1.17.0",
     "next": "16.2.9",
+    "pg": "^8.16.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

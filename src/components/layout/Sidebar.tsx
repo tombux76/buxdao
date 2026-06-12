@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { BrandMark } from "./BrandMark";
+import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { navItems } from "@/content/site";
 
 const icons: Record<string, ReactNode> = {
@@ -60,13 +61,7 @@ export function Sidebar() {
       <div className="border-t border-border p-4">
         <p className="mb-3 text-[10px] uppercase tracking-wider text-muted">Profile</p>
         <div className="space-y-2">
-          <button
-            type="button"
-            disabled
-            className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-left text-sm text-muted opacity-60"
-          >
-            Connect wallet
-          </button>
+          <WalletConnectButton className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-left text-sm hover:text-foreground" />
           <button
             type="button"
             disabled
@@ -75,7 +70,7 @@ export function Sidebar() {
             Connect Discord
           </button>
         </div>
-        <p className="mt-3 text-[10px] text-muted">UI mockup — not wired yet</p>
+        <p className="mt-3 text-[10px] text-muted">Discord connect coming soon</p>
       </div>
     </aside>
   );

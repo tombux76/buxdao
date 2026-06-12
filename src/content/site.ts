@@ -312,8 +312,8 @@ export const merchProducts: MerchProduct[] = [
 
 export const merchContent = {
   title: "Merch Store",
-  subtitle: "Official BUXDAO apparel — Printful fulfillment, SOL checkout coming with full integration.",
-  note: "UI mockup — cart and checkout not wired yet.",
+  subtitle: "Official BUXDAO apparel — Printful fulfillment with SOL checkout.",
+  note: "Connect Solflare, pick your size and color, then pay in SOL at checkout. Orders ship via Printful.",
 };
 
 export const hubContent = {
