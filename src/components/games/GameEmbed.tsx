@@ -5,15 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Music2, Wallet } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-
-const GAME_CONFIG = {
-  slots: { title: "BUX Slots", built: true, iframeSrc: "/casino/slots.html" },
-  roulette: { title: "Roulette", built: true, iframeSrc: "/casino/roulette.html" },
-  coinflip: { title: "Coin Flip", built: true, iframeSrc: "/casino/coinflip.html" },
-  blackjack: { title: "Blackjack", built: false },
-} as const;
-
-type GameId = keyof typeof GAME_CONFIG;
+import { GAME_CONFIG, type GameId } from "@/lib/games";
 
 type GameEmbedProps = {
   gameId: GameId;
@@ -148,9 +140,3 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
     </div>
   );
 }
-
-export function isValidGameId(value: string): value is GameId {
-  return value in GAME_CONFIG;
-}
-
-export { GAME_CONFIG };

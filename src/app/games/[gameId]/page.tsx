@@ -1,4 +1,5 @@
-import { GameEmbed, isValidGameId } from "@/components/games/GameEmbed";
+import { GameEmbed } from "@/components/games/GameEmbed";
+import { isValidGameId } from "@/lib/games";
 import { notFound } from "next/navigation";
 
 type GamePageProps = {
