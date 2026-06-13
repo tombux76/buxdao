@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { runCasinoHandler } from "@/lib/casino/node-handler";
 
-const HANDLER = "save-game.cjs";
+const HANDLER = "../../../casino-api/save-game.cjs";
 
 export const runtime = "nodejs";
 
