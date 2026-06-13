@@ -7,6 +7,7 @@ const {
   createAssociatedTokenAccountInstruction,
 } = require("@solana/spl-token");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
+const { isValidWalletAddress } = require("./wallet-utils.cjs");
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET;
 
@@ -55,9 +56,7 @@ async function handler(req, res) {
     if (!userWallet || !Number.isFinite(amount) || amount <= 0) {
       return json(res, 400, { error: "Invalid request: userWallet and positive amount required" });
     }
-    try {
-      new PublicKey(userWallet);
-    } catch (_) {
+    if (!isValidWalletAddress(userWallet)) {
       return json(res, 400, { error: "Invalid wallet address format" });
     }
     if (amount > MAX_WIN_AMOUNT) {

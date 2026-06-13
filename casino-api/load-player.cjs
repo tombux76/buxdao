@@ -1,5 +1,6 @@
 // Load slots player state — Neon Postgres
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
+const { isValidWalletAddress } = require("./wallet-utils.cjs");
 
 const TOKEN_DECIMALS = 6;
 
@@ -18,10 +19,7 @@ async function handler(req, res) {
     if (gameType !== "slots" && gameType !== "coinflip" && gameType !== "roulette") return json(res, 400, { error: "gameType must be slots, coinflip, or roulette" });
     if (!walletAddress) return json(res, 400, { error: "walletAddress query parameter is required" });
 
-    try {
-      const { PublicKey } = require("@solana/web3.js");
-      new PublicKey(walletAddress);
-    } catch (_) {
+    if (!isValidWalletAddress(walletAddress)) {
       return json(res, 400, { error: "Invalid wallet address format" });
     }
 

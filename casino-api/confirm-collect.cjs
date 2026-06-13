@@ -1,6 +1,7 @@
 // Confirm collect: clear unclaimed_rewards after tx confirmed — adapted from xapes, slots only
 const { Connection, PublicKey } = require("@solana/web3.js");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
+const { isValidWalletAddress } = require("./wallet-utils.cjs");
 
 const TOKEN_DECIMALS = 6;
 const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
@@ -26,9 +27,7 @@ async function handler(req, res) {
     if (!userWallet || !signature || !Number.isFinite(amount) || amount <= 0) {
       return json(res, 400, { error: "Invalid request: userWallet, signature, and positive amount required" });
     }
-    try {
-      new PublicKey(userWallet);
-    } catch (_) {
+    if (!isValidWalletAddress(userWallet)) {
       return json(res, 400, { error: "Invalid wallet address format" });
     }
     if (typeof signature !== "string" || signature.trim().length === 0) {

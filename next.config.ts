@@ -15,11 +15,7 @@ const casinoApiIncludes = Object.fromEntries(
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: casinoApiIncludes,
-  serverExternalPackages: [
-    "@neondatabase/serverless",
-    "@solana/web3.js",
-    "@solana/spl-token",
-  ],
+  serverExternalPackages: ["@neondatabase/serverless"],
 };
 
 export default nextConfig;

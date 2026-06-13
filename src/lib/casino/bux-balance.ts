@@ -1,7 +1,7 @@
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { tokenConfig } from "@/content/site";
 
 const HELIUS_RPC = "https://mainnet.helius-rpc.com";
+const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 async function heliusRpc<T>(method: string, params: unknown): Promise<T | null> {
   const apiKey = process.env.HELIUS_API_KEY;
@@ -38,7 +38,7 @@ export async function fetchCasinoBuxBalance(wallet: string): Promise<number> {
   const result = await heliusRpc<{ account: { data: string | [string, string] } }[]>(
     "getProgramAccounts",
     [
-      TOKEN_PROGRAM_ID.toBase58(),
+      TOKEN_PROGRAM_ID,
       {
         encoding: "base64",
         commitment: "confirmed",
@@ -83,4 +83,8 @@ export function getCasinoRpcUrl(): string {
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL?.trim() ||
     "https://api.mainnet-beta.solana.com"
   );
+}
+
+export function isValidSolanaWallet(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address.trim());
 }

@@ -1,5 +1,6 @@
 // Save slots game data (purchase or spin) — Neon Postgres
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
+const { isValidWalletAddress } = require("./wallet-utils.cjs");
 
 function getDateET() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -61,10 +62,7 @@ async function handler(req, res) {
     if (gameTypeNorm !== "slots" && gameTypeNorm !== "coinflip" && gameTypeNorm !== "roulette") return json(res, 400, { error: "gameType must be slots, coinflip, or roulette" });
     if (!walletAddress) return json(res, 400, { error: "walletAddress is required" });
 
-    try {
-      const { PublicKey } = require("@solana/web3.js");
-      new PublicKey(walletAddress);
-    } catch (_) {
+    if (!isValidWalletAddress(walletAddress)) {
       return json(res, 400, { error: "Invalid wallet address format" });
     }
 

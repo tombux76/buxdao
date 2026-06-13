@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { PublicKey } from "@solana/web3.js";
-import { fetchCasinoBuxBalance } from "@/lib/casino/bux-balance";
+import { fetchCasinoBuxBalance, isValidSolanaWallet } from "@/lib/casino/bux-balance";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const wallet = new URL(request.url).searchParams.get("wallet")?.trim();
@@ -10,12 +10,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "wallet required" }, { status: 400 });
   }
 
-  try {
-    new PublicKey(wallet);
-  } catch {
+  if (!isValidSolanaWallet(wallet)) {
     return NextResponse.json({ error: "invalid wallet" }, { status: 400 });
   }
 
-  const balance = await fetchCasinoBuxBalance(wallet);
-  return NextResponse.json({ balance });
+  try {
+    const balance = await fetchCasinoBuxBalance(wallet);
+    return NextResponse.json({ balance });
+  } catch (error) {
+    console.error("token-balance error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch balance", message: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
+  }
 }
