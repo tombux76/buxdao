@@ -36,7 +36,7 @@ function getMinSolForPurchase() {
 }
 
 function getTokenDecimals() {
-  return BUX_DECIMALS;
+  return typeof window.__BUX_DECIMALS__ === 'number' ? window.__BUX_DECIMALS__ : BUX_DECIMALS;
 }
 
 function getCoinImagePath(side) {
@@ -46,12 +46,26 @@ function getCoinImagePath(side) {
 let wallet = null;
 let connection = null;
 let tokenBalance = 0;
+let balanceFetchId = 0;
+let walletSetupPromise = null;
 let flipsRemaining = 0;
 let totalWon = 0;
 let selectedSide = null;
 let isFlipping = false;
 let isCollecting = false;
-let RPC_URL = window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
+
+function getRpcUrl() {
+  return window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
+}
+
+function initConnection() {
+  const rpcUrl = getRpcUrl();
+  if (typeof window.solanaWeb3 !== 'undefined') {
+    connection = new window.solanaWeb3.Connection(rpcUrl, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
+  } else if (typeof solanaWeb3 !== 'undefined') {
+    connection = new solanaWeb3.Connection(rpcUrl, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
+  }
+}
 
 function showMessage(options) {
   const { title, message, txSignature, isError } = options;
@@ -95,14 +109,6 @@ function setCurrencyLabels() {
   if (costLabel) costLabel.textContent = `Cost Per Flip (${label}):`;
 }
 
-function initConnection() {
-  if (typeof window.solanaWeb3 !== 'undefined') {
-    connection = new window.solanaWeb3.Connection(RPC_URL, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
-  } else if (typeof solanaWeb3 !== 'undefined') {
-    connection = new solanaWeb3.Connection(RPC_URL, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
-  }
-}
-
 function waitForSplToken() {
   if (window.splToken) return Promise.resolve();
   return new Promise(function (resolve) {
@@ -112,19 +118,30 @@ function waitForSplToken() {
 }
 
 async function applyWalletConnected(addr, connectContainer, walletInfo, walletAddressEl) {
+  if (addr && wallet === addr && walletSetupPromise) {
+    await walletSetupPromise;
+    return;
+  }
   wallet = addr;
   if (walletAddressEl) walletAddressEl.textContent = addr ? (addr.slice(0, 4) + '...' + addr.slice(-4)) : '';
   if (connectContainer) connectContainer.style.display = addr ? 'none' : 'block';
   if (walletInfo) walletInfo.style.display = addr ? 'flex' : 'none';
   if (addr) {
-    initConnection();
-    await waitForSplToken();
-    await updateBalance();
-    await loadPlayerData();
-    updateDisplay();
-    updateButtonStates();
-    try { window.parent.postMessage({ type: 'WALLET_CONNECTED', address: addr }, '*'); } catch (_) {}
+    walletSetupPromise = (async function () {
+      initConnection();
+      await updateBalance();
+      await loadPlayerData();
+      updateDisplay();
+      updateButtonStates();
+      try { window.parent.postMessage({ type: 'WALLET_CONNECTED', address: addr }, '*'); } catch (_) {}
+    })();
+    try {
+      await walletSetupPromise;
+    } finally {
+      walletSetupPromise = null;
+    }
   } else {
+    walletSetupPromise = null;
     try { window.parent.postMessage({ type: 'WALLET_DISCONNECTED' }, '*'); } catch (_) {}
   }
 }
@@ -216,8 +233,36 @@ async function setupWalletConnection() {
   }
 }
 
+async function fetchServerBuxBalance() {
+  if (!wallet) return null;
+  const response = await fetch(`/api/casino/token-balance?wallet=${encodeURIComponent(wallet)}`);
+  if (!response.ok) return null;
+  const data = await response.json();
+  if (typeof data.balance === 'number' && Number.isFinite(data.balance)) return data.balance;
+  return null;
+}
+
 async function updateBalance() {
-  if (!wallet || !connection || !window.splToken) return;
+  if (!wallet) return;
+  const fetchId = ++balanceFetchId;
+
+  try {
+    const balance = await fetchServerBuxBalance();
+    if (fetchId !== balanceFetchId) return;
+    if (balance !== null) {
+      tokenBalance = balance;
+      updateDisplay();
+      return;
+    }
+  } catch (error) {
+    if (fetchId !== balanceFetchId) return;
+    console.warn('Server balance lookup failed:', error);
+  }
+
+  if (fetchId !== balanceFetchId) return;
+  if (!connection) initConnection();
+  if (!connection || !window.splToken) return;
+
   try {
     const { PublicKey } = window.solanaWeb3 || solanaWeb3;
     const { getAssociatedTokenAddress, getAccount } = window.splToken;
@@ -226,15 +271,23 @@ async function updateBalance() {
     const tokenAccount = await getAssociatedTokenAddress(tokenMint, userPublicKey);
     try {
       const account = await getAccount(connection, tokenAccount);
+      if (fetchId !== balanceFetchId) return;
       tokenBalance = Number(account.amount) / Math.pow(10, getTokenDecimals());
-    } catch (_) {
-      tokenBalance = 0;
+    } catch (error) {
+      if (fetchId !== balanceFetchId) return;
+      const errorMsg = (error && (error.message || error.toString())) || '';
+      const isNotFound = errorMsg.includes('not found') || errorMsg.includes('TokenAccountNotFoundError');
+      if (errorMsg.includes('403') || errorMsg.includes('429') || errorMsg.includes('rate limit')) {
+        console.warn('RPC rate limited. Balance may not update.');
+      } else if (isNotFound) {
+        tokenBalance = 0;
+      }
     }
+    if (fetchId !== balanceFetchId) return;
     updateDisplay();
   } catch (err) {
+    if (fetchId !== balanceFetchId) return;
     console.error('Balance error:', err);
-    tokenBalance = 0;
-    updateDisplay();
   }
 }
 
@@ -321,8 +374,13 @@ async function loadPlayerData() {
 }
 
 async function purchaseFlips() {
-  if (!wallet || !connection) {
+  if (!wallet) {
     showMessage({ title: 'Wallet required', message: 'Please connect your wallet first.', isError: true });
+    return;
+  }
+  if (!connection) initConnection();
+  if (!connection) {
+    showMessage({ title: 'Connection error', message: 'Could not connect to Solana RPC.', isError: true });
     return;
   }
   let costPerFlip = parseInt(document.getElementById('cost-per-flip').value, 10);
@@ -334,6 +392,17 @@ async function purchaseFlips() {
   costPerFlip = Math.min(costPerFlip, MAX_COST_PER_FLIP);
   numFlips = Math.min(numFlips, MAX_FLIPS_PER_PURCHASE);
   const totalCost = costPerFlip * numFlips;
+
+  try {
+    const serverBalance = await fetchServerBuxBalance();
+    if (serverBalance !== null) {
+      tokenBalance = serverBalance;
+      updateDisplay();
+    }
+  } catch (error) {
+    console.warn('Could not refresh balance before purchase:', error);
+  }
+
   if (tokenBalance < totalCost) {
     showMessage({ title: 'Insufficient balance', message: `You need ${totalCost} ${getTokenLabel()} but only have ${tokenBalance.toFixed(2)} ${getTokenLabel()}.`, isError: true });
     return;
@@ -341,28 +410,35 @@ async function purchaseFlips() {
   const solBalance = await connection.getBalance(new (window.solanaWeb3 || solanaWeb3).PublicKey(wallet));
   const minSol = getMinSolForPurchase();
   if (solBalance < minSol) {
-    showMessage({ title: 'Insufficient SOL', message: `Need ~${(minSol / 1e9).toFixed(4)} SOL for fee. You have ${(solBalance / 1e9).toFixed(4)} SOL.`, isError: true });
+    showMessage({ title: 'Insufficient SOL', message: `Need ~${(minSol / 1e9).toFixed(4)} SOL for transaction fee (includes ${getPurchaseFeeSol()} SOL fee). You have ${(solBalance / 1e9).toFixed(4)} SOL.`, isError: true });
     return;
   }
   if (!window.splToken) {
-    showMessage({ title: 'Loading', message: 'Token library still loading. Try again in a moment.', isError: true });
+    showMessage({ title: 'Loading', message: 'SPL token library is still loading. Please wait a moment and try again.', isError: true });
     return;
   }
   try {
     const { PublicKey, Transaction, SystemProgram } = window.solanaWeb3 || solanaWeb3;
     const { getAssociatedTokenAddress, createTransferInstruction } = window.splToken;
-    const createATA = window.splToken.createAssociatedTokenAccountInstruction || window.splToken.createAssociatedTokenAccountIdempotentInstruction;
+    const createAssociatedTokenAccountInstruction = window.splToken.createAssociatedTokenAccountInstruction || window.splToken.createAssociatedTokenAccountIdempotentInstruction;
     const tokenMint = new PublicKey(getTokenMint());
     const userPublicKey = new PublicKey(wallet);
     const treasuryPublicKey = new PublicKey(getTreasuryWallet());
     const userTokenAccount = await getAssociatedTokenAddress(tokenMint, userPublicKey);
     const treasuryTokenAccount = await getAssociatedTokenAddress(tokenMint, treasuryPublicKey);
+    const treasuryAccountInfo = await connection.getAccountInfo(treasuryTokenAccount);
     const transaction = new Transaction();
-    try {
-      await connection.getAccountInfo(treasuryTokenAccount);
-    } catch (_) {
-      if (createATA) {
-        transaction.add(createATA(userPublicKey, treasuryTokenAccount, treasuryPublicKey, tokenMint));
+    if (!treasuryAccountInfo) {
+      if (createAssociatedTokenAccountInstruction) {
+        transaction.add(createAssociatedTokenAccountInstruction(
+          userPublicKey,
+          treasuryTokenAccount,
+          treasuryPublicKey,
+          tokenMint
+        ));
+      } else {
+        showMessage({ title: 'Setup error', message: 'Could not prepare treasury token account.', isError: true });
+        return;
       }
     }
     const transferAmount = BigInt(Math.floor(totalCost * Math.pow(10, getTokenDecimals())));
@@ -462,8 +538,13 @@ async function doFlip() {
 }
 
 async function withdrawWinnings() {
-  if (totalWon <= 0 || !wallet || !connection) {
+  if (totalWon <= 0 || !wallet) {
     showMessage({ title: 'No winnings', message: 'No winnings to withdraw.', isError: true });
+    return;
+  }
+  if (!connection) initConnection();
+  if (!connection) {
+    showMessage({ title: 'Connection error', message: 'Could not connect to Solana RPC.', isError: true });
     return;
   }
   if (!window.splToken) {
@@ -485,7 +566,10 @@ async function withdrawWinnings() {
       })
     });
     if (!response.ok) {
-      const errData = await response.json();
+      let errData = {};
+      try {
+        errData = await response.json();
+      } catch (_) {}
       throw new Error(errData.error || errData.message || 'Collect failed');
     }
     const { transaction: transactionBase64, actualAmount } = await response.json();
