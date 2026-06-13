@@ -20,6 +20,7 @@ Set **`POSTGRES_URL`** and **`CASINO_DATABASE_URL`** to the same connection stri
 |------|--------|
 | **Auth.js** | `users`, `accounts`, `sessions`, `verification_token` |
 | **Wallets** | `user_wallets`, `wallet_link_challenges` |
+| **Discord roles** | `discord_role_catalog` (display metadata only) |
 | **Merch** | `orders` |
 | **Cashout** | `cashout_transactions` |
 | **Legacy airdrop** | `legacy_reward_airdrops` |
@@ -55,6 +56,18 @@ This keeps `users.created_at` / `sessions` as a true picture of **who is current
 - **Discord** — primary login via Auth.js. Snowflake stored on `users.discord_id` (denormalized from `accounts.providerAccountId`). Profile name/avatar synced on login and hub load.
 - **X** — link second account after Discord login (`provider = 'twitter'`). Requires `AUTH_TWITTER_ID` / `AUTH_TWITTER_SECRET`.
 - **Wallet** — signed message against `wallet_link_challenges`, insert `user_wallets`
+- **Discord roles (Hub)** — bot fetches member role IDs from Discord; `discord_role_catalog` maps role IDs to display name, color, and emoji (no per-user role storage)
+
+### Discord role catalog
+
+Populate once from your verification role IDs (e.g. export from the old `roles` table):
+
+```sql
+INSERT INTO discord_role_catalog (discord_role_id, display_name, color, emoji_url, sort_order)
+VALUES ('123456789012345678', 'MONSTER', '#14f195', 'https://…', 1);
+```
+
+Requires `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` (same guild + bot as GraveKeeper verify).
 
 ### Discord app setup
 
@@ -90,6 +103,8 @@ CASINO_DATABASE_URL=   # same as POSTGRES_URL
 AUTH_SECRET=
 AUTH_DISCORD_ID=
 AUTH_DISCORD_SECRET=
+DISCORD_BOT_TOKEN=
+DISCORD_GUILD_ID=
 AUTH_TWITTER_ID=
 AUTH_TWITTER_SECRET=
 ```

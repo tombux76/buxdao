@@ -86,6 +86,22 @@ CREATE TABLE wallet_link_challenges (
 CREATE INDEX idx_wallet_link_challenges_user_id ON wallet_link_challenges (user_id);
 
 -- ---------------------------------------------------------------------------
+-- Discord role display catalog (membership fetched live from Discord API)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE discord_role_catalog (
+  discord_role_id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#ffffff',
+  emoji_url TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_discord_role_catalog_sort ON discord_role_catalog (sort_order, display_name);
+
+-- ---------------------------------------------------------------------------
 -- Merch (Printful + SOL checkout)
 -- ---------------------------------------------------------------------------
 
