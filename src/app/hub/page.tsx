@@ -2,6 +2,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
 import { HubProfileCard } from "@/components/hub/HubProfileCard";
 import { HubSetupSteps } from "@/components/hub/HubSetupSteps";
+import { HubDashboard } from "@/components/hub/HubDashboard";
 import { hubContent, site } from "@/content/site";
 
 export default function HubPage() {
@@ -32,46 +33,8 @@ export default function HubPage() {
 
       <Card glow="purple" className="space-y-4 p-5">
         <h3 className="text-lg font-semibold">Your dashboard</h3>
-        <p className="text-sm text-muted">{hubContent.note}</p>
-
         <HubProfileCard />
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {["Fcked Catz", "Money Monsters", "A.I. BitBots", "MM 3D", "Celebrity Catz"].map(
-            (name) => (
-              <div
-                key={name}
-                className="tile-border rounded-xl border-dashed bg-bg-deep/50 p-4"
-              >
-                <p className="text-xs uppercase text-muted">{name}</p>
-                <p className="mt-2 text-sm text-muted">NFT gallery — connect wallet</p>
-              </div>
-            ),
-          )}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
-            <p className="text-xs uppercase text-muted">Discord roles</p>
-            <p className="mt-1 text-sm text-muted">—</p>
-          </div>
-          <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
-            <p className="text-xs uppercase text-muted">$BUX balance</p>
-            <p className="mt-1 font-mono text-accent-gold">—</p>
-          </div>
-          <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
-            <p className="text-xs uppercase text-muted">Cashout value</p>
-            <p className="mt-1 font-mono text-accent-gold">— SOL</p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          disabled
-          className="w-full rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan py-3 text-sm font-semibold text-bg-deep opacity-50"
-        >
-          Cash out $BUX (coming soon)
-        </button>
+        <HubDashboard />
       </Card>
     </div>
   );
