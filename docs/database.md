@@ -27,19 +27,24 @@ Set **`POSTGRES_URL`** and **`CASINO_DATABASE_URL`** to the same connection stri
 
 View **`wallet_discord`** — joins `user_wallets` → `users` → Discord `accounts` for leaderboard names.
 
+## Clean slate — no old data migration
+
+**Do not import** users, wallets, or orders from the old site.
+
+| Data | Approach |
+|------|----------|
+| **Users & wallets** | Created only when someone logs in on the new site and links a wallet |
+| **Merch orders** | New orders only — past Printful orders are ignored |
+| **Casino stats** | Fresh — players accumulate from first play on v2 |
+| **Legacy unclaimed $BUX** | One-time airdrop only — `legacy_reward_airdrops` + CSV in `docs/` (not live user accounts) |
+
+This keeps `users.created_at` / `sessions` as a true picture of **who is currently active** on the new site.
+
 ## Auth flow (next step)
 
 - **Discord** — primary login via Auth.js (`provider = 'discord'`)
 - **X** — link second account (`provider = 'twitter'` or `'x'`) on same `users.id`
 - **Wallet** — signed message against `wallet_link_challenges`, insert `user_wallets`
-
-## Migrating from old DBs
-
-**Old main DB (us-east-2):** export `user_wallets` → create `users` + `accounts` stubs + `user_wallets`; copy `orders`.
-
-**Old casino DB (eu-west-2):** pg_dump game tables only (`slots_*`, `coinflip_*`, `roulette_*`, `casino_daily_totals`).
-
-Users who log in via Discord before migration will get new `users` rows; merge on `accounts.providerAccountId` = old `discord_id`.
 
 ## Env vars (auth — add when implementing)
 
