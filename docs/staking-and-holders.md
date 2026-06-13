@@ -40,6 +40,7 @@ These are in `tokenConfig.exemptWallets` and are never shown on holder tables:
 
 - `FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75` — project/treasury
 - `7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR` — also Celebrity Catz staking pool
+- `1BWutmTvYPwDtmw9abTkS4Ssr8no61spGAvW1X6NDix` — Magic Eden V2 authority / escrow
 
 ## Key files
 

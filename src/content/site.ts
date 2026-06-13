@@ -28,6 +28,8 @@ export const tokenConfig = {
   exemptWallets: [
     "FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75",
     "7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR",
+    /** Magic Eden V2 authority / escrow — not a community holder */
+    "1BWutmTvYPwDtmw9abTkS4Ssr8no61spGAvW1X6NDix",
   ],
 } as const;
 
