@@ -342,7 +342,7 @@ export const hubContent = {
     { step: 3, title: "Connect wallet(s)", body: "Add one or more Solana wallets to view NFT holdings." },
     { step: 4, title: "Verify in Discord", body: "Use the GraveKeeper verify embed in our Discord server for holder roles." },
   ],
-  note: "Functionality coming soon — UI mockup only.",
+  note: "Connect Discord to activate your profile. Wallet linking and holdings view coming next.",
 };
 
 export const buxPage = {

@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { BrandMark } from "./BrandMark";
+import { DiscordAuthButton } from "@/components/auth/DiscordAuthButton";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { navItems } from "@/content/site";
 
@@ -62,15 +63,12 @@ export function Sidebar() {
         <p className="mb-3 text-[10px] uppercase tracking-wider text-muted">Profile</p>
         <div className="space-y-2">
           <WalletConnectButton className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-left text-sm hover:text-foreground" />
-          <button
-            type="button"
-            disabled
-            className="w-full rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2 text-left text-sm text-[#5865F2] opacity-60"
-          >
-            Connect Discord
-          </button>
+          <DiscordAuthButton
+            compact
+            className="w-full rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2 text-left text-sm text-[#5865F2] transition hover:bg-[#5865F2]/20"
+            connectedClassName="w-full rounded-xl border border-[#5865F2]/30 bg-bg-surface px-3 py-2 text-left text-sm text-foreground"
+          />
         </div>
-        <p className="mt-3 text-[10px] text-muted">Discord connect coming soon</p>
       </div>
     </aside>
   );

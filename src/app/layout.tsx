@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import { Space_Grotesk, Syne } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
+import { AuthSessionProvider } from "@/components/auth/AuthSessionProvider";
 import { WalletProviders } from "@/components/wallet/WalletProviders";
 import { site } from "@/content/site";
 import "./globals.css";
@@ -50,9 +51,11 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${syne.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full font-sans">
-        <WalletProviders>
-          <AppShell>{children}</AppShell>
-        </WalletProviders>
+        <AuthSessionProvider>
+          <WalletProviders>
+            <AppShell>{children}</AppShell>
+          </WalletProviders>
+        </AuthSessionProvider>
       </body>
     </html>
   );

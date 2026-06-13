@@ -1,5 +1,6 @@
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
+import { HubProfileCard } from "@/components/hub/HubProfileCard";
 import { hubContent, site } from "@/content/site";
 
 export default function HubPage() {
@@ -42,17 +43,7 @@ export default function HubPage() {
         <h3 className="text-lg font-semibold">Your dashboard</h3>
         <p className="text-sm text-muted">{hubContent.note}</p>
 
-        <div className="flex flex-wrap gap-2">
-          <button type="button" disabled className="rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/10 px-4 py-2 text-sm text-[#5865F2] opacity-60">
-            Connect Discord
-          </button>
-          <button type="button" disabled className="rounded-xl border border-border px-4 py-2 text-sm text-muted opacity-60">
-            Connect X
-          </button>
-          <button type="button" disabled className="rounded-xl border border-border px-4 py-2 text-sm text-muted opacity-60">
-            Connect wallet
-          </button>
-        </div>
+        <HubProfileCard />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {["Fcked Catz", "Money Monsters", "A.I. BitBots", "MM 3D", "Celebrity Catz"].map(

@@ -40,20 +40,36 @@ View **`wallet_discord`** — joins `user_wallets` → `users` → Discord `acco
 
 This keeps `users.created_at` / `sessions` as a true picture of **who is currently active** on the new site.
 
-## Auth flow (next step)
+## Auth flow
 
-- **Discord** — primary login via Auth.js (`provider = 'discord'`)
-- **X** — link second account (`provider = 'twitter'` or `'x'`) on same `users.id`
+- **Discord** — primary login via Auth.js (`provider = 'discord'`). See env vars below.
+- **X** — link second account later (`provider = 'twitter'`)
 - **Wallet** — signed message against `wallet_link_challenges`, insert `user_wallets`
 
-## Env vars (auth — add when implementing)
+### Discord app setup
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) → New Application → OAuth2
+2. Redirect URL: `http://localhost:3000/api/auth/callback/discord` (and production URL)
+3. Copy Client ID → `AUTH_DISCORD_ID`, Client Secret → `AUTH_DISCORD_SECRET`
+4. Generate secret: `openssl rand -base64 32` → `AUTH_SECRET`
+
+### Active members query
+
+```sql
+SELECT u.id, u.name, u.created_at, u.updated_at, a."providerAccountId" AS discord_id
+FROM users u
+JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord'
+ORDER BY u.updated_at DESC;
+```
+
+## Env vars
 
 ```env
 POSTGRES_URL=
 CASINO_DATABASE_URL=   # same as POSTGRES_URL
-AUTH_SECRET=             # openssl rand -base64 32
+AUTH_SECRET=
 AUTH_DISCORD_ID=
 AUTH_DISCORD_SECRET=
-AUTH_TWITTER_ID=
-AUTH_TWITTER_SECRET=
+# AUTH_TWITTER_ID=
+# AUTH_TWITTER_SECRET=
 ```

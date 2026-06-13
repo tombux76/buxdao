@@ -11,6 +11,7 @@
     "db:seed-legacy-airdrops": "psql \"$POSTGRES_URL\" -f db/seed-legacy-airdrops.sql"
   },
   "dependencies": {
+    "@auth/pg-adapter": "^1.11.2",
     "@neondatabase/serverless": "^1.1.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-base": "^0.9.27",
@@ -21,6 +22,7 @@
     "@solanadeads/gravemarket": "^0.2.3",
     "lucide-react": "^1.17.0",
     "next": "16.2.9",
+    "next-auth": "^5.0.0-beta.31",
     "pg": "^8.16.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"
