@@ -28,7 +28,7 @@ async function handler(req, res) {
       if (sortBy === "flips") {
         players = await sql`
           SELECT c.wallet_address,
-                 COALESCE(u.discord_username, c.wallet_address) AS display_name,
+                 COALESCE(u.name, c.wallet_address) AS display_name,
                  c.total_flips,
                  c.total_won,
                  c.total_wagered,
@@ -42,7 +42,7 @@ async function handler(req, res) {
       } else {
         players = await sql`
           SELECT c.wallet_address,
-                 COALESCE(u.discord_username, c.wallet_address) AS display_name,
+                 COALESCE(u.name, c.wallet_address) AS display_name,
                  c.total_flips,
                  c.total_won,
                  c.total_wagered,
@@ -77,7 +77,7 @@ async function handler(req, res) {
     if (sortBy === "spins") {
       players = await sql`
         SELECT s.wallet_address,
-               COALESCE(u.discord_username, s.wallet_address) AS display_name,
+               COALESCE(u.name, s.wallet_address) AS display_name,
                s.total_spins,
                s.total_won,
                s.total_wagered,
@@ -91,7 +91,7 @@ async function handler(req, res) {
     } else if (sortBy === "won") {
       players = await sql`
         SELECT s.wallet_address,
-               COALESCE(u.discord_username, s.wallet_address) AS display_name,
+               COALESCE(u.name, s.wallet_address) AS display_name,
                s.total_spins,
                s.total_won,
                s.total_wagered,
@@ -105,7 +105,7 @@ async function handler(req, res) {
     } else {
       players = await sql`
         SELECT s.wallet_address,
-               COALESCE(u.discord_username, s.wallet_address) AS display_name,
+               COALESCE(u.name, s.wallet_address) AS display_name,
                s.total_spins,
                s.total_won,
                s.total_wagered,

@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## BUX holder metrics & GraveStake
 
 See **[docs/staking-and-holders.md](./docs/staking-and-holders.md)** before enabling staking on Money Monsters, A.I. BitBots, or Money Monsters 3D. Pool wallets must be set on each `collectionConfigs` entry in `src/content/site.ts`.
+
+## Database
+
+Unified Postgres schema (auth, wallets, merch, casino): **[docs/database.md](./docs/database.md)**. Apply with `npm run db:schema`.
