@@ -1,7 +1,7 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { tokenConfig } from "@/content/site";
 import { getSolPrice } from "@/lib/sol-price";
-import { buildRawHolders, isExemptWallet, type RawHolder } from "@/lib/bux/helius-holders";
+import { buildRawHolders, isNonPublicSupplyWallet, type RawHolder } from "@/lib/bux/helius-holders";
 
 export type TokenMetrics = {
   totalSupply: number;
@@ -44,7 +44,7 @@ export async function fetchTokenMetrics(holdersInput?: RawHolder[]): Promise<Tok
 
   for (const holder of holders) {
     totalSupply += holder.buxBalance;
-    if (isExemptWallet(holder.wallet)) {
+    if (isNonPublicSupplyWallet(holder.wallet)) {
       exemptSupply += holder.buxBalance;
     } else {
       publicSupply += holder.buxBalance;

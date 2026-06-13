@@ -212,12 +212,17 @@ export async function buildRawHolders(): Promise<RawHolder[]> {
 }
 
 export function isHiddenWallet(wallet: string): boolean {
-  return isExemptWallet(wallet);
+  return isExemptWallet(wallet) || isStakingWallet(wallet);
 }
 
 export function isExemptWallet(wallet: string): boolean {
   const lower = wallet.toLowerCase();
   return tokenConfig.exemptWallets.some((w) => w.toLowerCase() === lower);
+}
+
+/** BUX in staking pool wallets is not public circulating supply */
+export function isNonPublicSupplyWallet(wallet: string): boolean {
+  return isExemptWallet(wallet) || isStakingWallet(wallet);
 }
 
 /** Staking pool wallets — hidden from leaderboards, NFTs attributed to depositors */

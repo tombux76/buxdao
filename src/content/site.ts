@@ -81,7 +81,7 @@ export type CollectionConfig = {
   graveMarketUrl: string;
   graveStakeUrl: string;
   stakeLive: boolean;
-  /** GraveStake pool wallet — staked NFTs are attributed to depositors, not this wallet */
+  /** GraveStake pool wallet — staked NFTs attributed to depositors; $BUX here is exempt supply */
   stakingWallet?: string;
   /** Daily $BUX staking yield per NFT */
   dailyBuxYield: number;
