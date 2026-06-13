@@ -15,12 +15,17 @@ CREATE TABLE users (
   email VARCHAR(255) UNIQUE,
   "emailVerified" TIMESTAMPTZ,
   image TEXT,
+  discord_id VARCHAR(255),
+  discord_username VARCHAR(255),
+  discord_image TEXT,
   x_username VARCHAR(255),
   x_user_id VARCHAR(255),
   x_image TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX idx_users_discord_id ON users (discord_id) WHERE discord_id IS NOT NULL;
 
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
@@ -272,8 +277,8 @@ SELECT
   uw.wallet_address,
   uw.user_id,
   uw.is_primary,
-  a."providerAccountId" AS discord_id,
-  u.name AS discord_username
+  COALESCE(u.discord_id, a."providerAccountId") AS discord_id,
+  COALESCE(u.discord_username, u.name) AS discord_username
 FROM user_wallets uw
 JOIN users u ON u.id = uw.user_id
 LEFT JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord';

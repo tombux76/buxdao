@@ -42,7 +42,7 @@ This keeps `users.created_at` / `sessions` as a true picture of **who is current
 
 ## Auth flow
 
-- **Discord** — primary login via Auth.js (`provider = 'discord'`). See env vars below.
+- **Discord** — primary login via Auth.js. Snowflake stored on `users.discord_id` (denormalized from `accounts.providerAccountId`). Profile name/avatar synced on login and hub load.
 - **X** — link second account after Discord login (`provider = 'twitter'`). Requires `AUTH_TWITTER_ID` / `AUTH_TWITTER_SECRET`.
 - **Wallet** — signed message against `wallet_link_challenges`, insert `user_wallets`
 

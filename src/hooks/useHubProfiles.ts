@@ -10,19 +10,28 @@ export type LinkedTwitter = {
   label: string;
 };
 
-type SocialResponse = {
-  twitterEnabled: boolean;
-  twitter: LinkedTwitter | null;
+export type LinkedDiscord = {
+  discordId: string;
+  username: string | null;
+  image: string | null;
 };
 
-export function useLinkedSocial() {
+type HubProfilesResponse = {
+  discord: LinkedDiscord | null;
+  twitter: LinkedTwitter | null;
+  twitterEnabled: boolean;
+};
+
+export function useHubProfiles() {
   const { discordConnected } = useDiscordSession();
+  const [discord, setDiscord] = useState<LinkedDiscord | null>(null);
   const [twitter, setTwitter] = useState<LinkedTwitter | null>(null);
   const [twitterEnabled, setTwitterEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!discordConnected) {
+      setDiscord(null);
       setTwitter(null);
       setTwitterEnabled(false);
       return;
@@ -32,16 +41,15 @@ export function useLinkedSocial() {
     try {
       const response = await fetch("/api/hub/social");
       if (!response.ok) {
-        setTwitter(null);
-        setTwitterEnabled(false);
         return;
       }
-      const data = (await response.json()) as SocialResponse;
+      const data = (await response.json()) as HubProfilesResponse;
+      setDiscord(data.discord);
       setTwitter(data.twitter);
       setTwitterEnabled(data.twitterEnabled);
     } catch {
+      setDiscord(null);
       setTwitter(null);
-      setTwitterEnabled(false);
     } finally {
       setLoading(false);
     }
@@ -51,13 +59,5 @@ export function useLinkedSocial() {
     void refresh();
   }, [refresh]);
 
-  const unlinkTwitter = useCallback(async () => {
-    const response = await fetch("/api/hub/social", { method: "DELETE" });
-    if (!response.ok) {
-      throw new Error("Failed to unlink X");
-    }
-    setTwitter(null);
-  }, []);
-
-  return { twitter, twitterEnabled, loading, refresh, unlinkTwitter };
+  return { discord, twitter, twitterEnabled, loading, refresh };
 }

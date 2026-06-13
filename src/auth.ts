@@ -5,6 +5,7 @@ import Twitter from "next-auth/providers/twitter";
 import type { TwitterProfile } from "next-auth/providers/twitter";
 import PostgresAdapter from "@auth/pg-adapter";
 import { getPool } from "@/lib/db";
+import { saveDiscordProfile } from "@/lib/hub/discord-profile";
 import { saveTwitterLink } from "@/lib/hub/linked-social";
 
 const providers: Provider[] = [
@@ -59,12 +60,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   events: {
     async signIn({ user, account, profile }) {
-      if (user.id) {
-        await getPool().query(`UPDATE users SET updated_at = now() WHERE id = $1`, [user.id]);
+      if (!user.id || !account) {
+        return;
       }
 
-      if (account?.provider === "twitter" && user.id) {
-        const userId = String(user.id);
+      const userId = String(user.id);
+      await getPool().query(`UPDATE users SET updated_at = now() WHERE id = $1`, [userId]);
+
+      if (account.provider === "discord") {
+        await saveDiscordProfile(userId, profile, account.providerAccountId, account.access_token);
+        return;
+      }
+
+      if (account.provider === "twitter") {
         const existing = await getPool().query<{ userId: number }>(
           `SELECT "userId" FROM accounts WHERE provider = 'twitter' AND "providerAccountId" = $1 LIMIT 1`,
           [account.providerAccountId],
@@ -76,12 +84,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     },
     async linkAccount({ user, account, profile }) {
-      if (account.provider !== "twitter") {
+      const userId = String(user.id);
+
+      if (account.provider === "discord") {
+        await saveDiscordProfile(userId, profile, account.providerAccountId, account.access_token);
         return;
       }
 
-      const userId = String(user.id);
-      await saveTwitterLink(userId, account.providerAccountId, profile, account.access_token);
+      if (account.provider === "twitter") {
+        await saveTwitterLink(userId, account.providerAccountId, profile, account.access_token);
+      }
     },
   },
 });

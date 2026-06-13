@@ -6,7 +6,7 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useDiscordSession } from "@/hooks/useDiscordSession";
-import { useLinkedSocial } from "@/hooks/useLinkedSocial";
+import { useHubProfiles } from "@/hooks/useHubProfiles";
 
 const btnBase =
   "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55";
@@ -45,18 +45,24 @@ export function DisconnectButton({
 
 export function DiscordLoginButton({ fullWidth = false }: { fullWidth?: boolean }) {
   const { data: session, status } = useSession();
+  const { discord: discordProfile } = useHubProfiles();
   const connected = status === "authenticated" && !!session?.user;
+  const displayName = discordProfile?.username ?? session?.user?.name ?? "Discord";
+  const displayImage = discordProfile?.image ?? session?.user?.image;
 
   if (connected) {
     return (
       <div
         className={`${btnClass(fullWidth)} border border-[#5865F2]/50 bg-[#5865F2]/15 text-[#5865F2]`}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/discord.svg" alt="" className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">
-          {session.user.name ?? "Discord"}
-        </span>
+        {displayImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={displayImage} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/brand/discord.svg" alt="" className="h-4 w-4 shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 truncate text-left">{displayName}</span>
         <DisconnectButton
           size="sm"
           title="Disconnect Discord"
@@ -81,8 +87,16 @@ export function DiscordLoginButton({ fullWidth = false }: { fullWidth?: boolean 
 
 export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
   const { discordConnected, discordRequiredHint } = useDiscordSession();
-  const { twitter, twitterEnabled, loading, unlinkTwitter } = useLinkedSocial();
+  const { twitter, twitterEnabled, loading, refresh } = useHubProfiles();
   const [unlinking, setUnlinking] = useState(false);
+
+  const unlinkTwitter = async () => {
+    const response = await fetch("/api/hub/social", { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error("Failed to unlink X");
+    }
+    await refresh();
+  };
 
   if (!discordConnected) {
     return (

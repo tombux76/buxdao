@@ -67,8 +67,6 @@ export async function syncTwitterProfile(userId: string, force = false): Promise
 }
 
 export async function getLinkedTwitter(userId: string): Promise<LinkedTwitter | null> {
-  await syncTwitterProfile(userId, true);
-
   const result = await getPool().query<UserTwitterRow>(
     `SELECT x_username, x_user_id, x_image FROM users WHERE id = $1`,
     [userId],
