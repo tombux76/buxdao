@@ -8,10 +8,12 @@ export function useHubRoles() {
   const { discordConnected } = useDiscordSession();
   const [roles, setRoles] = useState<HubDiscordRole[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!discordConnected) {
       setRoles([]);
+      setError(null);
       return;
     }
 
@@ -20,12 +22,15 @@ export function useHubRoles() {
       const response = await fetch("/api/hub/roles");
       if (!response.ok) {
         setRoles([]);
+        setError("Failed to load roles");
         return;
       }
-      const data = (await response.json()) as { roles: HubDiscordRole[] };
+      const data = (await response.json()) as { roles: HubDiscordRole[]; error?: string };
       setRoles(data.roles ?? []);
+      setError(data.error ?? null);
     } catch {
       setRoles([]);
+      setError("Failed to load roles");
     } finally {
       setLoading(false);
     }
@@ -35,5 +40,5 @@ export function useHubRoles() {
     void refresh();
   }, [refresh]);
 
-  return { roles, loading, refresh };
+  return { roles, loading, error, refresh };
 }

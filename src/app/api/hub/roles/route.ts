@@ -10,6 +10,6 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const roles = await getDiscordRolesForUser(session.user.id);
-  return NextResponse.json({ roles });
+  const result = await getDiscordRolesForUser(session.user.id);
+  return NextResponse.json(result);
 }

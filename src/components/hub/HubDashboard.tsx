@@ -85,7 +85,7 @@ export function HubDashboard() {
   const { data: session, status: authStatus } = useSession();
   const { publicKey, connected } = useWallet();
   const { wallets } = useLinkedWallets();
-  const { roles, loading: rolesLoading } = useHubRoles();
+  const { roles, loading: rolesLoading, error: rolesError } = useHubRoles();
   const [activeTab, setActiveTab] = useState(collectionConfigs[0].id);
   const [data, setData] = useState<HubHoldingsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -209,7 +209,7 @@ export function HubDashboard() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="tile-border rounded-xl bg-bg-deep/50 p-4 sm:col-span-2">
-          <DiscordRolesDisplay roles={roles} loading={rolesLoading} />
+          <DiscordRolesDisplay roles={roles} loading={rolesLoading} error={rolesError} />
         </div>
         <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
           <p className="text-xs uppercase text-muted">$BUX balance</p>

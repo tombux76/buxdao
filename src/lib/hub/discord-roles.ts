@@ -8,6 +8,11 @@ export type HubDiscordRole = {
   emoji_url: string | null;
 };
 
+export type DiscordRolesResult = {
+  roles: HubDiscordRole[];
+  error?: string;
+};
+
 type RoleCatalogRow = {
   discord_role_id: string;
   display_name: string;
@@ -25,10 +30,10 @@ function discordConfig(): { botToken: string; guildId: string } | null {
   return { botToken, guildId };
 }
 
-async function fetchMemberRoleIds(discordUserId: string): Promise<string[] | null> {
+async function fetchMemberRoleIds(discordUserId: string): Promise<{ roleIds: string[]; error?: string }> {
   const config = discordConfig();
   if (!config) {
-    return null;
+    return { roleIds: [], error: "Discord bot not configured (DISCORD_BOT_TOKEN / DISCORD_GUILD_ID)" };
   }
 
   const response = await fetch(
@@ -40,15 +45,31 @@ async function fetchMemberRoleIds(discordUserId: string): Promise<string[] | nul
   );
 
   if (response.status === 404) {
-    return [];
+    const guildProbe = await fetch(`https://discord.com/api/v10/guilds/${config.guildId}`, {
+      headers: { Authorization: `Bot ${config.botToken}` },
+      cache: "no-store",
+    });
+    if (guildProbe.status === 404) {
+      return {
+        roleIds: [],
+        error: "Discord guild not found — check DISCORD_GUILD_ID and that the bot is in the server",
+      };
+    }
+    return { roleIds: [], error: "Discord account not found in the BUXDAO server" };
   }
 
   if (!response.ok) {
-    throw new Error(`Discord member lookup failed (${response.status})`);
+    const body = await response.text().catch(() => "");
+    return {
+      roleIds: [],
+      error: `Discord member lookup failed (${response.status})${body ? `: ${body.slice(0, 120)}` : ""}`,
+    };
   }
 
   const member = (await response.json()) as { roles?: string[] };
-  return (member.roles ?? []).filter((roleId) => roleId !== config.guildId);
+  return {
+    roleIds: (member.roles ?? []).filter((roleId) => roleId !== config.guildId),
+  };
 }
 
 async function getRoleCatalog(): Promise<RoleCatalogRow[]> {
@@ -60,24 +81,28 @@ async function getRoleCatalog(): Promise<RoleCatalogRow[]> {
   return result.rows;
 }
 
-export async function getDiscordRolesForUser(userId: string): Promise<HubDiscordRole[]> {
+export async function getDiscordRolesForUser(userId: string): Promise<DiscordRolesResult> {
   const discord = await getLinkedDiscord(userId);
   if (!discord?.discordId) {
-    return [];
+    return { roles: [] };
   }
 
   try {
-    const [memberRoleIds, catalog] = await Promise.all([
+    const [memberResult, catalog] = await Promise.all([
       fetchMemberRoleIds(discord.discordId),
       getRoleCatalog(),
     ]);
 
-    if (memberRoleIds === null || catalog.length === 0) {
-      return [];
+    if (memberResult.error) {
+      return { roles: [], error: memberResult.error };
     }
 
-    const memberRoleSet = new Set(memberRoleIds);
-    return catalog
+    if (catalog.length === 0) {
+      return { roles: [], error: "Role catalog is empty — run db:seed-roles" };
+    }
+
+    const memberRoleSet = new Set(memberResult.roleIds);
+    const roles = catalog
       .filter((role) => memberRoleSet.has(role.discord_role_id))
       .map((role) => ({
         id: role.discord_role_id,
@@ -85,7 +110,11 @@ export async function getDiscordRolesForUser(userId: string): Promise<HubDiscord
         color: role.color,
         emoji_url: role.emoji_url,
       }));
-  } catch {
-    return [];
+
+    return { roles };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load Discord roles";
+    console.error("[discord-roles]", message);
+    return { roles: [], error: message };
   }
 }

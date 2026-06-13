@@ -3,9 +3,10 @@ import type { HubDiscordRole } from "@/lib/hub/discord-roles";
 type DiscordRolesDisplayProps = {
   roles: HubDiscordRole[];
   loading?: boolean;
+  error?: string | null;
 };
 
-export function DiscordRolesDisplay({ roles, loading = false }: DiscordRolesDisplayProps) {
+export function DiscordRolesDisplay({ roles, loading = false, error = null }: DiscordRolesDisplayProps) {
   return (
     <div>
       <p className="mb-3 flex items-center gap-2 text-xs uppercase text-muted">
@@ -16,6 +17,8 @@ export function DiscordRolesDisplay({ roles, loading = false }: DiscordRolesDisp
 
       {loading ? (
         <p className="text-sm text-muted">Loading roles…</p>
+      ) : error ? (
+        <p className="text-sm text-red-400">{error}</p>
       ) : roles.length === 0 ? (
         <div className="text-sm text-muted">
           <p>Verify in Discord to receive holder roles.</p>
