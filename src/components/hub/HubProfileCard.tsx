@@ -1,7 +1,7 @@
 "use client";
 
-import { useSession } from "next-auth/react";
-import { DiscordAuthButton } from "@/components/auth/DiscordAuthButton";
+import { signOut, useSession } from "next-auth/react";
+import { DisconnectButton } from "@/components/hub/ProfileConnectActions";
 
 export function HubProfileCard() {
   const { data: session, status } = useSession();
@@ -34,7 +34,10 @@ export function HubProfileCard() {
         <p className="truncate text-lg font-semibold">{session.user.name ?? "Discord user"}</p>
         <p className="text-sm text-[#5865F2]">Discord connected</p>
       </div>
-      <DiscordAuthButton compact connectedClassName="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground" />
+      <DisconnectButton
+        title="Disconnect Discord"
+        onClick={() => signOut({ callbackUrl: "/hub" })}
+      />
     </div>
   );
 }
