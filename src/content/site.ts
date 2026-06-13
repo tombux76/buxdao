@@ -102,7 +102,8 @@ export const collectionConfigs: CollectionConfig[] = [
     gif: "/gifs/catz.gif",
     graveMarketUrl: "https://gravemarket.io/collection/fcked-catz",
     graveStakeUrl: "https://gravestake.io/p/fcked-catz",
-    stakeLive: false,
+    stakeLive: true,
+    stakingWallet: "9ykXGCGJF8LL3MRMmhrhDtXKfKXpaY1NcJeJQWAPCpfz",
     dailyBuxYield: 10,
   },
   {
