@@ -106,6 +106,8 @@ function setCurrencyLabels() {
 let wallet = null;
 let connection = null;
 let xmaBalance = 0;
+let balanceFetchId = 0;
+let walletSetupPromise = null;
 let spinsRemaining = 0;
 let totalWon = 0;
 let isSpinning = false;
@@ -343,17 +345,29 @@ function initConnection() {
 }
 
 async function applyWalletConnected(addr, connectContainer, walletInfo, walletAddressEl) {
+    if (addr && wallet === addr && walletSetupPromise) {
+        await walletSetupPromise;
+        return;
+    }
     wallet = addr;
     if (walletAddressEl) walletAddressEl.textContent = addr ? (addr.slice(0, 4) + '...' + addr.slice(-4)) : '';
     if (connectContainer) connectContainer.style.display = addr ? 'none' : 'block';
     if (walletInfo) walletInfo.style.display = addr ? 'flex' : 'none';
     if (addr) {
-        initConnection();
-        await updateBalance();
-        await loadPlayerData();
-        updateButtonStates();
-        try { window.parent.postMessage({ type: 'WALLET_CONNECTED', address: addr }, '*'); } catch (_) {}
+        walletSetupPromise = (async function () {
+            initConnection();
+            await updateBalance();
+            await loadPlayerData();
+            updateButtonStates();
+            try { window.parent.postMessage({ type: 'WALLET_CONNECTED', address: addr }, '*'); } catch (_) {}
+        })();
+        try {
+            await walletSetupPromise;
+        } finally {
+            walletSetupPromise = null;
+        }
     } else {
+        walletSetupPromise = null;
         try { window.parent.postMessage({ type: 'WALLET_DISCONNECTED' }, '*'); } catch (_) {}
     }
 }
@@ -449,24 +463,34 @@ async function setupWalletConnection() {
     }
 }
 
+async function fetchServerBuxBalance() {
+    if (!wallet) return null;
+    const response = await fetch(`/api/casino/token-balance?wallet=${encodeURIComponent(wallet)}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (typeof data.balance === 'number' && Number.isFinite(data.balance)) return data.balance;
+    return null;
+}
+
 // Update Balance - server lookup first (Helius), then on-chain fallback
 async function updateBalance() {
     if (!wallet) return;
+    const fetchId = ++balanceFetchId;
 
     try {
-        const response = await fetch(`/api/casino/token-balance?wallet=${encodeURIComponent(wallet)}`);
-        if (response.ok) {
-            const data = await response.json();
-            if (typeof data.balance === 'number' && Number.isFinite(data.balance)) {
-                xmaBalance = data.balance;
-                updateDisplay();
-                return;
-            }
+        const balance = await fetchServerBuxBalance();
+        if (fetchId !== balanceFetchId) return;
+        if (balance !== null) {
+            xmaBalance = balance;
+            updateDisplay();
+            return;
         }
     } catch (error) {
+        if (fetchId !== balanceFetchId) return;
         console.warn('Server balance lookup failed:', error);
     }
 
+    if (fetchId !== balanceFetchId) return;
     if (!connection) initConnection();
     if (!connection || !window.splToken) return;
 
@@ -484,8 +508,10 @@ async function updateBalance() {
 
         try {
             const account = await getAccount(connection, tokenAccount);
+            if (fetchId !== balanceFetchId) return;
             xmaBalance = Number(account.amount) / Math.pow(10, getTokenDecimals());
         } catch (error) {
+            if (fetchId !== balanceFetchId) return;
             const errorMsg = (error && (error.message || error.toString())) || '';
             const isNotFound = errorMsg.includes('Invalid param') || errorMsg.includes('not found') || errorMsg.includes('could not find account') ||
                 errorMsg.includes('TokenAccountNotFoundError') || (error && error.name === 'TokenAccountNotFoundError');
@@ -498,14 +524,11 @@ async function updateBalance() {
             }
         }
 
+        if (fetchId !== balanceFetchId) return;
         updateDisplay();
     } catch (error) {
+        if (fetchId !== balanceFetchId) return;
         console.error('Error fetching balance:', error);
-        const errorMsg = error.message || error.toString() || '';
-        if (!errorMsg.includes('403') && !errorMsg.includes('429') && !errorMsg.includes('rate limit')) {
-            xmaBalance = 0;
-        }
-        updateDisplay();
     }
 }
 
@@ -561,6 +584,16 @@ async function purchaseSpins() {
     numSpins = Math.min(numSpins, MAX_SPINS_PER_PURCHASE);
     
     const totalCost = costPerSpin * numSpins;
+
+    try {
+        const serverBalance = await fetchServerBuxBalance();
+        if (serverBalance !== null) {
+            xmaBalance = serverBalance;
+            updateDisplay();
+        }
+    } catch (error) {
+        console.warn('Could not refresh balance before purchase:', error);
+    }
     
     if (xmaBalance < totalCost) {
         showSlotsMessage({ title: 'Insufficient balance', message: `You need ${totalCost} ${getTokenLabel()} but only have ${xmaBalance.toFixed(2)} ${getTokenLabel()}.`, isError: true });

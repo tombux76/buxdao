@@ -1,6 +1,9 @@
 const { neon } = require("@neondatabase/serverless");
 
-const databaseUrl = process.env.CASINO_DATABASE_URL || process.env.DATABASE_URL;
+const databaseUrl =
+  process.env.CASINO_DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.DATABASE_URL;
 const sql = databaseUrl ? neon(databaseUrl) : null;
 
 const ALLOWED_ORIGINS = [
