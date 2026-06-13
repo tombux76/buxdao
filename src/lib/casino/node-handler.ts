@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import path from "node:path";
 import type { NextRequest } from "next/server";
 
 const require = createRequire(import.meta.url);
@@ -19,13 +20,44 @@ type NodeResponse = {
   end: (data?: string) => void;
 };
 
+function loadCasinoHandlerModule(handlerPath: string): NodeHandler | { handler: NodeHandler } {
+  switch (path.basename(handlerPath)) {
+    case "load-player.cjs":
+      return require("../../../casino-api/load-player.cjs");
+    case "save-game.cjs":
+      return require("../../../casino-api/save-game.cjs");
+    case "collect.cjs":
+      return require("../../../casino-api/collect.cjs");
+    case "confirm-collect.cjs":
+      return require("../../../casino-api/confirm-collect.cjs");
+    case "game-stats.cjs":
+      return require("../../../casino-api/game-stats.cjs");
+    case "leaderboard.cjs":
+      return require("../../../casino-api/leaderboard.cjs");
+    default:
+      throw new Error(`Unknown casino handler: ${handlerPath}`);
+  }
+}
+
 export async function runCasinoHandler(
   request: NextRequest,
   handlerPath: string,
   options?: { parseBody?: boolean },
 ): Promise<Response> {
-  const handlerModule = require(handlerPath) as NodeHandler | { handler: NodeHandler };
-  const handler = typeof handlerModule === "function" ? handlerModule : handlerModule.handler;
+  let handler: NodeHandler;
+  try {
+    const handlerModule = loadCasinoHandlerModule(handlerPath);
+    handler = typeof handlerModule === "function" ? handlerModule : handlerModule.handler;
+  } catch (error) {
+    console.error("Casino handler load failed:", handlerPath, error);
+    return Response.json(
+      {
+        error: "Casino handler unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
 
   const url = new URL(request.url);
   const query: Record<string, string> = {};
@@ -79,6 +111,7 @@ export async function runCasinoHandler(
     };
 
     Promise.resolve(handler(req, res)).catch((error) => {
+      console.error("Casino handler error:", error);
       resolve(
         Response.json(
           { error: "Server error", message: error instanceof Error ? error.message : String(error) },

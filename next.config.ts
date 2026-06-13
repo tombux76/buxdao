@@ -1,7 +1,25 @@
 import type { NextConfig } from "next";
 
+const casinoApiRoutes = [
+  "/api/load-player",
+  "/api/save-game",
+  "/api/collect",
+  "/api/confirm-collect",
+  "/api/game-stats",
+  "/api/leaderboard",
+] as const;
+
+const casinoApiIncludes = Object.fromEntries(
+  casinoApiRoutes.map((route) => [route, ["./casino-api/**/*"] as string[]]),
+);
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: casinoApiIncludes,
+  serverExternalPackages: [
+    "@neondatabase/serverless",
+    "@solana/web3.js",
+    "@solana/spl-token",
+  ],
 };
 
 export default nextConfig;
