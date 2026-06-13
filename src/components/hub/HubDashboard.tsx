@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { DiscordRolesDisplay } from "@/components/hub/DiscordRolesDisplay";
+import { useHubRoles } from "@/hooks/useHubRoles";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { collectionConfigs } from "@/content/site";
 import type { HubNft } from "@/lib/hub/wallet-nfts";
@@ -83,6 +85,7 @@ export function HubDashboard() {
   const { data: session, status: authStatus } = useSession();
   const { publicKey, connected } = useWallet();
   const { wallets } = useLinkedWallets();
+  const { roles, loading: rolesLoading } = useHubRoles();
   const [activeTab, setActiveTab] = useState(collectionConfigs[0].id);
   const [data, setData] = useState<HubHoldingsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -204,10 +207,9 @@ export function HubDashboard() {
         <NftGrid nfts={activeNfts} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
-          <p className="text-xs uppercase text-muted">Discord roles</p>
-          <p className="mt-1 text-sm text-muted">Verify in Discord for roles</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="tile-border rounded-xl bg-bg-deep/50 p-4 sm:col-span-2">
+          <DiscordRolesDisplay roles={roles} loading={rolesLoading} />
         </div>
         <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
           <p className="text-xs uppercase text-muted">$BUX balance</p>
