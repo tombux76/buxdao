@@ -207,8 +207,6 @@ export async function saveDiscordProfile(
       discord_id = $1,
       discord_username = $2,
       discord_image = $3,
-      name = COALESCE($2, name),
-      image = COALESCE($3, image),
       updated_at = now()
      WHERE id = $4`,
     [resolved.discordId, resolved.username, resolved.image, userId],
@@ -260,8 +258,6 @@ export async function syncDiscordProfile(userId: string, force = false): Promise
       discord_id = $1,
       discord_username = $2,
       discord_image = $3,
-      name = COALESCE($2, name),
-      image = COALESCE($3, image),
       updated_at = now()
      WHERE id = $4`,
     [fetched.discordId, fetched.username, fetched.image, userId],

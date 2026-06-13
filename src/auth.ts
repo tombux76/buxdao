@@ -39,9 +39,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/hub",
   },
   callbacks: {
-    session({ session, user }) {
+    async session({ session, user }) {
       if (session.user) {
         session.user.id = String(user.id);
+
+        const result = await getPool().query<{
+          discord_username: string | null;
+          discord_image: string | null;
+        }>(`SELECT discord_username, discord_image FROM users WHERE id = $1`, [user.id]);
+
+        const row = result.rows[0];
+        if (row?.discord_username) {
+          session.user.name = row.discord_username;
+        }
+        if (row?.discord_image) {
+          session.user.image = row.discord_image;
+        }
       }
       return session;
     },

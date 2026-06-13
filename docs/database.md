@@ -63,12 +63,18 @@ This keeps `users.created_at` / `sessions` as a true picture of **who is current
 
 X can only be linked while logged in with Discord — standalone X login is blocked.
 
+| Column | Purpose |
+|--------|---------|
+| `discord_id`, `discord_username`, `discord_image` | Canonical Discord identity (UI, leaderboards) |
+| `x_user_id`, `x_username`, `x_image` | Optional linked X identity |
+| `name`, `image` | Auth.js adapter fields only — not used for display |
+
 ### Active members query
 
 ```sql
-SELECT u.id, u.name, u.created_at, u.updated_at, a."providerAccountId" AS discord_id
+SELECT u.id, u.discord_id, u.discord_username, u.created_at, u.updated_at
 FROM users u
-JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord'
+WHERE u.discord_id IS NOT NULL
 ORDER BY u.updated_at DESC;
 ```
 

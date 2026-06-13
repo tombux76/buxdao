@@ -18,8 +18,8 @@ export function HubProfileCard() {
     );
   }
 
-  const displayName = discordProfile?.username ?? session.user.name ?? "Discord user";
-  const displayImage = discordProfile?.image ?? session.user.image;
+  const displayName = discordProfile?.username ?? "Discord user";
+  const displayImage = discordProfile?.image;
 
   return (
     <div className="flex items-center gap-4 rounded-xl border border-[#5865F2]/30 bg-[#5865F2]/5 p-4">

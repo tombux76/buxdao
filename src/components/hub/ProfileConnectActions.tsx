@@ -47,8 +47,8 @@ export function DiscordLoginButton({ fullWidth = false }: { fullWidth?: boolean 
   const { data: session, status } = useSession();
   const { discord: discordProfile } = useHubProfiles();
   const connected = status === "authenticated" && !!session?.user;
-  const displayName = discordProfile?.username ?? session?.user?.name ?? "Discord";
-  const displayImage = discordProfile?.image ?? session?.user?.image;
+  const displayName = discordProfile?.username ?? "Discord";
+  const displayImage = discordProfile?.image;
 
   if (connected) {
     return (
