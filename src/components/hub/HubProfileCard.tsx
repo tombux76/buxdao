@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { ProfileConnectActions } from "@/components/hub/ProfileConnectActions";
 import { DiscordAuthButton } from "@/components/auth/DiscordAuthButton";
 
 export function HubProfileCard() {
@@ -30,36 +31,19 @@ export function HubProfileCard() {
           <DiscordAuthButton compact connectedClassName="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground" />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-[#5865F2]/40 bg-[#5865F2]/5 p-5 text-center">
-          <p className="mb-1 text-lg font-semibold">Connect Discord to get started</p>
-          <p className="mb-4 text-sm text-muted">
-            Sign in to activate your Holder Hub profile. Only members who log in here count as
-            active on the new site.
-          </p>
-          <DiscordAuthButton className="mx-auto inline-flex items-center justify-center gap-2 rounded-xl border border-[#5865F2] bg-[#5865F2] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4752C4]" />
-        </div>
+        <p className="text-sm text-muted">
+          Connect your accounts to view holdings, roles, and $BUX cashout value. Only members who
+          log in here count as active on the new site.
+        </p>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled
-          className="rounded-xl border border-border px-4 py-2 text-sm text-muted opacity-60"
-        >
-          Connect X (soon)
-        </button>
-        <button
-          type="button"
-          disabled
-          className="rounded-xl border border-border px-4 py-2 text-sm text-muted opacity-60"
-        >
-          Connect wallet (soon)
-        </button>
-      </div>
+      <ProfileConnectActions stacked={false} />
 
       {!isAuthenticated && (
         <p className="text-xs text-muted">
-          After connecting, join our{" "}
+          Start with <span className="text-[#5865F2]">Login</span>, then optionally{" "}
+          <span className="text-foreground">Link</span> X and{" "}
+          <span className="text-accent-cyan">Connect</span> your wallet. Join our{" "}
           <a
             href="https://discord.com/invite/2dXNjyr593"
             target="_blank"
