@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:schema": "psql \"$POSTGRES_URL\" -f db/schema.sql",
     "db:seed-legacy-airdrops": "psql \"$POSTGRES_URL\" -f db/seed-legacy-airdrops.sql",
-    "db:migrate": "node scripts/db-migrate.mjs"
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:seed-roles": "node scripts/db-migrate.mjs db/seed-discord-role-catalog.sql"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.2",

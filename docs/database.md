@@ -67,7 +67,9 @@ INSERT INTO discord_role_catalog (discord_role_id, display_name, color, emoji_ur
 VALUES ('123456789012345678', 'MONSTER', '#14f195', 'https://…', 1);
 ```
 
-Requires `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` (same guild + bot as GraveKeeper verify).
+Requires `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` for a **display-only** bot in your BUXDAO Discord server (not the GraveKeeper verification bot — that service assigns roles; this bot only reads member roles for the Hub UI). The bot needs permission to view the server and read member role lists.
+
+Seed catalog: `npm run db:seed-roles` (or `node scripts/db-migrate.mjs db/seed-discord-role-catalog.sql`)
 
 ### Discord app setup
 

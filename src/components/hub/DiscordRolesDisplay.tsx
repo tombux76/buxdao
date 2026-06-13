@@ -30,7 +30,11 @@ export function DiscordRolesDisplay({ roles, loading = false }: DiscordRolesDisp
             >
               {role.emoji_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={role.emoji_url} alt="" className="mr-1.5 h-4 w-4 shrink-0 object-contain" />
+                <img
+                  src={role.emoji_url.startsWith("/") ? encodeURI(role.emoji_url) : role.emoji_url}
+                  alt=""
+                  className="mr-1.5 h-4 w-4 shrink-0 object-contain"
+                />
               ) : null}
               <span
                 className="mr-2 h-2 w-2 shrink-0 rounded-full"
