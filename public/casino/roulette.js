@@ -18,12 +18,13 @@
     var KNUKL_DECIMALS = 6;
     var ALLOWED_COST_PER_CHIP = [10, 50, 100, 500];
     var ALLOWED_NUM_CHIPS = [10, 50, 100, 200, 500, 1000, 5000];
-    var RPC_URL = window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
     var SOLSCAN_TX_BASE = 'https://solscan.io/tx/';
 
     var wallet = null;
     var connection = null;
     var tokenBalance = 0;
+    var balanceFetchId = 0;
+    var walletSetupPromise = null;
     var costPerChip = 1;
     var unclaimedRewards = 0;
     var isCollecting = false;
@@ -54,6 +55,10 @@
     function getMinSolForPurchase() {
         var fee = window.CasinoFees ? window.CasinoFees.getTotalPurchaseFeeLamports() : 2000000;
         return fee + 10000;
+    }
+
+    function getRpcUrl() {
+        return window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
     }
 
     function setCostPerChipLabel() {
@@ -537,11 +542,56 @@
     }
 
     function initConnection() {
+        var rpcUrl = getRpcUrl();
         if (typeof window.solanaWeb3 !== 'undefined') {
-            connection = new window.solanaWeb3.Connection(RPC_URL, 'confirmed');
+            connection = new window.solanaWeb3.Connection(rpcUrl, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
         } else if (typeof solanaWeb3 !== 'undefined') {
-            connection = new solanaWeb3.Connection(RPC_URL, 'confirmed');
+            connection = new solanaWeb3.Connection(rpcUrl, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
         }
+    }
+
+    function fetchServerBuxBalance() {
+        if (!wallet) return Promise.resolve(null);
+        return fetch('/api/casino/token-balance?wallet=' + encodeURIComponent(wallet))
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (data) {
+                if (data && typeof data.balance === 'number' && isFinite(data.balance)) return data.balance;
+                return null;
+            })
+            .catch(function () { return null; });
+    }
+
+    function applyWalletConnected(addr, connectContainer, walletInfo, walletAddressEl) {
+        if (addr && wallet === addr && walletSetupPromise) {
+            return walletSetupPromise;
+        }
+        wallet = addr;
+        if (walletAddressEl) walletAddressEl.textContent = addr ? addr.slice(0, 4) + '...' + addr.slice(-4) : '';
+        if (connectContainer) connectContainer.style.display = addr ? 'none' : 'block';
+        if (walletInfo) walletInfo.style.display = addr ? 'flex' : 'none';
+        if (!addr) {
+            walletSetupPromise = null;
+            connection = null;
+            tokenBalance = 0;
+            costPerChip = 1;
+            unclaimedRewards = 0;
+            chipBalance = 0;
+            updateChipUI();
+            updateStakedUI();
+            updateRouletteButtonStates();
+            try { window.parent.postMessage({ type: 'WALLET_DISCONNECTED' }, '*'); } catch (_) {}
+            return Promise.resolve();
+        }
+        walletSetupPromise = Promise.resolve().then(function () {
+            initConnection();
+            return updateBalance();
+        }).then(function () {
+            return loadPlayerData();
+        }).then(function () {
+            updateRouletteButtonStates();
+            try { window.parent.postMessage({ type: 'WALLET_CONNECTED', address: addr }, '*'); } catch (_) {}
+        });
+        return walletSetupPromise.finally(function () { walletSetupPromise = null; });
     }
 
     function setupWalletConnection() {
@@ -555,45 +605,17 @@
             if (connectBtn) { connectBtn.textContent = 'Install Phantom'; connectBtn.onclick = function () { window.open('https://phantom.app/', '_blank'); }; }
             return;
         }
-        function showConnected(addr) {
-            wallet = addr;
-            if (walletAddress) walletAddress.textContent = addr.slice(0, 4) + '...' + addr.slice(-4);
-            if (connectContainer) connectContainer.style.display = 'none';
-            if (walletInfo) walletInfo.style.display = 'flex';
-            if (window.self !== window.top && window.parent) try { window.parent.postMessage({ type: 'WALLET_CONNECTED', address: addr }, '*'); } catch (_) {}
-        }
-        function showDisconnected() {
-            wallet = null;
-            connection = null;
-            if (connectContainer) connectContainer.style.display = 'block';
-            if (walletInfo) walletInfo.style.display = 'none';
-            tokenBalance = 0;
-            costPerChip = 1;
-            unclaimedRewards = 0;
-            chipBalance = 0;
-            updateChipUI();
-            updateStakedUI();
-            updateRouletteButtonStates();
-        }
         try {
             if (window.solana && window.solana.isConnected) {
                 window.solana.connect({ onlyIfTrusted: true }).then(function (r) {
-                    if (r && r.publicKey) {
-                        showConnected(r.publicKey.toString());
-                        initConnection();
-                        updateBalance().then(function () { loadPlayerData().then(updateRouletteButtonStates); });
-                    }
+                    if (r && r.publicKey) applyWalletConnected(r.publicKey.toString(), connectContainer, walletInfo, walletAddress);
                 }).catch(function () {});
             }
         } catch (e) {}
         if (connectBtn) {
             connectBtn.addEventListener('click', function () {
                 window.solana.connect({ onlyIfTrusted: false }).then(function (r) {
-                    if (r && r.publicKey) {
-                        showConnected(r.publicKey.toString());
-                        initConnection();
-                        updateBalance().then(function () { loadPlayerData().then(updateRouletteButtonStates); });
-                    }
+                    if (r && r.publicKey) applyWalletConnected(r.publicKey.toString(), connectContainer, walletInfo, walletAddress);
                 }).catch(function (err) {
                     if (err && !String(err.message || '').match(/reject|authorized/i)) showMessage({ title: 'Connection failed', message: 'Failed to connect: ' + (err.message || err), isError: true });
                 });
@@ -602,20 +624,44 @@
         if (disconnectBtn) {
             disconnectBtn.addEventListener('click', function () {
                 if (window.solana && window.solana.disconnect) window.solana.disconnect();
-                showDisconnected();
+                applyWalletConnected(null, connectContainer, walletInfo, walletAddress);
             });
+        }
+        if (window.self !== window.top) {
+            try { window.parent.postMessage({ type: 'REQUEST_WALLET' }, '*'); } catch (_) {}
         }
     }
 
     function updateBalance() {
-        if (!wallet || !connection || !window.splToken) return Promise.resolve();
-        var PublicKey = (window.solanaWeb3 || solanaWeb3).PublicKey;
-        var tokenMint = new PublicKey(getTokenMint());
-        var userPublicKey = new PublicKey(wallet);
-        return window.splToken.getAssociatedTokenAddress(tokenMint, userPublicKey)
-            .then(function (tokenAccount) { return window.splToken.getAccount(connection, tokenAccount); })
-            .then(function (account) { tokenBalance = account ? Number(account.amount) / Math.pow(10, getTokenDecimals()) : 0; })
-            .catch(function () { tokenBalance = 0; });
+        if (!wallet) return Promise.resolve();
+        var fetchId = ++balanceFetchId;
+        return fetchServerBuxBalance().then(function (serverBalance) {
+            if (fetchId !== balanceFetchId) return;
+            if (serverBalance !== null) {
+                tokenBalance = serverBalance;
+                return;
+            }
+            if (!connection) initConnection();
+            if (!connection || !window.splToken) return;
+            var PublicKey = (window.solanaWeb3 || solanaWeb3).PublicKey;
+            var tokenMint = new PublicKey(getTokenMint());
+            var userPublicKey = new PublicKey(wallet);
+            return window.splToken.getAssociatedTokenAddress(tokenMint, userPublicKey)
+                .then(function (tokenAccount) { return window.splToken.getAccount(connection, tokenAccount); })
+                .then(function (account) {
+                    if (fetchId !== balanceFetchId) return;
+                    tokenBalance = account ? Number(account.amount) / Math.pow(10, getTokenDecimals()) : 0;
+                })
+                .catch(function (err) {
+                    if (fetchId !== balanceFetchId) return;
+                    var errorMsg = (err && (err.message || err.toString())) || '';
+                    if (errorMsg.indexOf('403') >= 0 || errorMsg.indexOf('429') >= 0 || errorMsg.indexOf('rate limit') >= 0) {
+                        console.warn('RPC rate limited. Balance may not update.');
+                    } else if (errorMsg.indexOf('not found') >= 0 || errorMsg.indexOf('TokenAccountNotFoundError') >= 0) {
+                        tokenBalance = 0;
+                    }
+                });
+        });
     }
 
     function loadPlayerData() {
@@ -642,7 +688,9 @@
     }
 
     function purchaseSpins() {
-        if (!wallet || !connection) { showMessage({ title: 'Wallet required', message: 'Please connect your wallet first.', isError: true }); return; }
+        if (!wallet) { showMessage({ title: 'Wallet required', message: 'Please connect your wallet first.', isError: true }); return; }
+        if (!connection) initConnection();
+        if (!connection) { showMessage({ title: 'Connection error', message: 'Could not connect to Solana RPC.', isError: true }); return; }
         if (chipBalance > 0) { showMessage({ title: 'Chips remaining', message: 'Use or collect your chips before buying more.', isError: true }); return; }
         var costEl = document.getElementById('roulette-cost-per-chip');
         var numEl = document.getElementById('roulette-num-chips');
@@ -653,21 +701,25 @@
         if (!cost || cost <= 0 || !num || num <= 0) { showMessage({ title: 'Invalid input', message: 'Please enter valid cost per chip and number of chips.', isError: true }); return; }
         var total = cost * num;
         var label = getTokenLabel();
-        if (tokenBalance < total) {
-            showMessage({ title: 'Insufficient balance', message: 'You need ' + total + ' ' + label + ' but only have ' + tokenBalance.toFixed(2) + ' ' + label + '.', isError: true });
-            return;
-        }
-        if (!window.splToken) { showMessage({ title: 'Loading', message: 'Token library still loading. Try again in a moment.', isError: true }); return; }
+        if (!window.splToken) { showMessage({ title: 'Loading', message: 'SPL token library is still loading. Please wait a moment and try again.', isError: true }); return; }
         var PublicKey = (window.solanaWeb3 || solanaWeb3).PublicKey;
         var Transaction = (window.solanaWeb3 || solanaWeb3).Transaction;
         var SystemProgram = (window.solanaWeb3 || solanaWeb3).SystemProgram;
         var tokenMint = new PublicKey(getTokenMint());
         var userPublicKey = new PublicKey(wallet);
         var treasuryPublicKey = new PublicKey(getTreasuryWallet());
-        connection.getBalance(userPublicKey).then(function (solBal) {
+        fetchServerBuxBalance().then(function (serverBalance) {
+            if (serverBalance !== null) tokenBalance = serverBalance;
+            if (tokenBalance < total) {
+                showMessage({ title: 'Insufficient balance', message: 'You need ' + total + ' ' + label + ' but only have ' + tokenBalance.toFixed(2) + ' ' + label + '.', isError: true });
+                return Promise.reject(new Error('INSUFFICIENT_BUX'));
+            }
+            return connection.getBalance(userPublicKey);
+        }).then(function (solBal) {
+            if (solBal == null) return;
             var minSol = getMinSolForPurchase();
             if (solBal < minSol) {
-                showMessage({ title: 'Insufficient SOL', message: 'Need ~' + (minSol / 1e9).toFixed(4) + ' SOL for fee (includes ' + getPurchaseFeeSol() + ' SOL fee). You have ' + (solBal / 1e9).toFixed(4) + ' SOL.', isError: true });
+                showMessage({ title: 'Insufficient SOL', message: 'Need ~' + (minSol / 1e9).toFixed(4) + ' SOL for transaction fee (includes ' + getPurchaseFeeSol() + ' SOL fee). You have ' + (solBal / 1e9).toFixed(4) + ' SOL.', isError: true });
                 return Promise.reject(new Error('INSUFFICIENT_SOL'));
             }
             return Promise.all([
@@ -675,20 +727,32 @@
                 window.splToken.getAssociatedTokenAddress(tokenMint, treasuryPublicKey)
             ]);
         }).then(function (accounts) {
+            if (!accounts) return;
             var userTokenAccount = accounts[0];
             var treasuryTokenAccount = accounts[1];
-            var transferAmount = BigInt(Math.floor(total * Math.pow(10, getTokenDecimals())));
-            var tx = new Transaction();
-            tx.add(window.splToken.createTransferInstruction(userTokenAccount, treasuryTokenAccount, userPublicKey, transferAmount));
-            if (window.CasinoFees) {
-                window.CasinoFees.addPurchaseSolFeeTransfers(tx, SystemProgram, PublicKey, userPublicKey);
-            }
-            return connection.getLatestBlockhash().then(function (r) {
-                tx.recentBlockhash = r.blockhash;
-                tx.feePayer = userPublicKey;
-                return window.solana.signTransaction(tx);
+            return connection.getAccountInfo(treasuryTokenAccount).then(function (treasuryAccountInfo) {
+                var transferAmount = BigInt(Math.floor(total * Math.pow(10, getTokenDecimals())));
+                var tx = new Transaction();
+                var createAssociatedTokenAccountInstruction = window.splToken.createAssociatedTokenAccountInstruction || window.splToken.createAssociatedTokenAccountIdempotentInstruction;
+                if (!treasuryAccountInfo) {
+                    if (!createAssociatedTokenAccountInstruction) {
+                        showMessage({ title: 'Setup error', message: 'Could not prepare treasury token account.', isError: true });
+                        return Promise.reject(new Error('NO_ATA_HELPER'));
+                    }
+                    tx.add(createAssociatedTokenAccountInstruction(userPublicKey, treasuryTokenAccount, treasuryPublicKey, tokenMint));
+                }
+                tx.add(window.splToken.createTransferInstruction(userTokenAccount, treasuryTokenAccount, userPublicKey, transferAmount));
+                if (window.CasinoFees) {
+                    window.CasinoFees.addPurchaseSolFeeTransfers(tx, SystemProgram, PublicKey, userPublicKey);
+                }
+                return connection.getLatestBlockhash().then(function (r) {
+                    tx.recentBlockhash = r.blockhash;
+                    tx.feePayer = userPublicKey;
+                    return window.solana.signTransaction(tx);
+                });
             });
         }).then(function (signed) {
+            if (!signed) return;
             return connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
         }).then(function (sig) {
             return connection.confirmTransaction(sig, 'confirmed').then(function () { return sig; });
@@ -717,14 +781,16 @@
             updateRouletteButtonStates();
             showMessage({ title: 'Purchase complete', message: 'Successfully bought ' + num + ' chips for ' + total + ' ' + getTokenLabel() + (getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : '') + '.', txSignature: sig });
         }).catch(function (err) {
-            if (err && err.message === 'INSUFFICIENT_SOL') return;
+            if (err && (err.message === 'INSUFFICIENT_SOL' || err.message === 'INSUFFICIENT_BUX' || err.message === 'NO_ATA_HELPER')) return;
             if (String(err.message || '').match(/reject|authorized|cancelled/i)) return;
             showMessage({ title: 'Purchase failed', message: 'Failed to purchase: ' + (err.message || err), isError: true });
         });
     }
 
     function withdrawWinnings() {
-        if (!wallet || !connection) { showMessage({ title: 'Wallet required', message: 'Please connect your wallet.', isError: true }); return; }
+        if (!wallet) { showMessage({ title: 'Wallet required', message: 'Please connect your wallet.', isError: true }); return; }
+        if (!connection) initConnection();
+        if (!connection) { showMessage({ title: 'Connection error', message: 'Could not connect to Solana RPC.', isError: true }); return; }
         if (!window.splToken) { showMessage({ title: 'Loading', message: 'Token library still loading. Try again in a moment.', isError: true }); return; }
         var label = getTokenLabel();
         var totalToCollectAmount = 0;
@@ -770,7 +836,9 @@
             })
             .then(function (res) {
                 if (!res.ok) {
-                    return res.json().then(function (d) {
+                    return res.text().then(function (text) {
+                        var d = {};
+                        try { d = JSON.parse(text); } catch (_) {}
                         var msg = (d && (d.error || d.message)) || 'Collect failed';
                         if (d && d.message && d.error !== d.message) msg = d.error + ': ' + d.message;
                         throw new Error(msg);
@@ -853,9 +921,35 @@
         else { window.addEventListener('splTokenLoaded', initWallet); setTimeout(initWallet, 2000); }
         window.addEventListener('resize', renderChipStacks);
         window.addEventListener('message', function (e) {
-            if (e.data && e.data.type === 'CONNECT_WALLET') {
+            if (!e.data || !e.data.type) return;
+            if (e.data.type === 'CONNECT_WALLET') {
                 var btn = document.getElementById('connect-wallet');
                 if (btn) btn.click();
+            }
+            if (e.data.type === 'WALLET_ADDRESS' && e.data.address) {
+                var connectContainer = document.getElementById('connect-wallet');
+                var walletInfo = document.getElementById('wallet-info');
+                var walletAddress = document.getElementById('wallet-address');
+                applyWalletConnected(e.data.address, connectContainer, walletInfo, walletAddress);
+            }
+            if (e.data.type === 'DISCONNECT_WALLET') {
+                if (window.solana && window.solana.disconnect) window.solana.disconnect().catch(function () {});
+                var connectContainer = document.getElementById('connect-wallet');
+                var walletInfo = document.getElementById('wallet-info');
+                var walletAddress = document.getElementById('wallet-address');
+                applyWalletConnected(null, connectContainer, walletInfo, walletAddress);
+            }
+            if (e.data.type === 'TOKEN_CHANGED') {
+                window.__ROULETTE_TOKEN__ = (e.data.token === 'bux') ? 'bux' : 'bux';
+                tokenBalance = 0;
+                chipBalance = 0;
+                unclaimedRewards = 0;
+                updateChipUI();
+                updateToCollectUI();
+                updateRouletteButtonStates();
+                if (wallet) {
+                    updateBalance().then(function () { return loadPlayerData(); }).then(updateRouletteButtonStates);
+                }
             }
         });
     }
