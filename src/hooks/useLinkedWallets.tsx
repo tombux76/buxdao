@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useDiscordSession } from "@/hooks/useDiscordSession";
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -15,7 +23,20 @@ export type LinkedWallet = {
   linkedAt: string;
 };
 
-export function useLinkedWallets() {
+type LinkedWalletsContextValue = {
+  wallets: LinkedWallet[];
+  loading: boolean;
+  refresh: () => Promise<void>;
+  linkWallet: (
+    walletAddress: string,
+    signMessage: (message: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<void>;
+  unlinkWallet: (walletAddress: string) => Promise<void>;
+};
+
+const LinkedWalletsContext = createContext<LinkedWalletsContextValue | null>(null);
+
+export function LinkedWalletsProvider({ children }: { children: ReactNode }) {
   const { discordConnected } = useDiscordSession();
   const [wallets, setWallets] = useState<LinkedWallet[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,5 +120,20 @@ export function useLinkedWallets() {
     [refresh],
   );
 
-  return { wallets, loading, refresh, linkWallet, unlinkWallet };
+  const value = useMemo(
+    () => ({ wallets, loading, refresh, linkWallet, unlinkWallet }),
+    [wallets, loading, refresh, linkWallet, unlinkWallet],
+  );
+
+  return (
+    <LinkedWalletsContext.Provider value={value}>{children}</LinkedWalletsContext.Provider>
+  );
+}
+
+export function useLinkedWallets() {
+  const context = useContext(LinkedWalletsContext);
+  if (!context) {
+    throw new Error("useLinkedWallets must be used within LinkedWalletsProvider");
+  }
+  return context;
 }

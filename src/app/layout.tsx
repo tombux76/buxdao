@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AuthSessionProvider } from "@/components/auth/AuthSessionProvider";
 import { HubAuthSync } from "@/components/hub/HubAuthSync";
 import { WalletProviders } from "@/components/wallet/WalletProviders";
+import { LinkedWalletsProvider } from "@/hooks/useLinkedWallets";
 import { site } from "@/content/site";
 import "./globals.css";
 
@@ -54,8 +55,10 @@ export default function RootLayout({
       <body className="min-h-full font-sans">
         <AuthSessionProvider>
           <WalletProviders>
-            <HubAuthSync />
-            <AppShell>{children}</AppShell>
+            <LinkedWalletsProvider>
+              <HubAuthSync />
+              <AppShell>{children}</AppShell>
+            </LinkedWalletsProvider>
           </WalletProviders>
         </AuthSessionProvider>
       </body>
