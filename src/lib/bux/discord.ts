@@ -18,9 +18,14 @@ export async function getWalletDiscordMap(): Promise<{
       discord_id: string | null;
       discord_username: string | null;
     }>(
-      `SELECT wallet_address, discord_id, discord_username
-       FROM wallet_discord
-       WHERE discord_id IS NOT NULL`,
+      `SELECT
+         uw.wallet_address,
+         COALESCE(u.discord_id, a."providerAccountId") AS discord_id,
+         u.discord_username
+       FROM user_wallets uw
+       JOIN users u ON u.id = uw.user_id
+       LEFT JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord'
+       WHERE COALESCE(u.discord_id, a."providerAccountId") IS NOT NULL`,
     );
     for (const row of walletsRes.rows) {
       walletToDiscord.set(row.wallet_address.toLowerCase(), row.discord_id!);

@@ -25,7 +25,17 @@ Set **`POSTGRES_URL`** and **`CASINO_DATABASE_URL`** to the same connection stri
 | **Legacy airdrop** | `legacy_reward_airdrops` |
 | **Casino** | `slots_*`, `coinflip_*`, `roulette_*`, `casino_daily_totals` |
 
-View **`wallet_discord`** — joins `user_wallets` → `users` → Discord `accounts` for leaderboard names.
+Wallet → Discord name lookups use a join in app code (`user_wallets` → `users` → `accounts`), not a DB view.
+
+## User profile columns
+
+| Column | Purpose |
+|--------|---------|
+| `discord_id`, `discord_username`, `discord_image` | Discord identity (required login) |
+| `x_user_id`, `x_username`, `x_image` | Optional linked X |
+| `email`, `emailVerified` | Auth.js only (often null for Discord) |
+
+Auth.js `User.name` / `User.image` are mapped from `discord_username` / `discord_image` in our custom adapter (`src/lib/auth/pg-adapter.ts`).
 
 ## Clean slate — no old data migration
 
@@ -62,12 +72,6 @@ This keeps `users.created_at` / `sessions` as a true picture of **who is current
 5. Apply DB migration: `psql "$POSTGRES_URL" -f db/migrations/20250613_users_x_link.sql`
 
 X can only be linked while logged in with Discord — standalone X login is blocked.
-
-| Column | Purpose |
-|--------|---------|
-| `discord_id`, `discord_username`, `discord_image` | Canonical Discord identity (UI, leaderboards) |
-| `x_user_id`, `x_username`, `x_image` | Optional linked X identity |
-| `name`, `image` | Auth.js adapter fields only — not used for display |
 
 ### Active members query
 

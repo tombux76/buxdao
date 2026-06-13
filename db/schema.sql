@@ -11,10 +11,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(255),
   email VARCHAR(255) UNIQUE,
   "emailVerified" TIMESTAMPTZ,
-  image TEXT,
   discord_id VARCHAR(255),
   discord_username VARCHAR(255),
   discord_image TEXT,
@@ -270,17 +268,5 @@ CREATE TABLE casino_daily_totals (
   updated_at TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (date_et, wallet_address, token_used, game_type)
 );
-
--- Discord display name for leaderboards / BUX page
-CREATE OR REPLACE VIEW wallet_discord AS
-SELECT
-  uw.wallet_address,
-  uw.user_id,
-  uw.is_primary,
-  COALESCE(u.discord_id, a."providerAccountId") AS discord_id,
-  u.discord_username
-FROM user_wallets uw
-JOIN users u ON u.id = uw.user_id
-LEFT JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord';
 
 COMMIT;

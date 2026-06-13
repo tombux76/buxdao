@@ -3,7 +3,7 @@ import type { Provider } from "next-auth/providers";
 import Discord from "next-auth/providers/discord";
 import Twitter from "next-auth/providers/twitter";
 import type { TwitterProfile } from "next-auth/providers/twitter";
-import PostgresAdapter from "@auth/pg-adapter";
+import { BuxdaoPostgresAdapter } from "@/lib/auth/pg-adapter";
 import { getPool } from "@/lib/db";
 import { saveDiscordProfile } from "@/lib/hub/discord-profile";
 import { saveTwitterLink } from "@/lib/hub/linked-social";
@@ -32,29 +32,16 @@ if (process.env.AUTH_TWITTER_ID && process.env.AUTH_TWITTER_SECRET) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PostgresAdapter(getPool()),
+  adapter: BuxdaoPostgresAdapter(getPool()),
   providers,
   trustHost: true,
   pages: {
     signIn: "/hub",
   },
   callbacks: {
-    async session({ session, user }) {
+    session({ session, user }) {
       if (session.user) {
         session.user.id = String(user.id);
-
-        const result = await getPool().query<{
-          discord_username: string | null;
-          discord_image: string | null;
-        }>(`SELECT discord_username, discord_image FROM users WHERE id = $1`, [user.id]);
-
-        const row = result.rows[0];
-        if (row?.discord_username) {
-          session.user.name = row.discord_username;
-        }
-        if (row?.discord_image) {
-          session.user.image = row.discord_image;
-        }
       }
       return session;
     },
