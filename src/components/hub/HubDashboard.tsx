@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { collectionConfigs } from "@/content/site";
 import type { HubNft } from "@/lib/hub/wallet-nfts";
 
@@ -81,14 +82,18 @@ function NftGrid({ nfts }: { nfts: HubNft[] }) {
 export function HubDashboard() {
   const { data: session, status: authStatus } = useSession();
   const { publicKey, connected } = useWallet();
+  const { wallets } = useLinkedWallets();
   const [activeTab, setActiveTab] = useState(collectionConfigs[0].id);
   const [data, setData] = useState<HubHoldingsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const linkedAddresses = useMemo(() => new Set(wallets.map((w) => w.address)), [wallets]);
   const discordReady = authStatus === "authenticated" && !!session?.user;
-  const walletReady = connected && !!publicKey;
-  const ready = discordReady && walletReady;
+  const walletConnected = connected && !!publicKey;
+  const walletLinked =
+    walletConnected && publicKey ? linkedAddresses.has(publicKey.toBase58()) : false;
+  const ready = discordReady && walletLinked;
 
   useEffect(() => {
     if (!ready || !publicKey) {
@@ -114,14 +119,22 @@ export function HubDashboard() {
       .finally(() => setLoading(false));
   }, [ready, publicKey]);
 
-  if (!discordReady || !walletReady) {
+  if (!discordReady || !walletConnected) {
     return (
       <p className="text-sm text-muted">
-        {!discordReady && !walletReady
+        {!discordReady && !walletConnected
           ? "Log in with Discord and connect your wallet to view your dashboard."
           : !discordReady
             ? "Log in with Discord to unlock your dashboard."
             : "Connect your wallet to load your NFTs and $BUX balance."}
+      </p>
+    );
+  }
+
+  if (!walletLinked) {
+    return (
+      <p className="text-sm text-muted">
+        Sign the message to link your wallet — use the &quot;Sign to link wallet&quot; button above.
       </p>
     );
   }

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Wallet, X as XIcon } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useDiscordSession } from "@/hooks/useDiscordSession";
 import { useHubProfiles } from "@/hooks/useHubProfiles";
+import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 
 const btnBase =
   "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55";
@@ -164,8 +165,11 @@ export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
 
 export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) {
   const { discordConnected, discordRequiredHint } = useDiscordSession();
-  const { publicKey, connected, disconnect } = useWallet();
+  const { publicKey, connected, disconnect, signMessage } = useWallet();
   const { setVisible } = useWalletModal();
+  const { wallets, linkWallet, unlinkWallet } = useLinkedWallets();
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   if (!discordConnected) {
     return (
@@ -182,17 +186,67 @@ export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) 
   }
 
   if (connected && publicKey) {
-    const address = `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`;
+    const address = publicKey.toBase58();
+    const short = `${address.slice(0, 4)}…${address.slice(-4)}`;
+    const isLinked = wallets.some((w) => w.address === address);
+
+    if (!isLinked) {
+      return (
+        <div className={`${fullWidth ? "w-full space-y-2" : "space-y-2"}`}>
+          <div
+            className={`${btnClass(fullWidth)} bg-gradient-to-r from-[#9945FF] to-[#14F195] text-bg-deep`}
+          >
+            <Wallet className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+            <span className="min-w-0 flex-1 truncate text-left font-mono">{short}</span>
+            <DisconnectButton
+              size="sm"
+              title="Disconnect wallet"
+              onClick={() => disconnect()}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={linking || !signMessage}
+            onClick={() => {
+              if (!signMessage) return;
+              setLinking(true);
+              setLinkError(null);
+              void linkWallet(address, signMessage)
+                .catch((err: Error) => setLinkError(err.message))
+                .finally(() => setLinking(false));
+            }}
+            className={`${btnClass(fullWidth)} border border-accent-gold/40 bg-accent-gold/10 text-accent-gold hover:bg-accent-gold/20`}
+          >
+            {linking ? "Signing…" : "Sign to link wallet"}
+          </button>
+          {linkError && <p className="text-xs text-red-400">{linkError}</p>}
+        </div>
+      );
+    }
+
     return (
       <div
         className={`${btnClass(fullWidth)} bg-gradient-to-r from-[#9945FF] to-[#14F195] text-bg-deep`}
       >
         <Wallet className="h-4 w-4 shrink-0" strokeWidth={2.25} />
-        <span className="min-w-0 flex-1 truncate text-left font-mono">{address}</span>
-        <DisconnectButton size="sm" title="Disconnect wallet" onClick={() => disconnect()} />
+        <span className="min-w-0 flex-1 truncate text-left font-mono">{short}</span>
+        <DisconnectButton
+          size="sm"
+          title="Unlink wallet"
+          onClick={() => {
+            void unlinkWallet(address)
+              .catch(() => undefined)
+              .finally(() => disconnect());
+          }}
+        />
       </div>
     );
   }
+
+  const linkedLabel =
+    wallets.length > 0
+      ? `Connect${wallets.length > 1 ? ` (${wallets.length} linked)` : ""}`
+      : "Connect";
 
   return (
     <button
@@ -201,7 +255,7 @@ export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) 
       className={`${btnClass(fullWidth)} bg-gradient-to-r from-[#9945FF] to-[#14F195] text-bg-deep hover:opacity-90`}
     >
       <Wallet className="h-4 w-4 shrink-0" strokeWidth={2.25} />
-      Connect
+      {linkedLabel}
     </button>
   );
 }
