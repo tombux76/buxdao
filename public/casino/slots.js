@@ -55,11 +55,15 @@ function getTokenLabel() {
 }
 
 function getTokenMint() {
-    return BUX_TOKEN_MINT;
+    return window.__BUX_TOKEN_MINT__ || BUX_TOKEN_MINT;
 }
 
 function getTokenDecimals() {
-    return BUX_DECIMALS;
+    return typeof window.__BUX_DECIMALS__ === 'number' ? window.__BUX_DECIMALS__ : BUX_DECIMALS;
+}
+
+function getTreasuryWallet() {
+    return window.__TREASURY_WALLET__ || TREASURY_WALLET;
 }
 
 function getSymbolsBasePath() {
@@ -317,13 +321,16 @@ function initializeReels() {
 }
 
 // Wallet Connection
-var RPC_URL = window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
+function getRpcUrl() {
+    return window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
+}
 
 function initConnection() {
+    const rpcUrl = getRpcUrl();
     if (typeof window.solanaWeb3 !== 'undefined') {
-        connection = new window.solanaWeb3.Connection(RPC_URL, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
+        connection = new window.solanaWeb3.Connection(rpcUrl, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
     } else if (typeof solanaWeb3 !== 'undefined') {
-        connection = new solanaWeb3.Connection(RPC_URL, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
+        connection = new solanaWeb3.Connection(rpcUrl, 'confirmed', { commitment: 'confirmed', disableRetryOnRateLimit: false, httpHeaders: { 'Content-Type': 'application/json' } });
     }
 }
 
@@ -434,50 +441,59 @@ async function setupWalletConnection() {
     }
 }
 
-// Update Balance - Fetch actual token balance
+// Update Balance - server lookup first (Helius), then on-chain fallback
 async function updateBalance() {
-    if (!wallet || !connection) return;
-    
-    // Check if SPL token library is loaded
-    if (!window.splToken) {
-        console.warn('SPL token library not loaded yet');
-        return;
+    if (!wallet) return;
+
+    try {
+        const response = await fetch(`/api/casino/token-balance?wallet=${encodeURIComponent(wallet)}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (typeof data.balance === 'number' && Number.isFinite(data.balance)) {
+                xmaBalance = data.balance;
+                updateDisplay();
+                return;
+            }
+        }
+    } catch (error) {
+        console.warn('Server balance lookup failed:', error);
     }
-    
+
+    if (!connection) initConnection();
+    if (!connection || !window.splToken) return;
+
     try {
         const { PublicKey } = window.solanaWeb3 || solanaWeb3;
         const { getAssociatedTokenAddress, getAccount } = window.splToken;
-        
+
         const tokenMint = new PublicKey(getTokenMint());
         const userPublicKey = new PublicKey(wallet);
-        
+
         const tokenAccount = await getAssociatedTokenAddress(
             tokenMint,
             userPublicKey
         );
-        
+
         try {
             const account = await getAccount(connection, tokenAccount);
             xmaBalance = Number(account.amount) / Math.pow(10, getTokenDecimals());
         } catch (error) {
-            // Token account doesn't exist yet or RPC error
             const errorMsg = (error && (error.message || error.toString())) || '';
             const isNotFound = errorMsg.includes('Invalid param') || errorMsg.includes('not found') || errorMsg.includes('could not find account') ||
                 errorMsg.includes('TokenAccountNotFoundError') || (error && error.name === 'TokenAccountNotFoundError');
             if (errorMsg.includes('403') || errorMsg.includes('429') || errorMsg.includes('rate limit') || errorMsg.includes('Too Many Requests')) {
-                console.warn('RPC rate limited. Balance may not update. For production, use a dedicated RPC service (Helius, QuickNode, etc.)');
+                console.warn('RPC rate limited. Balance may not update.');
             } else if (isNotFound) {
                 xmaBalance = 0;
             } else {
                 console.warn('Error fetching token account:', errorMsg);
             }
         }
-        
+
         updateDisplay();
     } catch (error) {
         console.error('Error fetching balance:', error);
         const errorMsg = error.message || error.toString() || '';
-        // If it's a rate limit error, don't reset balance
         if (!errorMsg.includes('403') && !errorMsg.includes('429') && !errorMsg.includes('rate limit')) {
             xmaBalance = 0;
         }
@@ -508,8 +524,13 @@ function setupGameControls() {
 
 // Purchase Spins - Transfer tokens to treasury wallet
 async function purchaseSpins() {
-    if (!wallet || !connection) {
+    if (!wallet) {
         showSlotsMessage({ title: 'Wallet required', message: 'Please connect your wallet first.', isError: true });
+        return;
+    }
+    if (!connection) initConnection();
+    if (!connection) {
+        showSlotsMessage({ title: 'Connection error', message: 'Could not connect to Solana RPC.', isError: true });
         return;
     }
     
@@ -559,7 +580,7 @@ async function purchaseSpins() {
         
         const tokenMint = new PublicKey(getTokenMint());
         const userPublicKey = new PublicKey(wallet);
-        const treasuryPublicKey = new PublicKey(TREASURY_WALLET);
+        const treasuryPublicKey = new PublicKey(getTreasuryWallet());
         
         // Get token accounts
         const userTokenAccount = await getAssociatedTokenAddress(

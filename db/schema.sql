@@ -1,5 +1,5 @@
 -- BUXDAO v2 — unified Postgres schema
--- Auth.js (Discord + X) · wallet links · merch · casino · cashout · legacy airdrops
+-- Auth.js (Discord + X) · wallet links · merch · casino · cashout
 
 BEGIN;
 
@@ -140,26 +140,6 @@ CREATE TABLE cashout_transactions (
 
 CREATE INDEX idx_cashout_transactions_user_id ON cashout_transactions (user_id);
 CREATE INDEX idx_cashout_transactions_status ON cashout_transactions (status, created_at DESC);
-
--- ---------------------------------------------------------------------------
--- Legacy staking unclaimed — one-time airdrop audit trail
--- ---------------------------------------------------------------------------
-
-CREATE TABLE legacy_reward_airdrops (
-  id BIGSERIAL PRIMARY KEY,
-  discord_id TEXT NOT NULL UNIQUE,
-  discord_username TEXT,
-  amount_bux BIGINT NOT NULL,
-  destination_wallet TEXT,
-  wallet_resolution TEXT NOT NULL DEFAULT 'pending',
-  airdrop_tx_signature TEXT,
-  status VARCHAR(32) NOT NULL DEFAULT 'pending',
-  notes TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  sent_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_legacy_reward_airdrops_status ON legacy_reward_airdrops (status);
 
 -- ---------------------------------------------------------------------------
 -- Casino games (wallet-keyed; join user_wallets for Discord display names)

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { DiscordRolesDisplay } from "@/components/hub/DiscordRolesDisplay";
+import { LegacyClaimCard } from "@/components/hub/LegacyClaimCard";
 import { useHubRoles } from "@/hooks/useHubRoles";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { collectionConfigs } from "@/content/site";
@@ -206,6 +207,8 @@ export function HubDashboard() {
         </div>
         <NftGrid nfts={activeNfts} />
       </div>
+
+      <LegacyClaimCard />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="tile-border rounded-xl bg-bg-deep/50 p-4 sm:col-span-2">
