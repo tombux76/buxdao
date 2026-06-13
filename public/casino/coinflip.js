@@ -4,8 +4,6 @@ const KNUKL_TOKEN_MINT = '6sYhJZDwqHpv1shyVeZ91tx8QYSiHJh2bio97Qdhq1br';
 const TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL';
 const BUX_DECIMALS = 9;
 const KNUKL_DECIMALS = 6;
-const PURCHASE_FEE_SOL = 0.002;
-const FEE_TREASURY_LAMPORTS = 2_000_000;
 const WIN_MULTIPLIER = 1.9;
 const MAX_COST_PER_FLIP = 1500;
 const MAX_FLIPS_PER_PURCHASE = 500;
@@ -20,7 +18,21 @@ function getTokenLabel() {
 }
 
 function getTokenMint() {
-  return BUX_TOKEN_MINT;
+  return window.__BUX_TOKEN_MINT__ || BUX_TOKEN_MINT;
+}
+
+function getTreasuryWallet() {
+  const fromConfig = window.__TREASURY_WALLET__ || (window.CasinoFees && window.CasinoFees.getTreasuryWallet());
+  return fromConfig || TREASURY_WALLET;
+}
+
+function getPurchaseFeeSol() {
+  return window.CasinoFees ? window.CasinoFees.getPurchaseFeeSol() : 0.002;
+}
+
+function getMinSolForPurchase() {
+  const fee = window.CasinoFees ? window.CasinoFees.getTotalPurchaseFeeLamports() : 2_000_000;
+  return fee + 10000;
 }
 
 function getTokenDecimals() {
@@ -327,7 +339,7 @@ async function purchaseFlips() {
     return;
   }
   const solBalance = await connection.getBalance(new (window.solanaWeb3 || solanaWeb3).PublicKey(wallet));
-  const minSol = FEE_TREASURY_LAMPORTS + 10000;
+  const minSol = getMinSolForPurchase();
   if (solBalance < minSol) {
     showMessage({ title: 'Insufficient SOL', message: `Need ~${(minSol / 1e9).toFixed(4)} SOL for fee. You have ${(solBalance / 1e9).toFixed(4)} SOL.`, isError: true });
     return;
@@ -342,7 +354,7 @@ async function purchaseFlips() {
     const createATA = window.splToken.createAssociatedTokenAccountInstruction || window.splToken.createAssociatedTokenAccountIdempotentInstruction;
     const tokenMint = new PublicKey(getTokenMint());
     const userPublicKey = new PublicKey(wallet);
-    const treasuryPublicKey = new PublicKey(TREASURY_WALLET);
+    const treasuryPublicKey = new PublicKey(getTreasuryWallet());
     const userTokenAccount = await getAssociatedTokenAddress(tokenMint, userPublicKey);
     const treasuryTokenAccount = await getAssociatedTokenAddress(tokenMint, treasuryPublicKey);
     const transaction = new Transaction();
@@ -355,8 +367,8 @@ async function purchaseFlips() {
     }
     const transferAmount = BigInt(Math.floor(totalCost * Math.pow(10, getTokenDecimals())));
     transaction.add(createTransferInstruction(userTokenAccount, treasuryTokenAccount, userPublicKey, transferAmount));
-    if (FEE_TREASURY_LAMPORTS > 0) {
-      transaction.add(SystemProgram.transfer({ fromPubkey: userPublicKey, toPubkey: treasuryPublicKey, lamports: FEE_TREASURY_LAMPORTS }));
+    if (window.CasinoFees) {
+      window.CasinoFees.addPurchaseSolFeeTransfers(transaction, SystemProgram, PublicKey, userPublicKey);
     }
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
@@ -382,7 +394,7 @@ async function purchaseFlips() {
     await updateBalance();
     updateDisplay();
     updateButtonStates();
-    showMessage({ title: 'Purchase complete', message: `Purchased ${numFlips} flip(s) for ${totalCost} ${getTokenLabel()}${PURCHASE_FEE_SOL > 0 ? ' + ' + PURCHASE_FEE_SOL + ' SOL fee' : ''}.`, txSignature: signature });
+    showMessage({ title: 'Purchase complete', message: `Purchased ${numFlips} flip(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : ''}.`, txSignature: signature });
   } catch (err) {
     const msg = err.message || err.toString();
     if (msg.includes('User rejected') || msg.includes('rejected')) return;

@@ -16,8 +16,6 @@
     var TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL';
     var BUX_DECIMALS = 9;
     var KNUKL_DECIMALS = 6;
-    var PURCHASE_FEE_SOL = 0.002;
-    var FEE_TREASURY_LAMPORTS = 2000000;
     var ALLOWED_COST_PER_CHIP = [10, 50, 100, 500];
     var ALLOWED_NUM_CHIPS = [10, 50, 100, 200, 500, 1000, 5000];
     var RPC_URL = window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
@@ -45,8 +43,18 @@
         return true;
     }
     function getTokenLabel() { return 'BUX'; }
-    function getTokenMint() { return BUX_TOKEN_MINT; }
-    function getTokenDecimals() { return BUX_DECIMALS; }
+    function getTokenMint() { return window.__BUX_TOKEN_MINT__ || BUX_TOKEN_MINT; }
+    function getTokenDecimals() { return typeof window.__BUX_DECIMALS__ === 'number' ? window.__BUX_DECIMALS__ : BUX_DECIMALS; }
+    function getTreasuryWallet() {
+        return window.__TREASURY_WALLET__ || (window.CasinoFees && window.CasinoFees.getTreasuryWallet()) || TREASURY_WALLET;
+    }
+    function getPurchaseFeeSol() {
+        return window.CasinoFees ? window.CasinoFees.getPurchaseFeeSol() : 0.002;
+    }
+    function getMinSolForPurchase() {
+        var fee = window.CasinoFees ? window.CasinoFees.getTotalPurchaseFeeLamports() : 2000000;
+        return fee + 10000;
+    }
 
     function setCostPerChipLabel() {
         var el = document.getElementById('roulette-cost-per-chip-label');
@@ -655,11 +663,11 @@
         var SystemProgram = (window.solanaWeb3 || solanaWeb3).SystemProgram;
         var tokenMint = new PublicKey(getTokenMint());
         var userPublicKey = new PublicKey(wallet);
-        var treasuryPublicKey = new PublicKey(TREASURY_WALLET);
+        var treasuryPublicKey = new PublicKey(getTreasuryWallet());
         connection.getBalance(userPublicKey).then(function (solBal) {
-            var minSol = FEE_TREASURY_LAMPORTS + 10000;
+            var minSol = getMinSolForPurchase();
             if (solBal < minSol) {
-                showMessage({ title: 'Insufficient SOL', message: 'Need ~' + (minSol / 1e9).toFixed(4) + ' SOL for fee (includes ' + PURCHASE_FEE_SOL + ' SOL fee). You have ' + (solBal / 1e9).toFixed(4) + ' SOL.', isError: true });
+                showMessage({ title: 'Insufficient SOL', message: 'Need ~' + (minSol / 1e9).toFixed(4) + ' SOL for fee (includes ' + getPurchaseFeeSol() + ' SOL fee). You have ' + (solBal / 1e9).toFixed(4) + ' SOL.', isError: true });
                 return Promise.reject(new Error('INSUFFICIENT_SOL'));
             }
             return Promise.all([
@@ -672,7 +680,9 @@
             var transferAmount = BigInt(Math.floor(total * Math.pow(10, getTokenDecimals())));
             var tx = new Transaction();
             tx.add(window.splToken.createTransferInstruction(userTokenAccount, treasuryTokenAccount, userPublicKey, transferAmount));
-            tx.add(SystemProgram.transfer({ fromPubkey: userPublicKey, toPubkey: treasuryPublicKey, lamports: FEE_TREASURY_LAMPORTS }));
+            if (window.CasinoFees) {
+                window.CasinoFees.addPurchaseSolFeeTransfers(tx, SystemProgram, PublicKey, userPublicKey);
+            }
             return connection.getLatestBlockhash().then(function (r) {
                 tx.recentBlockhash = r.blockhash;
                 tx.feePayer = userPublicKey;
@@ -705,7 +715,7 @@
             updateBalance();
             updatePopups();
             updateRouletteButtonStates();
-            showMessage({ title: 'Purchase complete', message: 'Successfully bought ' + num + ' chips for ' + total + ' ' + getTokenLabel() + (PURCHASE_FEE_SOL > 0 ? ' + ' + PURCHASE_FEE_SOL + ' SOL fee' : '') + '.', txSignature: sig });
+            showMessage({ title: 'Purchase complete', message: 'Successfully bought ' + num + ' chips for ' + total + ' ' + getTokenLabel() + (getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : '') + '.', txSignature: sig });
         }).catch(function (err) {
             if (err && err.message === 'INSUFFICIENT_SOL') return;
             if (String(err.message || '').match(/reject|authorized|cancelled/i)) return;

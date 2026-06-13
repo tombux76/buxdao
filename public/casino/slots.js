@@ -40,11 +40,9 @@ const SLOT_MACHINE_PROGRAM_ID = 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS'; 
 // Token mints: BUX (1000s) and KNUKL — must match the token selected via ?token=bux
 const BUX_TOKEN_MINT = 'AaKrMsZkuAdJL6TKZbj7X1VaH5qWioL7oDHagQZa1w59';
 const KNUKL_TOKEN_MINT = '6sYhJZDwqHpv1shyVeZ91tx8QYSiHJh2bio97Qdhq1br';
-const TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL'; // Treasury wallet (receives token + 0.002 SOL fee)
+const TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL'; // Fallback BUX pool if env not injected
 const BUX_DECIMALS = 9;
 const KNUKL_DECIMALS = 6;
-const PURCHASE_FEE_SOL = 0.002; // SOL fee per purchase (all to treasury)
-const FEE_TREASURY_LAMPORTS = 2_000_000; // 0.002 SOL -> treasury
 
 function isBuxToken() {
     return true;
@@ -63,7 +61,17 @@ function getTokenDecimals() {
 }
 
 function getTreasuryWallet() {
-    return window.__TREASURY_WALLET__ || TREASURY_WALLET;
+    const fromConfig = window.__TREASURY_WALLET__ || (window.CasinoFees && window.CasinoFees.getTreasuryWallet());
+    return fromConfig || TREASURY_WALLET;
+}
+
+function getPurchaseFeeSol() {
+    return window.CasinoFees ? window.CasinoFees.getPurchaseFeeSol() : 0.002;
+}
+
+function getMinSolForPurchase() {
+    const fee = window.CasinoFees ? window.CasinoFees.getTotalPurchaseFeeLamports() : 2_000_000;
+    return fee + 10000;
 }
 
 function getSymbolsBasePath() {
@@ -561,7 +569,7 @@ async function purchaseSpins() {
     
     // Check user has enough SOL for purchase fee (0.002 SOL) + tx fee
     const solBalance = await connection.getBalance(new (window.solanaWeb3 || solanaWeb3).PublicKey(wallet));
-        const minSolRequired = FEE_TREASURY_LAMPORTS + 10000; // fee + buffer for tx
+    const minSolRequired = getMinSolForPurchase();
     if (solBalance < minSolRequired) {
         showSlotsMessage({ title: 'Insufficient SOL', message: `Need ~${(minSolRequired / 1e9).toFixed(4)} SOL for transaction fee. You have ${(solBalance / 1e9).toFixed(4)} SOL.`, isError: true });
         return;
@@ -627,12 +635,8 @@ async function purchaseSpins() {
             transferAmount
         );
         transaction.add(transferInstruction);
-        if (FEE_TREASURY_LAMPORTS > 0) {
-            transaction.add(SystemProgram.transfer({
-                fromPubkey: userPublicKey,
-                toPubkey: treasuryPublicKey,
-                lamports: FEE_TREASURY_LAMPORTS
-            }));
+        if (window.CasinoFees) {
+            window.CasinoFees.addPurchaseSolFeeTransfers(transaction, SystemProgram, PublicKey, userPublicKey);
         }
         
         let blockhash;
@@ -721,7 +725,7 @@ async function purchaseSpins() {
         updateDisplay();
         updateButtonStates();
         
-        const successMsg = `Successfully purchased ${numSpins} spin(s) for ${totalCost} ${getTokenLabel()}${PURCHASE_FEE_SOL > 0 ? ` + ${PURCHASE_FEE_SOL} SOL fee` : ''}.`;
+        const successMsg = `Successfully purchased ${numSpins} spin(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ` + ${getPurchaseFeeSol()} SOL fee` : ''}.`;
         showSlotsMessage({ title: 'Purchase complete', message: successMsg, txSignature: signature });
     } catch (error) {
         console.error('Purchase error:', error);
