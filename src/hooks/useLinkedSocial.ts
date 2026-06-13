@@ -7,6 +7,7 @@ export type LinkedTwitter = {
   username: string;
   userId: string;
   image: string | null;
+  label: string;
 };
 
 type SocialResponse = {

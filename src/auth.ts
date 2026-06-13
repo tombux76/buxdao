@@ -22,7 +22,7 @@ if (process.env.AUTH_TWITTER_ID && process.env.AUTH_TWITTER_SECRET) {
       profile(profile: TwitterProfile) {
         return {
           id: profile.data.id,
-          name: profile.data.name,
+          name: profile.data.username ?? profile.data.name,
           image: profile.data.profile_image_url,
         };
       },
@@ -54,22 +54,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return "/hub?error=discord_required";
       }
 
-      const pool = getPool();
-      const existing = await pool.query<{ id: number }>(
-        `SELECT id FROM accounts WHERE "userId" = $1 AND provider = 'twitter' LIMIT 1`,
-        [session.user.id],
-      );
-      if ((existing.rowCount ?? 0) > 0) {
-        return "/hub?error=x_already_linked";
-      }
-
       return true;
     },
   },
   events: {
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
       if (user.id) {
         await getPool().query(`UPDATE users SET updated_at = now() WHERE id = $1`, [user.id]);
+      }
+
+      if (account?.provider === "twitter" && user.id) {
+        const userId = String(user.id);
+        const existing = await getPool().query<{ userId: number }>(
+          `SELECT "userId" FROM accounts WHERE provider = 'twitter' AND "providerAccountId" = $1 LIMIT 1`,
+          [account.providerAccountId],
+        );
+        const linkedUserId = existing.rows[0]?.userId;
+        if (linkedUserId != null && String(linkedUserId) === userId) {
+          await saveTwitterLink(userId, account.providerAccountId, profile, account.access_token);
+        }
       }
     },
     async linkAccount({ user, account, profile }) {
@@ -77,7 +80,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return;
       }
 
-      await saveTwitterLink(String(user.id), account.providerAccountId, profile, account.access_token);
+      const userId = String(user.id);
+      await saveTwitterLink(userId, account.providerAccountId, profile, account.access_token);
     },
   },
 });

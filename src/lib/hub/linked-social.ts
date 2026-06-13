@@ -1,10 +1,16 @@
 import { getPool } from "@/lib/db";
-import { fetchTwitterMe, resolveTwitterLinkProfile } from "@/lib/hub/twitter-profile";
+import {
+  fetchTwitterMe,
+  formatTwitterLabel,
+  getValidTwitterAccessToken,
+  resolveTwitterLinkProfile,
+} from "@/lib/hub/twitter-profile";
 
 export type LinkedTwitter = {
   username: string;
   userId: string;
   image: string | null;
+  label: string;
 };
 
 type UserTwitterRow = {
@@ -19,14 +25,14 @@ export async function saveTwitterLink(
   profile: unknown,
   accessToken?: string | null,
 ): Promise<void> {
-  const resolved = await resolveTwitterLinkProfile(profile, accessToken);
+  const resolved = await resolveTwitterLinkProfile(profile, userId, accessToken);
   await getPool().query(
     `UPDATE users SET x_username = $1, x_user_id = $2, x_image = $3, updated_at = now() WHERE id = $4`,
     [resolved.username, providerAccountId, resolved.image, userId],
   );
 }
 
-export async function syncTwitterProfile(userId: string): Promise<void> {
+export async function syncTwitterProfile(userId: string, force = false): Promise<void> {
   const pool = getPool();
   const userResult = await pool.query<UserTwitterRow>(
     `SELECT x_username, x_user_id, x_image FROM users WHERE id = $1`,
@@ -36,15 +42,11 @@ export async function syncTwitterProfile(userId: string): Promise<void> {
   if (!userRow?.x_user_id) {
     return;
   }
-  if (userRow.x_username && userRow.x_image) {
+  if (!force && userRow.x_username) {
     return;
   }
 
-  const accountResult = await pool.query<{ access_token: string | null }>(
-    `SELECT access_token FROM accounts WHERE "userId" = $1 AND provider = 'twitter' LIMIT 1`,
-    [userId],
-  );
-  const accessToken = accountResult.rows[0]?.access_token;
+  const accessToken = await getValidTwitterAccessToken(userId);
   if (!accessToken) {
     return;
   }
@@ -65,7 +67,7 @@ export async function syncTwitterProfile(userId: string): Promise<void> {
 }
 
 export async function getLinkedTwitter(userId: string): Promise<LinkedTwitter | null> {
-  await syncTwitterProfile(userId);
+  await syncTwitterProfile(userId, true);
 
   const result = await getPool().query<UserTwitterRow>(
     `SELECT x_username, x_user_id, x_image FROM users WHERE id = $1`,
@@ -77,7 +79,12 @@ export async function getLinkedTwitter(userId: string): Promise<LinkedTwitter | 
   }
 
   const username = row.x_username ?? row.x_user_id;
-  return { username, userId: row.x_user_id, image: row.x_image };
+  return {
+    username,
+    userId: row.x_user_id,
+    image: row.x_image,
+    label: formatTwitterLabel(row.x_username, row.x_user_id),
+  };
 }
 
 export async function unlinkTwitter(userId: string): Promise<void> {
