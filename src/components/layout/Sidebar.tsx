@@ -64,9 +64,9 @@ export function Sidebar() {
         <div className="space-y-2">
           <WalletConnectButton className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-left text-sm hover:text-foreground" />
           <DiscordAuthButton
-            compact
-            className="w-full rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2 text-left text-sm text-[#5865F2] transition hover:bg-[#5865F2]/20"
-            connectedClassName="w-full rounded-xl border border-[#5865F2]/30 bg-bg-surface px-3 py-2 text-left text-sm text-foreground"
+            profile
+            callbackUrl="/hub"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2 text-left text-sm text-[#5865F2] transition hover:bg-[#5865F2]/20"
           />
         </div>
       </div>

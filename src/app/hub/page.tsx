@@ -1,6 +1,7 @@
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
 import { HubProfileCard } from "@/components/hub/HubProfileCard";
+import { HubSetupSteps } from "@/components/hub/HubSetupSteps";
 import { hubContent, site } from "@/content/site";
 
 export default function HubPage() {
@@ -26,17 +27,7 @@ export default function HubPage() {
 
       <section>
         <SectionHeader eyebrow="Setup" title="How it works" />
-        <div className="grid gap-4 md:grid-cols-2">
-          {hubContent.steps.map((step) => (
-            <Card key={step.step} className="p-5">
-              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-accent-purple/20 font-mono text-sm text-accent-purple">
-                {step.step}
-              </div>
-              <h3 className="mb-2 font-semibold">{step.title}</h3>
-              <p className="text-sm text-muted">{step.body}</p>
-            </Card>
-          ))}
-        </div>
+        <HubSetupSteps />
       </section>
 
       <Card glow="purple" className="space-y-4 p-5">

@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandMark } from "./BrandMark";
+import { DiscordAuthButton } from "@/components/auth/DiscordAuthButton";
 import { site } from "@/content/site";
 
 export function Header() {
@@ -16,6 +17,15 @@ export function Header() {
         </div>
 
         <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
+          <div className="lg:hidden">
+            <DiscordAuthButton
+              compact
+              callbackUrl="/hub"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#5865F2]/40 bg-[#5865F2]/10 px-2.5 py-1.5 text-xs font-medium text-[#5865F2]"
+              connectedClassName="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface p-1"
+              profile={false}
+            />
+          </div>
           <a
             href={site.social.discord}
             target="_blank"
