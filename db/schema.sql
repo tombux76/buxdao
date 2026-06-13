@@ -15,6 +15,8 @@ CREATE TABLE users (
   email VARCHAR(255) UNIQUE,
   "emailVerified" TIMESTAMPTZ,
   image TEXT,
+  x_username VARCHAR(255),
+  x_user_id VARCHAR(255),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

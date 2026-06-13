@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
+import { HubAuthErrors } from "@/components/hub/HubAuthErrors";
 import { HubProfileCard } from "@/components/hub/HubProfileCard";
 import { HubSetupSteps } from "@/components/hub/HubSetupSteps";
 import { HubDashboard } from "@/components/hub/HubDashboard";
@@ -13,6 +15,10 @@ export default function HubPage() {
         title={hubContent.title}
         description={hubContent.subtitle}
       />
+
+      <Suspense fallback={null}>
+        <HubAuthErrors />
+      </Suspense>
 
       <Card className="border-l-2 border-l-[#5865F2] p-5">
         <p className="text-sm text-[#5865F2]">{hubContent.verifyBanner}</p>

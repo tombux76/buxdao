@@ -43,7 +43,7 @@ This keeps `users.created_at` / `sessions` as a true picture of **who is current
 ## Auth flow
 
 - **Discord** — primary login via Auth.js (`provider = 'discord'`). See env vars below.
-- **X** — link second account later (`provider = 'twitter'`)
+- **X** — link second account after Discord login (`provider = 'twitter'`). Requires `AUTH_TWITTER_ID` / `AUTH_TWITTER_SECRET`.
 - **Wallet** — signed message against `wallet_link_challenges`, insert `user_wallets`
 
 ### Discord app setup
@@ -52,6 +52,16 @@ This keeps `users.created_at` / `sessions` as a true picture of **who is current
 2. Redirect URL: `http://localhost:3000/api/auth/callback/discord` (and production URL)
 3. Copy Client ID → `AUTH_DISCORD_ID`, Client Secret → `AUTH_DISCORD_SECRET`
 4. Generate secret: `openssl rand -base64 32` → `AUTH_SECRET`
+
+### X app setup (optional)
+
+1. [X Developer Portal](https://developer.x.com/en/portal/dashboard) → your app → **User authentication settings**
+2. Enable **OAuth 2.0**, type **Web App**
+3. Callback URL: `http://localhost:3000/api/auth/callback/twitter` (and production URL)
+4. Copy Client ID → `AUTH_TWITTER_ID`, Client Secret → `AUTH_TWITTER_SECRET`
+5. Apply DB migration: `psql "$POSTGRES_URL" -f db/migrations/20250613_users_x_link.sql`
+
+X can only be linked while logged in with Discord — standalone X login is blocked.
 
 ### Active members query
 
@@ -70,6 +80,6 @@ CASINO_DATABASE_URL=   # same as POSTGRES_URL
 AUTH_SECRET=
 AUTH_DISCORD_ID=
 AUTH_DISCORD_SECRET=
-# AUTH_TWITTER_ID=
-# AUTH_TWITTER_SECRET=
+AUTH_TWITTER_ID=
+AUTH_TWITTER_SECRET=
 ```

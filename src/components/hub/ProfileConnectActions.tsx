@@ -1,10 +1,12 @@
 "use client";
 
-import { Wallet, X } from "lucide-react";
+import { useState } from "react";
+import { Wallet, X as XIcon } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useDiscordSession } from "@/hooks/useDiscordSession";
+import { useLinkedSocial } from "@/hooks/useLinkedSocial";
 
 const btnBase =
   "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55";
@@ -36,7 +38,7 @@ export function DisconnectButton({
       title={title}
       aria-label={title}
     >
-      <X className={icon} strokeWidth={2.25} />
+      <XIcon className={icon} strokeWidth={2.25} />
     </button>
   );
 }
@@ -79,14 +81,59 @@ export function DiscordLoginButton({ fullWidth = false }: { fullWidth?: boolean 
 
 export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
   const { discordConnected, discordRequiredHint } = useDiscordSession();
-  const blocked = !discordConnected;
-  const title = blocked ? discordRequiredHint : "X linking coming soon";
+  const { twitter, twitterEnabled, loading, unlinkTwitter } = useLinkedSocial();
+  const [unlinking, setUnlinking] = useState(false);
+
+  if (!discordConnected) {
+    return (
+      <button
+        type="button"
+        disabled
+        title={discordRequiredHint}
+        className={`${btnClass(fullWidth)} border border-neutral-700 bg-black text-white`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/x-logo.png" alt="" className="h-4 w-4 object-contain" />
+        Link
+      </button>
+    );
+  }
+
+  if (twitter) {
+    return (
+      <div
+        className={`${btnClass(fullWidth)} border border-neutral-700 bg-black text-white`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/x-logo.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+        <span className="min-w-0 flex-1 truncate text-left">@{twitter.username}</span>
+        <DisconnectButton
+          size="sm"
+          title="Unlink X"
+          onClick={() => {
+            setUnlinking(true);
+            void unlinkTwitter()
+              .catch(() => undefined)
+              .finally(() => setUnlinking(false));
+          }}
+        />
+      </div>
+    );
+  }
+
+  const disabled = loading || unlinking || !twitterEnabled;
+  const title = !twitterEnabled
+    ? "X linking is not configured"
+    : loading
+      ? "Loading…"
+      : "Link your X account";
 
   return (
     <button
       type="button"
-      disabled
+      disabled={disabled}
       title={title}
+      onClick={() => signIn("twitter", { callbackUrl: "/hub" })}
       className={`${btnClass(fullWidth)} border border-neutral-700 bg-black text-white hover:bg-neutral-900`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
