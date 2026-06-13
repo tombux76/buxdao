@@ -1,10 +1,23 @@
 const { neon } = require("@neondatabase/serverless");
 
-const databaseUrl =
-  process.env.CASINO_DATABASE_URL ||
-  process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL;
-const sql = databaseUrl ? neon(databaseUrl) : null;
+let sqlClient = null;
+
+function getDatabaseUrl() {
+  return (
+    process.env.CASINO_DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL ||
+    null
+  );
+}
+
+/** Resolve Neon client at request time (env is not available during Next build). */
+function getSql() {
+  const databaseUrl = getDatabaseUrl();
+  if (!databaseUrl) return null;
+  if (!sqlClient) sqlClient = neon(databaseUrl);
+  return sqlClient;
+}
 
 const ALLOWED_ORIGINS = [
   "https://1000s.space",
@@ -44,4 +57,4 @@ function formatDbConnectionErr(err) {
   return null;
 }
 
-module.exports = { sql, setCors, json, ALLOWED_ORIGINS, formatDbConnectionErr };
+module.exports = { getSql, getDatabaseUrl, setCors, json, ALLOWED_ORIGINS, formatDbConnectionErr };

@@ -1,5 +1,5 @@
 // Load slots player state — Neon Postgres
-const { sql, setCors, json } = require("./slots-helpers.cjs");
+const { getSql, setCors, json } = require("./slots-helpers.cjs");
 
 const TOKEN_DECIMALS = 6;
 
@@ -8,6 +8,7 @@ async function handler(req, res) {
   if (req.method === "OPTIONS") return res.end();
 
   if (req.method !== "GET") return json(res, 405, { error: "Method not allowed" });
+  const sql = getSql();
   if (!sql) return json(res, 500, { error: "Database not configured" });
 
   try {

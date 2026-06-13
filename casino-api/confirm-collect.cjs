@@ -1,6 +1,6 @@
 // Confirm collect: clear unclaimed_rewards after tx confirmed — adapted from xapes, slots only
 const { Connection, PublicKey } = require("@solana/web3.js");
-const { sql, setCors, json } = require("./slots-helpers.cjs");
+const { getSql, setCors, json } = require("./slots-helpers.cjs");
 
 const TOKEN_DECIMALS = 6;
 const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
@@ -12,6 +12,7 @@ async function handler(req, res) {
   setCors(res, req.headers.origin);
   if (req.method === "OPTIONS") return res.end();
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const sql = getSql();
   if (!sql) return json(res, 500, { error: "Database not configured" });
 
   try {

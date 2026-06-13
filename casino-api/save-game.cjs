@@ -1,11 +1,12 @@
 // Save slots game data (purchase or spin) — Neon Postgres
-const { sql, setCors, json } = require("./slots-helpers.cjs");
+const { getSql, setCors, json } = require("./slots-helpers.cjs");
 
 function getDateET() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
 async function bumpCasinoDailyTotals({ walletAddress, tokenUsed, gameType, spentRaw }) {
+  const sql = getSql();
   if (!sql) return;
   const dateEt = getDateET();
   const game = (gameType || "").toLowerCase();
@@ -27,6 +28,7 @@ async function handler(req, res) {
   if (req.method === "OPTIONS") return res.end();
 
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const sql = getSql();
   if (!sql) return json(res, 500, { error: "Database not configured" });
 
   try {

@@ -1,7 +1,9 @@
 import type { NextRequest } from "next/server";
 import { runCasinoHandler } from "@/lib/casino/node-handler";
 
-const HANDLER = "../../../casino-api/collect.cjs";
+const HANDLER = "collect.cjs";
+
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   return runCasinoHandler(request, HANDLER, { parseBody: true });

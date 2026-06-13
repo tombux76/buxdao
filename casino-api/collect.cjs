@@ -6,7 +6,7 @@ const {
   getAccount,
   createAssociatedTokenAccountInstruction,
 } = require("@solana/spl-token");
-const { sql, setCors, json } = require("./slots-helpers.cjs");
+const { getSql, setCors, json } = require("./slots-helpers.cjs");
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET;
 
@@ -67,6 +67,7 @@ async function handler(req, res) {
       return json(res, 429, { error: "Too many requests. Please wait before trying again." });
     }
 
+    const sql = getSql();
     if (sql) {
       const dbDecimals = 6;
       let playerData, dbUnclaimed;

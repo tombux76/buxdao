@@ -1,7 +1,17 @@
 import { createRequire } from "module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NextRequest } from "next/server";
 
 const require = createRequire(import.meta.url);
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+function resolveCasinoHandler(handlerPath: string): string {
+  if (handlerPath.includes("/") || handlerPath.includes("\\")) {
+    return path.isAbsolute(handlerPath) ? handlerPath : path.join(projectRoot, handlerPath);
+  }
+  return path.join(projectRoot, "casino-api", handlerPath);
+}
 
 type NodeHandler = (req: NodeRequest, res: NodeResponse) => void | Promise<void>;
 
@@ -24,7 +34,7 @@ export async function runCasinoHandler(
   handlerPath: string,
   options?: { parseBody?: boolean },
 ): Promise<Response> {
-  const handlerModule = require(handlerPath) as NodeHandler | { handler: NodeHandler };
+  const handlerModule = require(resolveCasinoHandler(handlerPath)) as NodeHandler | { handler: NodeHandler };
   const handler = typeof handlerModule === "function" ? handlerModule : handlerModule.handler;
 
   const url = new URL(request.url);

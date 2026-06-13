@@ -12,7 +12,16 @@ psql "$POSTGRES_URL" -f db/schema.sql
 psql "$POSTGRES_URL" -f db/seed-legacy-airdrops.sql
 ```
 
-Set **`POSTGRES_URL`** and **`CASINO_DATABASE_URL`** to the same connection string (casino API reads `CASINO_DATABASE_URL` first).
+Set **`POSTGRES_URL`** on Vercel (and locally). Casino API uses `CASINO_DATABASE_URL` first, then **`POSTGRES_URL`**, then `DATABASE_URL`.
+
+**Important:** If `CASINO_DATABASE_URL` points at a different/empty Neon project, casino saves will go to the wrong database. Either unset it on Vercel or set it to the **same** connection string as `POSTGRES_URL`.
+
+Apply schema once:
+
+```bash
+npm run db:schema
+# or: psql "$POSTGRES_URL" -f db/schema.sql
+```
 
 ## Tables
 
