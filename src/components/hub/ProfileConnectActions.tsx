@@ -4,6 +4,7 @@ import { Wallet, X } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useDiscordSession } from "@/hooks/useDiscordSession";
 
 const btnBase =
   "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55";
@@ -77,11 +78,15 @@ export function DiscordLoginButton({ fullWidth = false }: { fullWidth?: boolean 
 }
 
 export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
+  const { discordConnected, discordRequiredHint } = useDiscordSession();
+  const blocked = !discordConnected;
+  const title = blocked ? discordRequiredHint : "X linking coming soon";
+
   return (
     <button
       type="button"
       disabled
-      title="X linking coming soon"
+      title={title}
       className={`${btnClass(fullWidth)} border border-neutral-700 bg-black text-white hover:bg-neutral-900`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -92,8 +97,23 @@ export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
 }
 
 export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) {
+  const { discordConnected, discordRequiredHint } = useDiscordSession();
   const { publicKey, connected, disconnect } = useWallet();
   const { setVisible } = useWalletModal();
+
+  if (!discordConnected) {
+    return (
+      <button
+        type="button"
+        disabled
+        title={discordRequiredHint}
+        className={`${btnClass(fullWidth)} bg-gradient-to-r from-[#9945FF] to-[#14F195] text-bg-deep`}
+      >
+        <Wallet className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+        Connect
+      </button>
+    );
+  }
 
   if (connected && publicKey) {
     const address = `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`;

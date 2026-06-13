@@ -7,6 +7,7 @@ import {
   HubWalletButton,
   XLinkButton,
 } from "@/components/hub/ProfileConnectActions";
+import { useDiscordSession } from "@/hooks/useDiscordSession";
 import { hubContent, site } from "@/content/site";
 
 const stepMeta = [
@@ -33,6 +34,8 @@ const stepMeta = [
 ];
 
 export function HubSetupSteps() {
+  const { discordConnected, discordRequiredHint } = useDiscordSession();
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {hubContent.steps.map((step, index) => {
@@ -70,16 +73,26 @@ export function HubSetupSteps() {
               {step.step === 1 && <DiscordLoginButton fullWidth />}
               {step.step === 2 && <XLinkButton fullWidth />}
               {step.step === 3 && <HubWalletButton fullWidth />}
-              {step.step === 4 && (
-                <a
-                  href={site.social.discord}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`${"inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition"} border border-accent-gold/40 bg-accent-gold/10 text-accent-gold hover:bg-accent-gold/20`}
-                >
-                  Verify in Discord
-                </a>
-              )}
+              {step.step === 4 &&
+                (discordConnected ? (
+                  <a
+                    href={site.social.discord}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${"inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition"} border border-accent-gold/40 bg-accent-gold/10 text-accent-gold hover:bg-accent-gold/20`}
+                  >
+                    Verify in Discord
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title={discordRequiredHint}
+                    className={`${"inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55"} border border-accent-gold/40 bg-accent-gold/10 text-accent-gold`}
+                  >
+                    Verify in Discord
+                  </button>
+                ))}
             </div>
           </Card>
         );
