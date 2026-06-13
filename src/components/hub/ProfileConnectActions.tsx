@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Wallet, X as XIcon } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { WalletReadyState } from "@solana/wallet-adapter-base";
+import { useWallet, type Wallet as AdapterWallet } from "@solana/wallet-adapter-react";
 import { useDiscordSession } from "@/hooks/useDiscordSession";
 import { useHubProfiles } from "@/hooks/useHubProfiles";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
@@ -165,11 +165,72 @@ export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
 
 export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) {
   const { discordConnected, discordRequiredHint } = useDiscordSession();
-  const { publicKey, connected, disconnect, signMessage } = useWallet();
-  const { setVisible } = useWalletModal();
-  const { wallets, linkWallet, unlinkWallet } = useLinkedWallets();
+  const { publicKey, connected, disconnect, signMessage, wallets, select } = useWallet();
+  const { wallets: linkedWallets, linkWallet, unlinkWallet } = useLinkedWallets();
   const [linking, setLinking] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  const installedWallets = wallets.filter(
+    (wallet) =>
+      wallet.readyState === WalletReadyState.Installed ||
+      wallet.readyState === WalletReadyState.Loadable,
+  );
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [pickerOpen]);
+
+  const handleConnectWallet = useCallback(
+    async (wallet: AdapterWallet) => {
+      setConnecting(true);
+      setLinkError(null);
+      setPickerOpen(false);
+
+      try {
+        select(wallet.adapter.name);
+        await wallet.adapter.connect();
+
+        const address = wallet.adapter.publicKey?.toBase58();
+        if (!address) {
+          throw new Error("Wallet did not return an address");
+        }
+
+        const alreadyLinked = linkedWallets.some((w) => w.address === address);
+        if (alreadyLinked) return;
+
+        const sign =
+          "signMessage" in wallet.adapter && wallet.adapter.signMessage
+            ? wallet.adapter.signMessage.bind(wallet.adapter)
+            : signMessage;
+
+        if (!sign) {
+          throw new Error("This wallet does not support message signing");
+        }
+
+        setLinking(true);
+        await linkWallet(address, sign);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to connect wallet";
+        if (!message.toLowerCase().includes("user rejected")) {
+          setLinkError(message);
+        }
+      } finally {
+        setConnecting(false);
+        setLinking(false);
+      }
+    },
+    [linkedWallets, linkWallet, select, signMessage],
+  );
 
   if (!discordConnected) {
     return (
@@ -188,7 +249,7 @@ export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) 
   if (connected && publicKey) {
     const address = publicKey.toBase58();
     const short = `${address.slice(0, 4)}…${address.slice(-4)}`;
-    const isLinked = wallets.some((w) => w.address === address);
+    const isLinked = linkedWallets.some((w) => w.address === address);
 
     if (!isLinked) {
       return (
@@ -206,7 +267,7 @@ export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) 
           </div>
           <button
             type="button"
-            disabled={linking || !signMessage}
+            disabled={linking || connecting || !signMessage}
             onClick={() => {
               if (!signMessage) return;
               setLinking(true);
@@ -244,19 +305,54 @@ export function HubWalletButton({ fullWidth = false }: { fullWidth?: boolean }) 
   }
 
   const linkedLabel =
-    wallets.length > 0
-      ? `Connect${wallets.length > 1 ? ` (${wallets.length} linked)` : ""}`
+    linkedWallets.length > 0
+      ? `Connect${linkedWallets.length > 1 ? ` (${linkedWallets.length} linked)` : ""}`
       : "Connect";
 
   return (
-    <button
-      type="button"
-      onClick={() => setVisible(true)}
-      className={`${btnClass(fullWidth)} bg-gradient-to-r from-[#9945FF] to-[#14F195] text-bg-deep hover:opacity-90`}
-    >
-      <Wallet className="h-4 w-4 shrink-0" strokeWidth={2.25} />
-      {linkedLabel}
-    </button>
+    <div ref={pickerRef} className={`relative ${fullWidth ? "w-full" : ""}`}>
+      <button
+        type="button"
+        disabled={connecting || linking}
+        onClick={() => setPickerOpen((open) => !open)}
+        className={`${btnClass(fullWidth)} bg-gradient-to-r from-[#9945FF] to-[#14F195] text-bg-deep hover:opacity-90`}
+      >
+        <Wallet className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+        {connecting || linking ? "Connecting…" : linkedLabel}
+      </button>
+      {pickerOpen && (
+        <ul
+          className={`absolute z-50 mt-2 overflow-hidden rounded-xl border border-white/10 bg-bg-deep shadow-xl ${
+            fullWidth ? "left-0 right-0" : "left-0 min-w-[220px]"
+          }`}
+        >
+          {installedWallets.length === 0 ? (
+            <li className="px-4 py-3 text-sm text-text-muted">No Solana wallet detected</li>
+          ) : (
+            installedWallets.map((wallet) => (
+              <li key={wallet.adapter.name}>
+                <button
+                  type="button"
+                  disabled={connecting || linking}
+                  onClick={() => void handleConnectWallet(wallet)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-text-primary transition hover:bg-white/5"
+                >
+                  {wallet.adapter.icon && (
+                    <img
+                      src={wallet.adapter.icon}
+                      alt=""
+                      className="h-6 w-6 rounded-md"
+                    />
+                  )}
+                  {wallet.adapter.name}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+      {linkError && <p className="mt-2 text-xs text-red-400">{linkError}</p>}
+    </div>
   );
 }
 
