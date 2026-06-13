@@ -17,6 +17,7 @@ CREATE TABLE users (
   image TEXT,
   x_username VARCHAR(255),
   x_user_id VARCHAR(255),
+  x_image TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

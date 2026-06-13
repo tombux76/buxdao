@@ -6,6 +6,7 @@ import { useDiscordSession } from "@/hooks/useDiscordSession";
 export type LinkedTwitter = {
   username: string;
   userId: string;
+  image: string | null;
 };
 
 type SocialResponse = {

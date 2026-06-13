@@ -5,6 +5,7 @@ import Twitter from "next-auth/providers/twitter";
 import type { TwitterProfile } from "next-auth/providers/twitter";
 import PostgresAdapter from "@auth/pg-adapter";
 import { getPool } from "@/lib/db";
+import { saveTwitterLink } from "@/lib/hub/linked-social";
 
 const providers: Provider[] = [
   Discord({
@@ -76,12 +77,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return;
       }
 
-      const twitterProfile = profile as TwitterProfile | undefined;
-      const username = twitterProfile?.data?.username;
-      await getPool().query(
-        `UPDATE users SET x_username = $1, x_user_id = $2, updated_at = now() WHERE id = $3`,
-        [username ?? null, account.providerAccountId, user.id],
-      );
+      await saveTwitterLink(String(user.id), account.providerAccountId, profile, account.access_token);
     },
   },
 });

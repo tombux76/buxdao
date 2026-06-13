@@ -104,9 +104,16 @@ export function XLinkButton({ fullWidth = false }: { fullWidth?: boolean }) {
       <div
         className={`${btnClass(fullWidth)} border border-neutral-700 bg-black text-white`}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/x-logo.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
-        <span className="min-w-0 flex-1 truncate text-left">@{twitter.username}</span>
+        {twitter.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={twitter.image} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/brand/x-logo.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+        )}
+        <span className="min-w-0 flex-1 truncate text-left">
+          {twitter.username.startsWith("@") ? twitter.username : `@${twitter.username}`}
+        </span>
         <DisconnectButton
           size="sm"
           title="Unlink X"
