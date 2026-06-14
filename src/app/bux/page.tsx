@@ -18,6 +18,7 @@ type TokenMetrics = {
 type HolderRow = {
   discord_id: string;
   discord_username: string;
+  has_discord: boolean;
   nfts: string;
   bux: string;
   value: string;
@@ -174,7 +175,7 @@ export default function BuxPage() {
               <thead>
                 <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-3 pr-4">Rank</th>
-                  <th className="pb-3 pr-4">Discord</th>
+                  <th className="pb-3 pr-4">Holder</th>
                   {(viewType === "bux,nfts" || viewType === "nfts") && (
                     <th className="pb-3 pr-4">NFTs</th>
                   )}
@@ -201,7 +202,14 @@ export default function BuxPage() {
                   holders.map((row, index) => (
                     <tr key={row.discord_id} className="border-b border-border/50 last:border-0">
                       <td className="py-3 pr-4 font-mono text-accent-gold">#{index + 1}</td>
-                      <td className="py-3 pr-4">{row.discord_username}</td>
+                      <td className="py-3 pr-4">
+                        <span
+                          className={row.has_discord ? "font-medium text-accent-green" : "font-mono text-muted"}
+                          title={row.has_discord ? "Linked Hub user" : row.discord_username}
+                        >
+                          {row.discord_username}
+                        </span>
+                      </td>
                       {(viewType === "bux,nfts" || viewType === "nfts") && (
                         <td className="py-3 pr-4 font-mono">{row.nfts}</td>
                       )}

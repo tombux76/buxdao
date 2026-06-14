@@ -1,12 +1,13 @@
 import { collectionConfigs } from "@/content/site";
 import { fetchGraveMarketFloorSol } from "@/lib/gravemarket";
-import { getWalletDiscordMap } from "@/lib/bux/discord";
+import { getWalletIdentityMaps } from "@/lib/bux/discord";
 import { buildRawHolders, isHiddenWallet } from "@/lib/bux/helius-holders";
 import { fetchTokenMetrics } from "@/lib/bux/metrics";
 
 export type HolderRow = {
   discord_id: string;
   discord_username: string;
+  has_discord: boolean;
   nfts: string;
   bux: string;
   value: string;
@@ -43,8 +44,10 @@ async function getFloorPrices(): Promise<Record<string, number>> {
 
 type AggregatedHolder = {
   key: string;
+  userId: number | null;
   discordId: string | null;
-  displayName: string;
+  discordUsername: string | null;
+  labelWallet: string;
   buxBalance: number;
   nftCounts: Record<string, number>;
   totalNfts: number;
@@ -65,17 +68,17 @@ export async function fetchTopHolders(
   collection: string,
 ): Promise<TopHoldersResult | null> {
   const rawHolders = await buildRawHolders();
-  const [metrics, floors, discordMaps] = await Promise.all([
+  const [metrics, floors, identityMaps] = await Promise.all([
     fetchTokenMetrics(rawHolders),
     getFloorPrices(),
-    getWalletDiscordMap(),
+    getWalletIdentityMaps(),
   ]);
 
   if (!metrics) {
     return null;
   }
 
-  const { walletToDiscord, discordNames } = discordMaps;
+  const { walletToUserId, userDiscord } = identityMaps;
   const tokenValueSol = metrics.tokenValue;
   const solPrice = metrics.solPrice;
   const collectionId = collection === "all" ? "all" : collection;
@@ -86,9 +89,12 @@ export async function fetchTopHolders(
     if (isHiddenWallet(holder.wallet)) {
       continue;
     }
-    const discordId = walletToDiscord.get(holder.wallet.toLowerCase()) ?? null;
-    const key = discordId ?? holder.wallet;
-    const existing = byKey.get(key);
+
+    const walletKey = holder.wallet.toLowerCase();
+    const userId = walletToUserId.get(walletKey) ?? null;
+    const aggregateKey = userId != null ? `user:${userId}` : walletKey;
+    const discordInfo = userId != null ? userDiscord.get(userId) : null;
+    const existing = byKey.get(aggregateKey);
 
     if (existing) {
       existing.buxBalance += holder.buxBalance;
@@ -97,13 +103,19 @@ export async function fetchTopHolders(
           (existing.nftCounts[config.id] ?? 0) + (holder.nftCounts[config.id] ?? 0);
       }
       existing.totalNfts += holder.totalNfts;
+      if (discordInfo?.discordUsername) {
+        existing.discordUsername = discordInfo.discordUsername;
+      }
+      if (discordInfo?.discordId) {
+        existing.discordId = discordInfo.discordId;
+      }
     } else {
-      byKey.set(key, {
-        key,
-        discordId,
-        displayName: discordId
-          ? discordNames.get(discordId) || "Discord user"
-          : shortWallet(holder.wallet),
+      byKey.set(aggregateKey, {
+        key: aggregateKey,
+        userId,
+        discordId: discordInfo?.discordId ?? null,
+        discordUsername: discordInfo?.discordUsername ?? null,
+        labelWallet: holder.wallet,
         buxBalance: holder.buxBalance,
         nftCounts: { ...holder.nftCounts },
         totalNfts: holder.totalNfts,
@@ -120,10 +132,12 @@ export async function fetchTopHolders(
       type === "bux" ? buxSol : type === "nfts" ? nftsSol : buxSol + nftsSol;
     const sortValue =
       type === "bux" ? h.buxBalance : type === "nfts" ? nftCount : totalSol;
+    const hasDiscord = !!h.discordUsername;
 
     return {
       discord_id: h.discordId ?? h.key,
-      discord_username: h.displayName,
+      discord_username: hasDiscord ? h.discordUsername! : shortWallet(h.labelWallet),
+      has_discord: hasDiscord,
       nfts: collectionId === "all" ? `${nftCount} NFTs` : String(nftCount),
       bux: h.buxBalance.toLocaleString(undefined, { maximumFractionDigits: 0 }),
       value: formatValue(totalSol, totalSol * solPrice),
