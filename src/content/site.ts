@@ -193,7 +193,7 @@ export const liveProducts: LiveProduct[] = [
     name: "BUX Casino",
     status: "live",
     href: "/games",
-    // thumbnail: "/products/casino.png" — add tomorrow
+    thumbnail: "/products/casino.png",
   },
   {
     id: "spades",
