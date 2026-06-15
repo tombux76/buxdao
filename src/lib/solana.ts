@@ -38,7 +38,7 @@ export async function verifySolPayment(
     return { ok: false as const, error: "Transaction failed on chain" };
   }
 
-  let paidLamports = 0n;
+  let paidLamports = BigInt(0);
   const instructions = tx.transaction.message.instructions;
   const inner = (tx.meta?.innerInstructions ?? []).flatMap((ii) => ii.instructions);
   for (const inst of [...instructions, ...inner]) {
@@ -50,7 +50,7 @@ export async function verifySolPayment(
     }
   }
 
-  if (paidLamports <= 0n) {
+  if (paidLamports <= BigInt(0)) {
     return { ok: false as const, error: "SOL payment to project wallet not found" };
   }
 
