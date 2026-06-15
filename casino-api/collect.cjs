@@ -8,6 +8,7 @@ const {
 } = require("@solana/spl-token");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
+const { isCasinoPaused, DB_DECIMALS } = require("./game-logic.cjs");
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET;
 
@@ -41,6 +42,9 @@ async function handler(req, res) {
   setCors(res, req.headers.origin);
   if (req.method === "OPTIONS") return res.end();
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  if (isCasinoPaused()) {
+    return json(res, 503, { error: "Casino withdrawals are temporarily paused" });
+  }
 
   try {
     let { userWallet, amount: amountRaw, gameType = "slots" } = req.body;
@@ -68,16 +72,22 @@ async function handler(req, res) {
 
     const sql = getSql();
     if (sql) {
-      const dbDecimals = 6;
+      const dbDecimals = DB_DECIMALS;
       let playerData, dbUnclaimed;
       if (gameTypeNorm === "coinflip") {
         const rows = await sql`SELECT unclaimed_rewards FROM coinflip_players WHERE wallet_address = ${userWallet} AND token_used = ${token}`;
         playerData = rows[0];
         dbUnclaimed = playerData ? Number(playerData.unclaimed_rewards || 0) / Math.pow(10, dbDecimals) : 0;
       } else if (gameTypeNorm === "roulette") {
-        const rows = await sql`SELECT unclaimed_rewards FROM roulette_players WHERE wallet_address = ${userWallet} AND token_used = ${token}`;
+        const rows = await sql`SELECT unclaimed_rewards, chips_balance, cost_per_chip FROM roulette_players WHERE wallet_address = ${userWallet} AND token_used = ${token}`;
         playerData = rows[0];
-        dbUnclaimed = playerData ? Number(playerData.unclaimed_rewards || 0) / Math.pow(10, dbDecimals) : 0;
+        if (!playerData) {
+          dbUnclaimed = 0;
+        } else {
+          const unclaimedPart = Number(playerData.unclaimed_rewards || 0) / Math.pow(10, dbDecimals);
+          const chipPart = (playerData.chips_balance || 0) * (playerData.cost_per_chip || 100);
+          dbUnclaimed = unclaimedPart + chipPart;
+        }
       } else {
         const rows = await sql`SELECT unclaimed_rewards FROM slots_players WHERE wallet_address = ${userWallet} AND token_used = ${token}`;
         playerData = rows[0];

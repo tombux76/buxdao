@@ -470,28 +470,40 @@
             userClickedChipYet = false;
             updatePopups();
             updateRouletteButtonStates();
-            var result = WHEEL_ORDER[Math.floor(Math.random() * SEGMENTS)];
-            spinReel(result, function () {
-                last10Results.push(result);
-                if (last10Results.length > 7) last10Results.shift();
-                renderLast10();
-                var win = calculateWinnings(result);
-                lastBets = copyBets(bets);
-                lastChipTypes = copyBets(chipTypes);
-                showWinMessage(win.profit);
-                saveSpinToDb(result, win);
-                var wonToken = (win && win.profit) ? win.profit * costPerChip : 0;
-                if (wonToken > 0) { unclaimedRewards += wonToken; }
-                clearTable();
-                userClickedChipYet = false;
-                selectedChipValue = 0;
-                document.querySelectorAll('.roulette-chip').forEach(function (b) { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
-                updateChipUI();
-                updateToCollectUI();
-                updateReplaceButton();
-                spinInProgress = false;
-                updateRouletteButtonStates();
-                updatePopups();
+            var betsSnapshot = copyBets(bets);
+            saveSpinToDb(betsSnapshot, function (data, err) {
+                if (err || !data) {
+                    spinInProgress = false;
+                    updateRouletteButtonStates();
+                    showMessage({ title: 'Spin failed', message: (err && err.message) || 'Could not complete spin.', isError: true });
+                    return;
+                }
+                var result = data.result;
+                var profitChips = data.profitChips || 0;
+                spinReel(result, function () {
+                    last10Results.push(result);
+                    if (last10Results.length > 7) last10Results.shift();
+                    renderLast10();
+                    lastBets = copyBets(betsSnapshot);
+                    lastChipTypes = copyBets(chipTypes);
+                    showWinMessage(profitChips);
+                    chipBalance = typeof data.chipsBalance === 'number' ? data.chipsBalance : chipBalance;
+                    if (typeof data.unclaimedRewards === 'number') {
+                        unclaimedRewards = data.unclaimedRewards;
+                    } else if (data.wonAmount > 0) {
+                        unclaimedRewards += data.wonAmount;
+                    }
+                    clearTable();
+                    userClickedChipYet = false;
+                    selectedChipValue = 0;
+                    document.querySelectorAll('.roulette-chip').forEach(function (b) { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
+                    updateChipUI();
+                    updateToCollectUI();
+                    updateReplaceButton();
+                    spinInProgress = false;
+                    updateRouletteButtonStates();
+                    updatePopups();
+                });
             });
         });
     }
@@ -499,28 +511,32 @@
     function bindUndoButton() { var btn = document.getElementById('roulette-undo'); if (btn) btn.addEventListener('click', undoLastBet); }
     function bindReplaceButton() { var btn = document.getElementById('roulette-replace'); if (btn) btn.addEventListener('click', replaceChips); }
 
-    function saveSpinToDb(result, win) {
-        if (!wallet) return;
-        var resultSymbols = [String(result)];
-        var totalStaked = getTotalStaked();
-        var spinCostToken = totalStaked * costPerChip;
-        var wonAmountToken = (win && win.profit) ? win.profit * costPerChip : 0;
+    function saveSpinToDb(betsSnapshot, onComplete) {
+        if (!wallet) {
+            if (onComplete) onComplete(null, new Error('No wallet'));
+            return;
+        }
         fetch('/api/save-game', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 walletAddress: wallet,
                 costPerChip: costPerChip,
-                resultSymbols: resultSymbols,
-                spinCost: spinCostToken,
-                wonAmount: wonAmountToken,
-                updateChipsBalance: chipBalance,
+                bets: betsSnapshot,
                 gameType: 'roulette',
                 tokenUsed: isBuxToken() ? 'bux' : 'bux'
             })
         }).then(function (res) {
-            if (!res.ok) return res.json().then(function (d) { console.error('Save spin failed:', d); });
-        }).catch(function (err) { console.error('Save spin error:', err); });
+            if (!res.ok) {
+                return res.json().then(function (d) { throw new Error(d.error || d.message || 'Save failed'); });
+            }
+            return res.json();
+        }).then(function (data) {
+            if (onComplete) onComplete(data, null);
+        }).catch(function (err) {
+            console.error('Save spin error:', err);
+            if (onComplete) onComplete(null, err);
+        });
     }
 
     function updateRouletteButtonStates() {
@@ -757,7 +773,6 @@
         }).then(function (sig) {
             return connection.confirmTransaction(sig, 'confirmed').then(function () { return sig; });
         }).then(function (sig) {
-            chipBalance += num;
             costPerChip = cost;
             updateChipUI();
             updateRouletteButtonStates();
@@ -768,18 +783,23 @@
                     walletAddress: wallet,
                     chipsPurchased: num,
                     costPerChip: cost,
+                    purchaseSignature: sig,
                     gameType: 'roulette',
                     tokenUsed: isBuxToken() ? 'bux' : 'bux'
                 })
             }).then(function (res) {
                 if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Save failed'); });
-                return sig;
+                return res.json().then(function (saveData) { return { saveData: saveData, sig: sig }; });
             });
-        }).then(function (sig) {
+        }).then(function (result) {
+            if (!result) return;
+            if (result.saveData && typeof result.saveData.chipsBalance === 'number') {
+                chipBalance = result.saveData.chipsBalance;
+            }
             updateBalance();
             updatePopups();
             updateRouletteButtonStates();
-            showMessage({ title: 'Purchase complete', message: 'Successfully bought ' + num + ' chips for ' + total + ' ' + getTokenLabel() + (getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : '') + '.', txSignature: sig });
+            showMessage({ title: 'Purchase complete', message: 'Successfully bought ' + num + ' chips for ' + total + ' ' + getTokenLabel() + (getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : '') + '.', txSignature: result.sig });
         }).catch(function (err) {
             if (err && (err.message === 'INSUFFICIENT_SOL' || err.message === 'INSUFFICIENT_BUX' || err.message === 'NO_ATA_HELPER')) return;
             if (String(err.message || '').match(/reject|authorized|cancelled/i)) return;
@@ -809,25 +829,6 @@
                     return Promise.reject(new Error('NOTHING_TO_COLLECT'));
                 }
                 totalToCollectAmount = totalToCollect;
-                return totalToCollect;
-            })
-            .then(function (newUnclaimed) {
-                return fetch('/api/save-game', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        walletAddress: wallet,
-                        resultSymbols: [],
-                        wonAmount: 0,
-                        updateUnclaimedRewards: newUnclaimed,
-                        updateChipsBalance: 0,
-                        gameType: 'roulette',
-                        tokenUsed: isBuxToken() ? 'bux' : 'bux'
-                    })
-                });
-            })
-            .then(function (res) {
-                if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || d.message || 'Save failed'); });
                 return fetch('/api/collect', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

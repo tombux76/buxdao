@@ -455,18 +455,30 @@ async function purchaseFlips() {
 
     flipsRemaining += numFlips;
     try {
-      await fetch('/api/save-game', {
+      const saveRes = await fetch('/api/save-game', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           walletAddress: wallet,
           flipCost: costPerFlip,
           flipsPurchased: numFlips,
+          purchaseSignature: signature,
           gameType: 'coinflip',
           tokenUsed: isBuxToken() ? 'bux' : 'bux'
         })
       });
-    } catch (_) {}
+      if (!saveRes.ok) {
+        const err = await saveRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Purchase could not be recorded');
+      }
+      const saveData = await saveRes.json();
+      if (typeof saveData.flipsRemaining === 'number') {
+        flipsRemaining = saveData.flipsRemaining;
+      }
+    } catch (saveErr) {
+      showMessage({ title: 'Purchase sync failed', message: saveErr.message || 'Contact support if flips do not appear.', isError: true });
+      return;
+    }
     await updateBalance();
     updateDisplay();
     updateButtonStates();
@@ -486,10 +498,39 @@ async function doFlip() {
   isFlipping = true;
   updateButtonStates();
 
-  const result = Math.random() < 0.5 ? 'heads' : 'tails';
-  const won = result === selectedSide ? costPerFlip * WIN_MULTIPLIER : 0;
-  if (won > 0) totalWon += won;
-  flipsRemaining -= 1;
+  let serverData;
+  try {
+    const res = await fetch('/api/save-game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        walletAddress: wallet,
+        gameType: 'coinflip',
+        choice: selectedSide,
+        flipCost: costPerFlip,
+        tokenUsed: isBuxToken() ? 'bux' : 'bux'
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Flip failed');
+    }
+    serverData = await res.json();
+  } catch (err) {
+    isFlipping = false;
+    updateButtonStates();
+    showMessage({ title: 'Flip failed', message: err.message || String(err), isError: true });
+    return;
+  }
+
+  const result = serverData.result;
+  const won = serverData.wonAmount || 0;
+  flipsRemaining = serverData.flipsRemaining ?? Math.max(0, flipsRemaining - 1);
+  if (typeof serverData.unclaimedRewards === 'number') {
+    totalWon = serverData.unclaimedRewards;
+  } else if (won > 0) {
+    totalWon += won;
+  }
 
   const coinImage = document.getElementById('coin-image');
   if (coinImage) {
@@ -510,27 +551,8 @@ async function doFlip() {
       setTimeout(() => { resultEl.style.display = 'none'; }, 2000);
     }
 
-    fetch('/api/save-game', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        walletAddress: wallet,
-        gameType: 'coinflip',
-        flipCost: costPerFlip,
-        choice: selectedSide,
-        result,
-        wonAmount: won,
-        updateFlipsRemaining: flipsRemaining,
-        updateUnclaimedRewards: totalWon,
-        tokenUsed: isBuxToken() ? 'bux' : 'bux'
-      })
-    }).then((res) => {
-      if (res && res.ok) {
-        loadGameStats();
-        loadLeaderboard('flips');
-      }
-    }).catch(() => {});
-
+    loadGameStats();
+    loadLeaderboard('flips');
     updateDisplay();
     updateButtonStates();
     isFlipping = false;

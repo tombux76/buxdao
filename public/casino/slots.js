@@ -720,10 +720,7 @@ async function purchaseSpins() {
         
         await connection.confirmTransaction(signature, 'confirmed');
         
-        // Update spins remaining
-        spinsRemaining += numSpins;
-        
-        // Save purchase to database
+        // Save purchase to database (server verifies on-chain tx)
         try {
             const saveResponse = await fetch('/api/save-game', {
                 method: 'POST',
@@ -736,6 +733,7 @@ async function purchaseSpins() {
                     resultSymbols: [],
                     wonAmount: 0,
                     spinsPurchased: numSpins,
+                    purchaseSignature: signature,
                     gameType: 'slots',
                     tokenUsed: isBuxToken() ? 'bux' : 'bux'
                 })
@@ -744,13 +742,19 @@ async function purchaseSpins() {
             if (!saveResponse.ok) {
                 const errorData = await saveResponse.json();
                 console.error('Failed to save purchase to database:', errorData);
-                // Don't fail the purchase if DB save fails, but log it
-            } else {
-                console.log('Purchase saved to database successfully');
+                throw new Error(errorData.error || 'Purchase could not be recorded');
             }
+            const saveData = await saveResponse.json();
+            if (typeof saveData.spinsRemaining === 'number') {
+                spinsRemaining = saveData.spinsRemaining;
+            } else {
+                spinsRemaining += numSpins;
+            }
+            console.log('Purchase saved to database successfully');
         } catch (saveError) {
             console.error('Error saving purchase to database:', saveError);
-            // Don't fail the purchase if DB save fails, but log it
+            showSlotsMessage({ title: 'Purchase recorded on chain', message: saveError.message || 'Could not sync purchase with server. Contact support if spins do not appear.', isError: true });
+            return;
         }
         
         // Update balance
@@ -848,109 +852,107 @@ function toggleAutoSpin() {
     }
 }
 
-// Perform a single spin
+function findReelPositionForSymbol(symbolIndex) {
+    if (!FIXED_REEL_ORDER) {
+        FIXED_REEL_ORDER = createFixedReelOrder();
+    }
+    const matches = [];
+    for (let i = 0; i < FIXED_REEL_ORDER.length; i++) {
+        if (FIXED_REEL_ORDER[i] === symbolIndex) matches.push(i);
+    }
+    if (matches.length === 0) return Math.floor(Math.random() * FIXED_REEL_ORDER.length);
+    return matches[Math.floor(Math.random() * matches.length)];
+}
+
+// Perform a single spin (server-authoritative outcome)
 async function performSpin() {
     if (isSpinning || spinsRemaining <= 0) {
-        // Stop autospin if no spins remaining
         if (isAutoSpinning && spinsRemaining <= 0) {
             isAutoSpinning = false;
             updateSpinButtonText();
         }
         return;
     }
-    
-    // Stop autospin if user disabled it
+
     if (!isAutoSpinning) {
         return;
     }
-    
+
+    if (!wallet) {
+        isAutoSpinning = false;
+        updateSpinButtonText();
+        return;
+    }
+
     isSpinning = true;
-    spinsRemaining = Math.max(0, spinsRemaining - 1);
-    updateDisplay();
     updateButtonStates();
     updateSpinButtonText();
-    
-    // Start spinning animation
+
+    let serverData;
+    try {
+        const saveResponse = await fetch('/api/save-game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                walletAddress: wallet,
+                gameType: 'slots',
+                spin: true,
+                tokenUsed: isBuxToken() ? 'bux' : 'bux'
+            })
+        });
+        if (!saveResponse.ok) {
+            const errorData = await saveResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.message || 'Spin failed');
+        }
+        serverData = await saveResponse.json();
+    } catch (spinError) {
+        console.error('Spin error:', spinError);
+        isSpinning = false;
+        isAutoSpinning = false;
+        updateButtonStates();
+        updateSpinButtonText();
+        showSlotsMessage({ title: 'Spin failed', message: spinError.message || 'Could not complete spin.', isError: true });
+        return;
+    }
+
+    spinsRemaining = serverData.spinsRemaining ?? spinsRemaining;
+    if (typeof serverData.unclaimedRewards === 'number') {
+        totalWon = serverData.unclaimedRewards;
+    } else if (serverData.wonAmount > 0) {
+        totalWon += serverData.wonAmount;
+    }
+
+    const results = Array.isArray(serverData.resultSymbols) ? serverData.resultSymbols : [0, 0, 0];
+    const resultPositions = results.map((sym) => findReelPositionForSymbol(sym));
+    const costPerSpin = Math.min(parseFloat(document.getElementById('cost-per-spin').value) || SPIN_COST, MAX_COST_PER_SPIN);
+
     for (let i = 1; i <= 3; i++) {
         const reel = document.getElementById(`reel-${i}`);
         const strip = reel.querySelector('.reel-strip');
         if (reel && strip) {
-            // Get current position
             const currentTransform = strip.style.transform;
             const currentY = currentTransform ? parseFloat(currentTransform.match(/-?\d+\.?\d*/)?.[0] || '0') : 0;
             strip.style.setProperty('--spin-start', `${currentY}px`);
             reel.classList.add('spinning');
         }
     }
-    
-    // Generate weighted random positions based on symbol distribution
-    const resultPositions = [
-        getWeightedRandomPosition(),
-        getWeightedRandomPosition(),
-        getWeightedRandomPosition()
-    ];
-    
-    // Derive symbol indices from positions for win calculation
-    const results = resultPositions.map(pos => FIXED_REEL_ORDER[pos]);
-    
-    // Stop reels with delay for visual effect, positioning the chosen symbol in the center
+
     setTimeout(() => stopReel(1, resultPositions[0]), 1000);
     setTimeout(() => stopReel(2, resultPositions[1]), 1500);
     setTimeout(() => stopReel(3, resultPositions[2]), 2000);
-    
-    // Calculate win after all reels stop
+
     setTimeout(async () => {
-        const costPerSpin = Math.min(parseFloat(document.getElementById('cost-per-spin').value) || SPIN_COST, MAX_COST_PER_SPIN);
-        const winAmount = calculateWin(results, costPerSpin);
+        calculateWin(results, costPerSpin);
         isSpinning = false;
-        
-        // Save spin to database
-        if (wallet) {
-            try {
-                const saveResponse = await fetch('/api/save-game', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        walletAddress: wallet,
-                        spinCost: costPerSpin,
-                        resultSymbols: results,
-                        wonAmount: winAmount,
-                        updateSpinsRemaining: spinsRemaining,
-                        gameType: 'slots',
-                        tokenUsed: isBuxToken() ? 'bux' : 'bux'
-                    })
-                });
-                
-                if (!saveResponse.ok) {
-                    const errorData = await saveResponse.json();
-                    console.error('Failed to save spin to database:', errorData);
-                    // Don't fail the spin if DB save fails, but log it
-                } else {
-                    console.log('Spin saved to database successfully');
-                    // Refresh token-specific grand totals + leaderboard after each saved spin
-                    loadGameStats();
-                    loadLeaderboard('spins');
-                }
-            } catch (saveError) {
-                console.error('Error saving spin to database:', saveError);
-                // Don't fail the spin if DB save fails, but log it
-            }
-        }
-        
+        loadGameStats();
+        loadLeaderboard('spins');
         updateDisplay();
         updateButtonStates();
         updateSpinButtonText();
-        
-        // Continue autospin if enabled and spins remaining
+
         if (isAutoSpinning && spinsRemaining > 0) {
-            // Small delay before next spin
-            setTimeout(() => {
-                performSpin();
-            }, 500);
+            setTimeout(() => { performSpin(); }, 500);
         } else if (isAutoSpinning && spinsRemaining <= 0) {
-            // Stop autospin when spins run out
             isAutoSpinning = false;
             updateSpinButtonText();
         }

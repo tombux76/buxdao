@@ -2,6 +2,7 @@
 const { Connection, PublicKey } = require("@solana/web3.js");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
+const { verifyCollectPayout } = require("./collect-verify.cjs");
 
 const TOKEN_DECIMALS = 6;
 const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
@@ -68,6 +69,15 @@ async function handler(req, res) {
       return json(res, 202, { message: "Transaction still processing", status: "processing" });
     }
 
+    try {
+      await verifyCollectPayout({ signature, userWallet, expectedAmount: amount });
+    } catch (verifyErr) {
+      return json(res, 400, {
+        error: "Collect transaction verification failed",
+        message: verifyErr.message || String(verifyErr),
+      });
+    }
+
     let rows, updateResult;
     if (gameTypeNorm === "coinflip") {
       rows = await sql`SELECT unclaimed_rewards FROM coinflip_players WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm}`;
@@ -75,10 +85,10 @@ async function handler(req, res) {
       if (!playerData) return json(res, 404, { error: "Player not found" });
       updateResult = await sql`UPDATE coinflip_players SET unclaimed_rewards = 0 WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm} AND unclaimed_rewards = ${playerData.unclaimed_rewards} RETURNING wallet_address`;
     } else if (gameTypeNorm === "roulette") {
-      rows = await sql`SELECT unclaimed_rewards FROM roulette_players WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm}`;
+      rows = await sql`SELECT unclaimed_rewards, chips_balance FROM roulette_players WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm}`;
       const playerData = rows[0];
       if (!playerData) return json(res, 404, { error: "Player not found" });
-      updateResult = await sql`UPDATE roulette_players SET unclaimed_rewards = 0 WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm} AND unclaimed_rewards = ${playerData.unclaimed_rewards} RETURNING wallet_address`;
+      updateResult = await sql`UPDATE roulette_players SET unclaimed_rewards = 0, chips_balance = 0 WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm} AND (unclaimed_rewards = ${playerData.unclaimed_rewards} OR chips_balance = ${playerData.chips_balance}) RETURNING wallet_address`;
     } else {
       rows = await sql`SELECT unclaimed_rewards FROM slots_players WHERE wallet_address = ${userWallet} AND token_used = ${tokenNorm}`;
       const playerData = rows[0];
