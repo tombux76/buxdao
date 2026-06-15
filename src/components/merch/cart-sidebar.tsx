@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { ShippingForm } from "@/components/merch/shipping-form";
 import type { CartItem, MerchOrder, ShippingFormState } from "@/lib/merch/types";
+import { buildMerchAccessMessage, signatureBytesToBase64 } from "@/lib/merch/access-message";
 
 type CartSidebarProps = {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export function CartSidebar({
   activeTab,
   setActiveTab,
 }: CartSidebarProps) {
-  const { publicKey } = useWallet();
+  const { publicKey, signMessage } = useWallet();
   const [orders, setOrders] = useState<MerchOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
@@ -58,11 +59,29 @@ export function CartSidebar({
   useEffect(() => {
     const fetchOrders = async () => {
       if (activeTab !== "orders" || !publicKey) return;
+      if (!signMessage) {
+        setOrdersError("Your wallet must support message signing to view orders.");
+        return;
+      }
       setOrdersLoading(true);
       setOrdersError(null);
       try {
-        const response = await fetch(`/api/printful/order/${publicKey.toString()}`);
-        if (!response.ok) throw new Error("Failed to fetch orders");
+        const walletAddress = publicKey.toString();
+        const message = buildMerchAccessMessage(walletAddress);
+        const signatureBytes = await signMessage(new TextEncoder().encode(message));
+        const response = await fetch("/api/printful/order/list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress,
+            message,
+            signature: signatureBytesToBase64(signatureBytes),
+          }),
+        });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(data.error || "Failed to fetch orders");
+        }
         const data = (await response.json()) as { orders?: MerchOrder[] };
         setOrders(data.orders ?? []);
       } catch (error) {
@@ -73,7 +92,7 @@ export function CartSidebar({
     };
 
     fetchOrders();
-  }, [activeTab, publicKey]);
+  }, [activeTab, publicKey, signMessage]);
 
   return (
     <div

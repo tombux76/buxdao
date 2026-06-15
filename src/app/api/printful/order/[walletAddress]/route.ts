@@ -1,25 +1,16 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
 
-type RouteContext = {
-  params: Promise<{ walletAddress: string }>;
-};
+/** Deprecated unauthenticated lookup — use POST /api/printful/order/list instead. */
+export async function GET() {
+  return NextResponse.json(
+    { error: "Unauthorized. Use POST /api/printful/order/list with wallet signature." },
+    { status: 401 },
+  );
+}
 
-export async function GET(_request: Request, context: RouteContext) {
-  const pool = getPool();
-  const client = await pool.connect();
-
-  try {
-    const { walletAddress } = await context.params;
-    const result = await client.query(
-      `SELECT * FROM orders WHERE wallet_address = $1 ORDER BY created_at DESC`,
-      [walletAddress],
-    );
-
-    return NextResponse.json({ success: true, orders: result.rows });
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  } finally {
-    client.release();
-  }
+export async function POST() {
+  return NextResponse.json(
+    { error: "Use POST /api/printful/order/list with wallet signature." },
+    { status: 410 },
+  );
 }
