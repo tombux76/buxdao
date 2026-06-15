@@ -3,6 +3,7 @@ const { Connection, PublicKey } = require("@solana/web3.js");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { verifyCollectPayout } = require("./collect-verify.cjs");
+const { releaseCollectLock } = require("./collect-lock.cjs");
 
 const TOKEN_DECIMALS = 6;
 const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
@@ -97,8 +98,11 @@ async function handler(req, res) {
     }
 
     if (!updateResult || updateResult.length === 0) {
+      await releaseCollectLock(userWallet, gameTypeNorm, tokenNorm);
       return json(res, 200, { message: "Unclaimed rewards already cleared", alreadyCleared: true });
     }
+
+    await releaseCollectLock(userWallet, gameTypeNorm, tokenNorm);
 
     return json(res, 200, { message: "Unclaimed rewards cleared successfully", amount });
   } catch (err) {

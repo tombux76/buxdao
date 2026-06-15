@@ -9,6 +9,7 @@ const {
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { isCasinoPaused, DB_DECIMALS } = require("./game-logic.cjs");
+const { acquireCollectLock, releaseCollectLock } = require("./collect-lock.cjs");
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET;
 
@@ -99,16 +100,25 @@ async function handler(req, res) {
       if (Math.abs(dbUnclaimed - amount) > 0.000001) amount = dbUnclaimed;
     }
 
+    const lock = await acquireCollectLock(userWallet, gameTypeNorm, token, amount);
+    if (!lock.ok) {
+      return json(res, 409, { error: lock.error, pendingAmount: lock.pendingAmount });
+    }
+
+    try {
     const { mint: TOKEN_MINT, decimals: TOKEN_DECIMALS } = getTokenMintAndDecimals(token);
     if (!TOKEN_MINT) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 500, { error: "Token not configured", message: `Missing ${token === "bux" ? "BUX_TOKEN_MINT" : "KNUKL_TOKEN_MINT"} in env` });
     }
 
     const treasuryPrivateKey = process.env.TREASURY_PRIVATE_KEY;
     if (!treasuryPrivateKey) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 500, { error: "Server configuration error", message: "TREASURY_PRIVATE_KEY not set" });
     }
     if (!TREASURY_WALLET) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 500, { error: "Server configuration error", message: "TREASURY_WALLET not set in .env" });
     }
 
@@ -125,10 +135,12 @@ async function handler(req, res) {
         treasuryKeypair = Keypair.fromSecretKey(decoded);
       }
     } catch (e) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 500, { error: "Invalid treasury key configuration", message: e.message });
     }
 
     if (treasuryKeypair.publicKey.toString() !== TREASURY_WALLET) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 500, { error: "Treasury key mismatch" });
     }
 
@@ -143,6 +155,7 @@ async function handler(req, res) {
 
     const transferAmountRaw = amount * Math.pow(10, decimals);
     if (!isFinite(transferAmountRaw) || transferAmountRaw <= 0) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 400, { error: "Invalid transfer amount" });
     }
     const transferAmount = BigInt(Math.floor(transferAmountRaw));
@@ -157,6 +170,7 @@ async function handler(req, res) {
       const treasuryAccountInfo = await getAccount(connection, treasuryTokenAccount);
       const treasuryBalance = Number(treasuryAccountInfo.amount);
       if (treasuryBalance < Number(transferAmount)) {
+        await releaseCollectLock(userWallet, gameTypeNorm, token);
         return json(res, 503, {
           error: "Insufficient treasury balance",
           message: `Available: ${(treasuryBalance / Math.pow(10, decimals)).toFixed(2)}, Required: ${amount}`,
@@ -166,12 +180,14 @@ async function handler(req, res) {
     } catch (accountError) {
       const msg = accountError.message || "";
       if (msg.includes("could not find account") || msg.includes("not found")) {
+        await releaseCollectLock(userWallet, gameTypeNorm, token);
         return json(res, 503, {
           error: "Treasury token account not found",
           message: "Make a purchase first to create the treasury token account.",
           treasuryAccount: treasuryTokenAccount.toString(),
         });
       }
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
       return json(res, 500, { error: "Failed to verify treasury balance", message: msg });
     }
 
@@ -206,6 +222,10 @@ async function handler(req, res) {
       transaction: serialized.toString("base64"),
       actualAmount: amount,
     });
+    } catch (collectErr) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
+      throw collectErr;
+    }
   } catch (err) {
     console.error("Collect error:", err);
     return json(res, 500, { error: "Failed to create collect transaction", message: err.message });

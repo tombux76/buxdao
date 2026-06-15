@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { createPrintfulOrder, type CartItem, type ShippingInfo } from "@/lib/printful/orders";
+import { computeCartTotalUsd } from "@/lib/solana";
 
 type OrderBody = {
   shippingInfo: ShippingInfo;
@@ -27,17 +28,19 @@ export async function POST(request: Request) {
     }
 
     const printfulOrder = await createPrintfulOrder(shippingInfo, cart);
+    const totalUsd = computeCartTotalUsd(cart);
 
     await client.query("BEGIN");
     const dbOrder = await client.query(
-      `INSERT INTO orders (wallet_address, cart, shipping_info, status, printful_order_id)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      `INSERT INTO orders (wallet_address, cart, shipping_info, status, printful_order_id, total_usd)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [
         wallet_address,
         JSON.stringify(cart),
         JSON.stringify(shippingInfo),
         "pending_payment",
         printfulOrder.id,
+        totalUsd,
       ],
     );
     await client.query("COMMIT");

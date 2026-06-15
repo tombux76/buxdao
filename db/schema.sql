@@ -114,6 +114,7 @@ CREATE TABLE orders (
   shipping_info JSONB NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
   printful_order_id INTEGER,
+  total_usd NUMERIC(12, 2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

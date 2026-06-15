@@ -74,13 +74,19 @@ export async function fetchCasinoBuxBalance(wallet: string): Promise<number> {
   return total / 10 ** decimals;
 }
 
+/** Server-side RPC (may include Helius API key). Never expose to the browser. */
 export function getCasinoRpcUrl(): string {
   if (process.env.HELIUS_API_KEY?.trim()) {
     return `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY.trim())}`;
   }
+  return getPublicCasinoRpcUrl();
+}
+
+/** Client-safe RPC URL — no private API keys. */
+export function getPublicCasinoRpcUrl(): string {
   return (
-    process.env.SOLANA_RPC_URL?.trim() ||
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL?.trim() ||
+    process.env.SOLANA_RPC_URL?.trim() ||
     "https://api.mainnet-beta.solana.com"
   );
 }

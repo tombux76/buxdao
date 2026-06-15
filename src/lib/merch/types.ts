@@ -43,6 +43,7 @@ export type ShippingFormState = {
 export type MerchOrder = {
   id: number;
   wallet_address: string;
+  total_usd?: number | string;
   tx_signature?: string;
   cart: CartItem[] | string;
   shipping_info: ShippingFormState | string;
