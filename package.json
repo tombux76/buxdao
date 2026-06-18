@@ -10,7 +10,6 @@
     "db:schema": "psql \"$POSTGRES_URL\" -f db/schema.sql",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed-roles": "node scripts/db-migrate.mjs db/seed-discord-role-catalog.sql",
-    "legacy-airdrop": "node scripts/legacy-airdrop.mjs",
     "holder-rewards-accrue": "npx tsx scripts/holder-rewards-accrue.ts"
   },
   "dependencies": {

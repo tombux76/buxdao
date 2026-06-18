@@ -7,9 +7,6 @@ Single unified database for auth, wallets, merch, casino, and cashout.
 ```bash
 # Apply schema
 psql "$POSTGRES_URL" -f db/schema.sql
-
-# Optional: seed legacy airdrop audit rows
-psql "$POSTGRES_URL" -f db/seed-legacy-airdrops.sql
 ```
 
 Set **`POSTGRES_URL`** on Vercel (and locally). Casino API uses `CASINO_DATABASE_URL` first, then **`POSTGRES_URL`**, then `DATABASE_URL`.
@@ -32,8 +29,8 @@ npm run db:schema
 | **Discord roles** | `discord_role_catalog` (display metadata only) |
 | **Merch** | `orders` |
 | **Cashout** | `cashout_transactions` |
-| **Legacy airdrop** | `legacy_reward_airdrops` |
 | **Casino** | `slots_*`, `coinflip_*`, `roulette_*`, `casino_daily_totals` |
+| **Holder daily rewards** *(on hold)* | `holder_reward_*`, `holder_nft_hold_tracking` — see [holder-daily-rewards.md](./holder-daily-rewards.md) |
 
 Wallet → Discord name lookups use a join in app code (`user_wallets` → `users` → `accounts`), not a DB view.
 
@@ -56,7 +53,6 @@ Auth.js `User.name` / `User.image` are mapped from `discord_username` / `discord
 | **Users & wallets** | Created only when someone logs in on the new site and links a wallet |
 | **Merch orders** | New orders only — past Printful orders are ignored |
 | **Casino stats** | Fresh — players accumulate from first play on v2 |
-| **Legacy unclaimed $BUX** | One-time airdrop only — `legacy_reward_airdrops` + CSV in `docs/` (not live user accounts) |
 
 This keeps `users.created_at` / `sessions` as a true picture of **who is currently active** on the new site.
 

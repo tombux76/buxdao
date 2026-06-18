@@ -127,25 +127,3 @@ export async function sendTreasuryBuxTransfer(params: {
     amountBux: params.amountBux,
   });
 }
-
-/** Legacy unclaimed $BUX one-off airdrop */
-export async function sendLegacyAirdropBuxTransfer(params: {
-  recipientWallet: string;
-  amountBux: bigint;
-}): Promise<string> {
-  const senderWallet =
-    process.env.LEGACY_AIRDROP_WALLET?.trim() || process.env.TREASURY_WALLET?.trim();
-  const senderPrivateKey =
-    process.env.LEGACY_AIRDROP_PRIVATE_KEY?.trim() || process.env.TREASURY_PRIVATE_KEY?.trim();
-
-  if (!senderWallet || !senderPrivateKey) {
-    throw new Error("Legacy airdrop sender wallet is not configured");
-  }
-
-  return sendBuxTransferFromWallet({
-    senderWallet,
-    senderPrivateKey,
-    recipientWallet: params.recipientWallet,
-    amountBux: params.amountBux,
-  });
-}

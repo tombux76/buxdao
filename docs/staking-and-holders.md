@@ -1,6 +1,12 @@
 # GraveStake pools & BUX holder metrics
 
-When a collection’s staking pool goes live on [GraveStake](https://gravestake.io), update **`src/content/site.ts`** in the matching `collectionConfigs` entry:
+**Production staking:** [GraveStake](https://gravestake.io) — see `/staking` on the site.
+
+**In-house daily rewards** (wallet-held NFTs, Hub-linked wallets) are **on hold** — built but not launched. See **[holder-daily-rewards.md](./holder-daily-rewards.md)** for status, spec, and resume checklist.
+
+---
+
+When a collection’s staking pool goes live on GraveStake, update **`src/content/site.ts`** in the matching `collectionConfigs` entry:
 
 ```ts
 {
