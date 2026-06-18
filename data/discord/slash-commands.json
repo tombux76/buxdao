@@ -73,16 +73,6 @@
     "options": [{ "type": 6, "name": "user", "description": "User to view profile for (admin only)" }]
   },
   {
-    "name": "mybux",
-    "description": "View your BUX token balance and cashout value",
-    "options": [{ "type": 6, "name": "user", "description": "User to view BUX for (admin only)" }]
-  },
-  {
-    "name": "mynfts",
-    "description": "View your NFT collection counts",
-    "options": [{ "type": 6, "name": "user", "description": "User to view NFT holdings for (admin only)" }]
-  },
-  {
     "name": "collections",
     "description": "View stats for a BUXDAO collection",
     "options": [

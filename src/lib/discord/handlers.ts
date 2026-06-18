@@ -257,53 +257,6 @@ async function handleProfile(interaction: DiscordInteraction): Promise<APIEmbed>
   };
 }
 
-async function handleMyBux(interaction: DiscordInteraction): Promise<APIEmbed> {
-  const { discordId, error } = await resolveTargetDiscordId(interaction, "user");
-  if (error) {
-    return error;
-  }
-
-  const profile = await getDiscordUserProfile(discordId);
-  if (!profile) {
-    return notLinkedEmbed();
-  }
-
-  return {
-    title: "$BUX balance",
-    description: `**${formatBux(profile.holdings.buxBalance)}** $BUX`,
-    color: 0xfff44d,
-    fields: [
-      { name: "Cashout pool value", value: `${formatSol(profile.cashoutSol)} SOL`, inline: true },
-      { name: "USD estimate", value: `$${profile.cashoutUsd.toFixed(2)}`, inline: true },
-    ],
-    footer: { text: "On-chain balance across linked wallets" },
-  };
-}
-
-async function handleMyNfts(interaction: DiscordInteraction): Promise<APIEmbed> {
-  const { discordId, error } = await resolveTargetDiscordId(interaction, "user");
-  if (error) {
-    return error;
-  }
-
-  const profile = await getDiscordUserProfile(discordId);
-  if (!profile) {
-    return notLinkedEmbed();
-  }
-
-  const counts = countNftsByCollection(profile.holdings);
-  const total = counts.reduce((sum, c) => sum + c.count, 0);
-  const lines = counts.map((c) => `**${c.name}:** ${c.count}`);
-
-  return {
-    title: "NFT holdings",
-    description: lines.join("\n") || "No NFTs found",
-    color: 0x4dff4d,
-    fields: [{ name: "Total", value: String(total), inline: true }],
-    footer: { text: "Wallet-held + GraveStake staked (attributed to your wallet)" },
-  };
-}
-
 function handleHelp(): APIEmbed {
   return {
     title: "BUXDAO bot commands",
@@ -315,8 +268,6 @@ function handleHelp(): APIEmbed {
       { name: "/rank", value: "`cat` `mm` `mm3d` + **rank** — NFT by rarity rank", inline: false },
       { name: "/collections", value: "Floor, volume, supply for a collection", inline: false },
       { name: "/profile", value: "Your Hub profile, wallets, $BUX, NFT counts", inline: false },
-      { name: "/mybux", value: "$BUX balance and cashout value", inline: false },
-      { name: "/mynfts", value: "NFT counts per collection", inline: false },
       { name: "/addclaim", value: "Disabled — use GraveStake staking + Holder Hub", inline: false },
       { name: "Holder Hub", value: hubLink(), inline: false },
     ],
@@ -369,10 +320,6 @@ export async function handleApplicationCommand(interaction: DiscordInteraction):
     }
     case "profile":
       return { embeds: [await handleProfile(interaction)] };
-    case "mybux":
-      return { embeds: [await handleMyBux(interaction)] };
-    case "mynfts":
-      return { embeds: [await handleMyNfts(interaction)] };
     case "addclaim":
       return { embeds: [handleAddClaim()], ephemeral: true };
     case "help":

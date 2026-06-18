@@ -14,8 +14,6 @@ const DEFERRED_COMMANDS = new Set([
   "rank",
   "collections",
   "profile",
-  "mybux",
-  "mynfts",
 ]);
 
 export async function handleDiscordInteractionPost(request: NextRequest) {

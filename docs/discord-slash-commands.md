@@ -15,11 +15,11 @@ BUXDAO slash commands are handled by the **Interactions Endpoint** on the Next.j
 3. Ensure these env vars are set on Vercel:
    - `DISCORD_PUBLIC_KEY`
    - `HELIUS_API_KEY`
-   - `POSTGRES_URL` (for `/profile`, `/mybux`, `/mynfts`)
+   - `POSTGRES_URL` (for `/profile`)
    - `GRAVEMARKET_API_KEY` (for `/collections` market stats)
    - `AUTH_DISCORD_ID` (application id — already used for OAuth)
    - `DISCORD_BOT_TOKEN` (unchanged — Hub role display)
-4. Optional: `DISCORD_ADMIN_ROLE_IDS` — comma-separated role IDs allowed to use `/profile`, `/mybux`, `/mynfts` with another user.
+4. Optional: `DISCORD_ADMIN_ROLE_IDS` — comma-separated role IDs allowed to use `/profile` with another user.
 
 ## Registered commands (global)
 
@@ -29,8 +29,6 @@ BUXDAO slash commands are handled by the **Interactions Endpoint** on the Next.j
 | `/rank` | Helius metadata `Rank` / `Rarity Rank` traits |
 | `/collections` | GraveMarket + Helius supply |
 | `/profile` | Hub-linked wallets + on-chain $BUX / NFTs |
-| `/mybux` | On-chain $BUX + cashout pool metrics |
-| `/mynfts` | Helius wallet holdings (+ GraveStake attribution) |
 | `/addclaim` | Disabled (returns message — use GraveStake) |
 | `/help` | Static command list |
 
