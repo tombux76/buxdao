@@ -1,0 +1,41 @@
+name: Holder rewards accrual
+
+on:
+  schedule:
+    # 05:05 UTC ≈ 00:05 ET (EST) / 01:05 ET (EDT) — accrual date uses America/New_York
+    - cron: "5 5 * * *"
+  workflow_dispatch:
+    inputs:
+      reward_date_et:
+        description: "Optional ET date (YYYY-MM-DD); defaults to today ET"
+        required: false
+        type: string
+
+jobs:
+  accrue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run daily accrual
+        env:
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          HOLDER_REWARDS_ENABLED: "true"
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.reward_date_et }}" ]; then
+            ARGS="--date ${{ inputs.reward_date_et }}"
+          fi
+          npx tsx scripts/holder-rewards-accrue.ts $ARGS
