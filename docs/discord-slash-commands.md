@@ -6,11 +6,12 @@ BUXDAO slash commands are handled by the **Interactions Endpoint** on the Next.j
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) → your app → **General Information**
    - Copy **Public Key** → `DISCORD_PUBLIC_KEY` in Vercel / `.env`
-2. Same app → **General Information** → **Interactions Endpoint URL**:
+2. Same app → **General Information** → **Interactions Endpoint URL** (keep existing if already set):
    ```
-   https://buxdao.com/api/discord/interactions
+   https://api.buxdao.com/api/discord-interactions
    ```
-   Discord will send a PING to verify the endpoint.
+   Also works on the main domain: `https://buxdao.com/api/discord-interactions` or `/api/discord/interactions`.
+   Discord sends a PING to verify — requires `DISCORD_PUBLIC_KEY` on the deployment that serves `api.buxdao.com`.
 3. Ensure these env vars are set on Vercel:
    - `DISCORD_PUBLIC_KEY`
    - `HELIUS_API_KEY`
@@ -45,7 +46,8 @@ node scripts/discord-list-commands.mjs
 
 | File | Role |
 |------|------|
-| `src/app/api/discord/interactions/route.ts` | Webhook entry, signature verify, defer |
+| `src/app/api/discord/interactions/route.ts` | Webhook handler |
+| `src/app/api/discord-interactions/route.ts` | Same handler (legacy URL path) |
 | `src/lib/discord/handlers.ts` | Command logic |
 | `src/lib/discord/collection-index.ts` | Token # / rank → mint (cached) |
 | `src/lib/discord/user-data.ts` | Discord ID → Hub wallets |
