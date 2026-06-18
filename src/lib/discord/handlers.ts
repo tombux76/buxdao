@@ -10,6 +10,7 @@ import { lookupNftByNumber, lookupNftByRank } from "@/lib/discord/collection-ind
 import type { APIEmbed } from "@/lib/discord/embed-types";
 import {
   collectionGifUrl,
+  collectionLogoUrl,
   formatBux,
   formatSol,
   hexColorToEmbed,
@@ -188,6 +189,7 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
     title: config.name,
     description: `Daily staking yield: **${config.dailyBuxYield} $BUX** / NFT / day on [GraveStake](${config.graveStakeUrl})`,
     ...collectionEmbedImage(config),
+    thumbnail: { url: collectionLogoUrl(config.logo) },
     fields: marketFields,
     footer: { text: "Market data · GraveMarket" },
   };

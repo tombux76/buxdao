@@ -47,6 +47,10 @@ export function collectionGifUrl(gifPath: string): string {
   return absoluteSiteUrl(gifPath);
 }
 
+export function collectionLogoUrl(logoPath: string): string {
+  return absoluteSiteUrl(logoPath);
+}
+
 export function hexColorToEmbed(hex: string): number {
   const cleaned = hex.replace("#", "");
   return Number.parseInt(cleaned, 16);
