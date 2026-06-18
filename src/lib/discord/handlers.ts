@@ -240,6 +240,7 @@ async function handleProfile(interaction: DiscordInteraction): Promise<APIEmbed>
     title: profile.discordUsername ? `@${profile.discordUsername}` : "BUXDAO profile",
     description: nftSummary,
     color: 0x5865f2,
+    thumbnail: { url: profile.avatarUrl },
     fields: [
       {
         name: "Linked wallets",

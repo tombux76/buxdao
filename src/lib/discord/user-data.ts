@@ -6,6 +6,7 @@ import { collectionConfigs } from "@/content/site";
 export type DiscordUserProfile = {
   discordId: string;
   discordUsername: string | null;
+  avatarUrl: string;
   linkedWallets: string[];
   holdings: HubWalletHoldings;
   cashoutSol: number;
@@ -15,15 +16,17 @@ export type DiscordUserProfile = {
 async function getLinkedWalletsForDiscordId(discordId: string): Promise<{
   userId: number | null;
   discordUsername: string | null;
+  discordImage: string | null;
   wallets: string[];
 }> {
   const pool = getPool();
   const { rows } = await pool.query<{
     user_id: number;
     discord_username: string | null;
+    discord_image: string | null;
     wallet_address: string;
   }>(
-    `SELECT u.id AS user_id, u.discord_username, uw.wallet_address
+    `SELECT u.id AS user_id, u.discord_username, u.discord_image, uw.wallet_address
      FROM users u
      JOIN user_wallets uw ON uw.user_id = u.id
      LEFT JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord'
@@ -33,15 +36,47 @@ async function getLinkedWalletsForDiscordId(discordId: string): Promise<{
   );
 
   if (rows.length === 0) {
-    return { userId: null, discordUsername: null, wallets: [] };
+    return { userId: null, discordUsername: null, discordImage: null, wallets: [] };
   }
 
   const wallets = [...new Set(rows.map((r) => r.wallet_address))];
   return {
     userId: rows[0].user_id,
     discordUsername: rows[0].discord_username,
+    discordImage: rows[0].discord_image,
     wallets,
   };
+}
+
+function defaultDiscordAvatarUrl(discordId: string): string {
+  const index = Number((BigInt(discordId) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+}
+
+async function resolveDiscordAvatarUrl(discordId: string, storedImage: string | null): Promise<string> {
+  if (storedImage) {
+    return storedImage;
+  }
+
+  const token = process.env.DISCORD_BOT_TOKEN?.trim();
+  if (token) {
+    try {
+      const res = await fetch(`https://discord.com/api/v10/users/${discordId}`, {
+        headers: { Authorization: `Bot ${token}` },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const user = (await res.json()) as { avatar?: string | null };
+        if (user.avatar) {
+          return `https://cdn.discordapp.com/avatars/${discordId}/${user.avatar}.png`;
+        }
+      }
+    } catch {
+      // fall through to default avatar
+    }
+  }
+
+  return defaultDiscordAvatarUrl(discordId);
 }
 
 function emptyHoldings(): HubWalletHoldings {
@@ -67,14 +102,15 @@ function mergeHoldings(parts: HubWalletHoldings[]): HubWalletHoldings {
 }
 
 export async function getDiscordUserProfile(discordId: string): Promise<DiscordUserProfile | null> {
-  const { discordUsername, wallets } = await getLinkedWalletsForDiscordId(discordId);
+  const { discordUsername, discordImage, wallets } = await getLinkedWalletsForDiscordId(discordId);
   if (wallets.length === 0) {
     return null;
   }
 
-  const [holdingsParts, metrics] = await Promise.all([
+  const [holdingsParts, metrics, avatarUrl] = await Promise.all([
     Promise.all(wallets.map((w) => fetchHubWalletHoldings(w))),
     fetchTokenMetrics(),
+    resolveDiscordAvatarUrl(discordId, discordImage),
   ]);
 
   const holdings = mergeHoldings(holdingsParts);
@@ -85,6 +121,7 @@ export async function getDiscordUserProfile(discordId: string): Promise<DiscordU
   return {
     discordId,
     discordUsername,
+    avatarUrl,
     linkedWallets: wallets,
     holdings,
     cashoutSol,
