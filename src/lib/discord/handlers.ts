@@ -308,6 +308,7 @@ function handleHelp(): APIEmbed {
     title: "BUXDAO bot commands",
     description: "On-chain data via Helius · profiles require a Hub-linked wallet",
     color: 0x5865f2,
+    thumbnail: { url: collectionLogoUrl("/brand/bux-logo.png") },
     fields: [
       { name: "/nft", value: "`cat` `celeb` `mm` `mm3d` `bot` + token **#id** — NFT lookup", inline: false },
       { name: "/rank", value: "`cat` `mm` `mm3d` + **rank** — NFT by rarity rank", inline: false },
