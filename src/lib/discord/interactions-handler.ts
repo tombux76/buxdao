@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
 import { handleApplicationCommand } from "@/lib/discord/handlers";
 import { sendFollowupMessage } from "@/lib/discord/followup";
@@ -44,9 +45,11 @@ export async function handleDiscordInteractionPost(request: NextRequest) {
   const command = interaction.data?.name ?? "";
 
   if (DEFERRED_COMMANDS.has(command)) {
-    void runDeferred(interaction).catch((err) => {
-      console.error("[discord] deferred handler failed:", err);
-    });
+    after(() =>
+      runDeferred(interaction).catch((err) => {
+        console.error("[discord] deferred handler failed:", err);
+      }),
+    );
     return NextResponse.json(deferMessage());
   }
 

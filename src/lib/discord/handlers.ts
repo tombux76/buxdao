@@ -1,4 +1,4 @@
-import { getCollectionsWithStats } from "@/lib/collections";
+import { fetchGraveMarketCollectionStats } from "@/lib/gravemarket";
 import {
   COLLECTION_CHOICE_MAP,
   getAdminRoleIds,
@@ -151,28 +151,37 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
 
   const collectionId = COLLECTION_CHOICE_MAP[choice];
   if (!collectionId) {
-    return { title: "Unknown collection", description: "Invalid collection choice.", color: 0xff4d4d };
+    return {
+      title: "Unknown collection",
+      description: `Unrecognized collection choice \`${choice}\`. Active collections: Fcked Catz, Money Monsters, A.I. BitBots, MM3D, Celebrity Catz.`,
+      color: 0xff4d4d,
+    };
   }
 
-  const collections = await getCollectionsWithStats();
-  const stats = collections.find((c) => c.id === collectionId);
-  if (!stats) {
+  const config = getCollectionConfig(collectionId);
+  if (!config) {
     return { title: "Collection not found", color: 0xff4d4d };
   }
 
+  const stats = await fetchGraveMarketCollectionStats(config.id);
+
+  const marketFields = stats
+    ? [
+        { name: "Floor", value: stats.floor, inline: true },
+        { name: "24h volume", value: stats.volume24h, inline: true },
+        { name: "Total volume", value: stats.totalVolume, inline: true },
+        { name: "Supply", value: stats.supply, inline: true },
+        { name: "Listed", value: stats.listed, inline: true },
+        { name: "% listed", value: stats.percentListed, inline: true },
+      ]
+    : [{ name: "Market data", value: "GraveMarket stats unavailable right now.", inline: false }];
+
   return {
-    title: stats.name,
-    description: `Daily staking yield: **${stats.dailyBuxYield} $BUX** / NFT / day on [GraveStake](${stats.graveStakeUrl})`,
+    title: config.name,
+    description: `Daily staking yield: **${config.dailyBuxYield} $BUX** / NFT / day on [GraveStake](${config.graveStakeUrl})`,
     color: 0x4dffff,
-    fields: [
-      { name: "Floor", value: stats.floor, inline: true },
-      { name: "24h volume", value: stats.volume24h, inline: true },
-      { name: "Total volume", value: stats.totalVolume, inline: true },
-      { name: "Supply", value: stats.supply, inline: true },
-      { name: "Listed", value: stats.listed, inline: true },
-      { name: "% listed", value: stats.percentListed, inline: true },
-    ],
-    footer: { text: "Market data · GraveMarket + Helius" },
+    fields: marketFields,
+    footer: { text: "Market data · GraveMarket" },
   };
 }
 
