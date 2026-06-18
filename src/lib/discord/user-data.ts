@@ -49,7 +49,7 @@ async function getLinkedWalletsForDiscordId(discordId: string): Promise<{
 }
 
 function defaultDiscordAvatarUrl(discordId: string): string {
-  const index = Number((BigInt(discordId) >> 22n) % 6n);
+  const index = Number((BigInt(discordId) >> BigInt(22)) % BigInt(6));
   return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
 }
 
