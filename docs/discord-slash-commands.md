@@ -34,13 +34,31 @@ BUXDAO slash commands are handled by the **Interactions Endpoint** on the Next.j
 | `/addclaim` | Disabled (returns message — use GraveStake) |
 | `/help` | Static command list |
 
-Legacy `/collections` choices (Energy Apes, Rejected Bots, etc.) return a “retired collection” message.
+Legacy `/collections` choices were removed — re-register commands after deploy (see below).
+
+## Register / update commands
+
+```bash
+npm run discord-register-commands
+```
 
 ## List registered commands
 
 ```bash
-node scripts/discord-list-commands.mjs
+npm run discord-list-commands
 ```
+
+## Register / update global commands
+
+Replaces all global slash commands (5 active collections only — no AI collab collections):
+
+```bash
+npm run discord-register-commands
+# preview payload:
+npm run discord-register-commands -- --dry-run
+```
+
+Command definitions: `data/discord/slash-commands.json`
 
 ## Key files
 

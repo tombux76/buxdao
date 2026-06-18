@@ -3,15 +3,16 @@ import {
   COLLECTION_CHOICE_MAP,
   getAdminRoleIds,
   getCollectionConfig,
-  LEGACY_COLLECTION_CHOICES,
   NFT_SUBCOMMAND_COLLECTION,
   RANK_SUBCOMMAND_COLLECTION,
 } from "@/lib/discord/config";
 import { lookupNftByNumber, lookupNftByRank } from "@/lib/discord/collection-index";
 import type { APIEmbed } from "@/lib/discord/embed-types";
 import {
+  collectionGifUrl,
   formatBux,
   formatSol,
+  hexColorToEmbed,
   hubLink,
   shortWallet,
   solscanNftUrl,
@@ -46,6 +47,13 @@ function notLinkedEmbed(): APIEmbed {
   };
 }
 
+function collectionEmbedImage(config: { gif: string; accent: string }): Pick<APIEmbed, "image" | "color"> {
+  return {
+    color: hexColorToEmbed(config.accent),
+    image: { url: collectionGifUrl(config.gif) },
+  };
+}
+
 function buildNftEmbed(params: {
   collectionName: string;
   mint: string;
@@ -55,6 +63,8 @@ function buildNftEmbed(params: {
   owner: string | null;
   image: string | null;
   collectionId: string;
+  collectionGif: string;
+  collectionAccent: string;
 }): APIEmbed {
   const bonusMult = getRankMultiplier(params.mint, params.collectionId);
   const fields = [
@@ -73,9 +83,11 @@ function buildNftEmbed(params: {
   return {
     title: params.name,
     url: solscanNftUrl(params.mint),
-    color: 0xfff44d,
+    color: hexColorToEmbed(params.collectionAccent),
     fields,
-    ...(params.image ? { image: { url: params.image } } : {}),
+    ...(params.image
+      ? { image: { url: params.image }, thumbnail: { url: collectionGifUrl(params.collectionGif) } }
+      : { image: { url: collectionGifUrl(params.collectionGif) } }),
     footer: { text: "BUXDAO · on-chain via Helius" },
   };
 }
@@ -92,7 +104,7 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
     return {
       title: `${config.name} #${tokenId}`,
       description: "NFT not found in this collection (on-chain index).",
-      color: 0xff4d4d,
+      ...collectionEmbedImage(config),
     };
   }
 
@@ -102,6 +114,8 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
   return buildNftEmbed({
     collectionName: config.name,
     collectionId,
+    collectionGif: config.gif,
+    collectionAccent: config.accent,
     mint: indexed.mint,
     name: indexed.name,
     number: indexed.number,
@@ -124,13 +138,15 @@ async function handleRank(subcommand: string, rank: number): Promise<APIEmbed> {
       title: `${config.name} rank #${rank}`,
       description:
         "No NFT with this rarity rank in the on-chain index. Rank metadata may be missing for some tokens.",
-      color: 0xff4d4d,
+      ...collectionEmbedImage(config),
     };
   }
 
   return buildNftEmbed({
     collectionName: config.name,
     collectionId,
+    collectionGif: config.gif,
+    collectionAccent: config.accent,
     mint: indexed.mint,
     name: indexed.name,
     number: indexed.number,
@@ -141,19 +157,11 @@ async function handleRank(subcommand: string, rank: number): Promise<APIEmbed> {
 }
 
 async function handleCollections(choice: string): Promise<APIEmbed> {
-  if (LEGACY_COLLECTION_CHOICES.has(choice)) {
-    return {
-      title: "Collection retired",
-      description: "This collection is no longer part of the active BUXDAO ecosystem.",
-      color: 0x888888,
-    };
-  }
-
   const collectionId = COLLECTION_CHOICE_MAP[choice];
   if (!collectionId) {
     return {
       title: "Unknown collection",
-      description: `Unrecognized collection choice \`${choice}\`. Active collections: Fcked Catz, Money Monsters, A.I. BitBots, MM3D, Celebrity Catz.`,
+      description: `Unrecognized collection choice \`${choice}\`.`,
       color: 0xff4d4d,
     };
   }
@@ -179,7 +187,7 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
   return {
     title: config.name,
     description: `Daily staking yield: **${config.dailyBuxYield} $BUX** / NFT / day on [GraveStake](${config.graveStakeUrl})`,
-    color: 0x4dffff,
+    ...collectionEmbedImage(config),
     fields: marketFields,
     footer: { text: "Market data · GraveMarket" },
   };

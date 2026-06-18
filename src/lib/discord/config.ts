@@ -25,14 +25,6 @@ export const COLLECTION_CHOICE_MAP: Record<string, string> = {
   CelebCatz: "celebrity-catz",
 };
 
-export const LEGACY_COLLECTION_CHOICES = new Set([
-  "AELxAIBB",
-  "AIRB",
-  "AUSQRL",
-  "DDBOT",
-  "CLB",
-]);
-
 export function getCollectionConfig(collectionId: string) {
   return collectionConfigs.find((c) => c.id === collectionId);
 }

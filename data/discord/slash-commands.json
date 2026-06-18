@@ -1,0 +1,108 @@
+[
+  {
+    "name": "nft",
+    "description": "Look up NFT details",
+    "options": [
+      {
+        "type": 1,
+        "name": "cat",
+        "description": "Look up Fcked Cat NFT details",
+        "options": [{ "type": 4, "name": "id", "description": "Token ID number", "required": true }]
+      },
+      {
+        "type": 1,
+        "name": "celeb",
+        "description": "Look up Celebrity Catz NFT details",
+        "options": [{ "type": 4, "name": "id", "description": "Token ID number", "required": true }]
+      },
+      {
+        "type": 1,
+        "name": "mm",
+        "description": "Look up Money Monsters NFT details",
+        "options": [{ "type": 4, "name": "id", "description": "Token ID number", "required": true }]
+      },
+      {
+        "type": 1,
+        "name": "mm3d",
+        "description": "Look up Money Monsters 3D NFT details",
+        "options": [{ "type": 4, "name": "id", "description": "Token ID number", "required": true }]
+      },
+      {
+        "type": 1,
+        "name": "bot",
+        "description": "Look up AI Bitbot NFT details",
+        "options": [{ "type": 4, "name": "id", "description": "Token ID number", "required": true }]
+      }
+    ]
+  },
+  {
+    "name": "rank",
+    "description": "Look up NFT by rarity rank",
+    "options": [
+      {
+        "type": 1,
+        "name": "cat",
+        "description": "Look up Fcked Cat by rarity rank",
+        "options": [{ "type": 4, "name": "rank", "description": "Rarity rank number", "required": true }]
+      },
+      {
+        "type": 1,
+        "name": "mm",
+        "description": "Look up Money Monsters by rarity rank",
+        "options": [{ "type": 4, "name": "rank", "description": "Rarity rank number", "required": true }]
+      },
+      {
+        "type": 1,
+        "name": "mm3d",
+        "description": "Look up Money Monsters 3D by rarity rank",
+        "options": [{ "type": 4, "name": "rank", "description": "Rarity rank number", "required": true }]
+      }
+    ]
+  },
+  {
+    "name": "addclaim",
+    "description": "Disabled — use GraveStake staking for $BUX rewards",
+    "options": [
+      { "type": 6, "name": "user", "description": "User to award BUX to", "required": true },
+      { "type": 4, "name": "amount", "description": "Amount of BUX to award", "required": true }
+    ]
+  },
+  {
+    "name": "profile",
+    "description": "View your BUXDAO profile information",
+    "options": [{ "type": 6, "name": "user", "description": "User to view profile for (admin only)" }]
+  },
+  {
+    "name": "mybux",
+    "description": "View your BUX token balance and cashout value",
+    "options": [{ "type": 6, "name": "user", "description": "User to view BUX for (admin only)" }]
+  },
+  {
+    "name": "mynfts",
+    "description": "View your NFT collection counts",
+    "options": [{ "type": 6, "name": "user", "description": "User to view NFT holdings for (admin only)" }]
+  },
+  {
+    "name": "collections",
+    "description": "View stats for a BUXDAO collection",
+    "options": [
+      {
+        "type": 3,
+        "name": "collection",
+        "description": "Select a collection",
+        "required": true,
+        "choices": [
+          { "name": "Fcked Catz", "value": "FCKEDCATZ" },
+          { "name": "Money Monsters", "value": "MM" },
+          { "name": "A.I. BitBots", "value": "AIBB" },
+          { "name": "Money Monsters 3D", "value": "MM3D" },
+          { "name": "Celebrity Catz", "value": "CelebCatz" }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "help",
+    "description": "Show a list of all available commands and options"
+  }
+]
