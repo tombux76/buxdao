@@ -10,6 +10,8 @@ See **[docs/staking-and-holders.md](./docs/staking-and-holders.md)** before enab
 
 **In-house daily rewards** (`/rewards`) are on hold — code on `main`, not live. **[docs/holder-daily-rewards.md](./docs/holder-daily-rewards.md)**.
 
+**Discord slash commands** — Interactions webhook at `/api/discord/interactions`. **[docs/discord-slash-commands.md](./docs/discord-slash-commands.md)**.
+
 ## Database
 
 Unified Postgres schema (auth, wallets, merch, casino): **[docs/database.md](./docs/database.md)**. Apply with `npm run db:schema`.

@@ -10,7 +10,8 @@
     "db:schema": "psql \"$POSTGRES_URL\" -f db/schema.sql",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed-roles": "node scripts/db-migrate.mjs db/seed-discord-role-catalog.sql",
-    "holder-rewards-accrue": "npx tsx scripts/holder-rewards-accrue.ts"
+    "holder-rewards-accrue": "npx tsx scripts/holder-rewards-accrue.ts",
+    "discord-list-commands": "node scripts/discord-list-commands.mjs"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.2",
