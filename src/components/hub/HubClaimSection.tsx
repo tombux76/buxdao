@@ -338,10 +338,6 @@ export function HubClaimSection() {
                   <div className="space-y-4 rounded-xl border border-border bg-bg-deep/40 p-4">
                     <div>
                       <p className="text-sm font-medium">Two-step claim</p>
-                      <p className="mt-1 text-xs text-muted">
-                        Phantom only asks you to sign a simple SOL transfer — no presigned transactions.
-                        After your fee confirms, our treasury sends $BUX to your wallet automatically.
-                      </p>
                     </div>
 
                     <ol className="space-y-3 text-sm">
