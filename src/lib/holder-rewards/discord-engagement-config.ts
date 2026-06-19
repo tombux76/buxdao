@@ -1,5 +1,5 @@
 export const DISCORD_MESSAGE_BUX = 1;
-export const DISCORD_REACTION_BUX = 5;
+export const DISCORD_REACTION_BUX = 2;
 export const DISCORD_MIN_MESSAGE_LENGTH = 10;
 export const DISCORD_MESSAGE_COOLDOWN_MS = 5 * 60 * 1000;
 export const DISCORD_MAX_MESSAGES_PER_DAY = 50;
