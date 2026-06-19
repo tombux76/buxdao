@@ -29,7 +29,10 @@ async function main(): Promise<void> {
   const result = await syncDiscordEngagementRewards();
   console.log(JSON.stringify(result, null, 2));
 
-  if (result.errors.length > 0) {
+  const fatalErrors = result.errors.filter(
+    (e) => !e.includes("rate limited") && !e.includes("Missing Access"),
+  );
+  if (fatalErrors.length > 0) {
     process.exitCode = 1;
   }
 }

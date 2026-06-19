@@ -39,6 +39,13 @@ export type DiscordEngagementSyncResult = {
 };
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5, 15]);
+const ANNOUNCEMENT_MESSAGE_LIMIT = 15;
+const REACTION_FETCH_DELAY_MS = 400;
+const MAX_RATE_LIMIT_RETRIES = 6;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 class DiscordFetchError extends Error {
   constructor(
@@ -54,7 +61,11 @@ function isMissingAccess(error: unknown): boolean {
   return error instanceof DiscordFetchError && error.status === 403;
 }
 
-async function discordFetch<T>(path: string): Promise<T> {
+function isRateLimited(error: unknown): boolean {
+  return error instanceof DiscordFetchError && error.status === 429;
+}
+
+async function discordFetch<T>(path: string, attempt = 0): Promise<T> {
   const token = getDiscordBotToken();
   if (!token) {
     throw new Error("DISCORD_BOT_TOKEN is not configured");
@@ -66,8 +77,15 @@ async function discordFetch<T>(path: string): Promise<T> {
   });
 
   if (response.status === 429) {
-    const retry = response.headers.get("retry-after");
-    throw new Error(`Discord rate limited (retry after ${retry ?? "?"}s)`);
+    const retryAfterSec = Number.parseFloat(response.headers.get("retry-after") ?? "2");
+    if (attempt < MAX_RATE_LIMIT_RETRIES) {
+      await sleep(Math.ceil(retryAfterSec * 1000) + 200);
+      return discordFetch<T>(path, attempt + 1);
+    }
+    throw new DiscordFetchError(
+      `Discord rate limited after ${MAX_RATE_LIMIT_RETRIES} retries`,
+      429,
+    );
   }
 
   if (!response.ok) {
@@ -123,6 +141,9 @@ async function fetchReactionUsers(
   let after: string | undefined;
 
   for (let page = 0; page < 10; page += 1) {
+    if (page > 0) {
+      await sleep(REACTION_FETCH_DELAY_MS);
+    }
     const query = after ? `?after=${after}&limit=100` : "?limit=100";
     const batch = await discordFetch<DiscordUser[]>(
       `/channels/${channelId}/messages/${messageId}/reactions/${encoded}${query}`,
@@ -259,7 +280,9 @@ async function syncAnnouncementReactions(result: DiscordEngagementSyncResult): P
   const channelId = DISCORD_ANNOUNCEMENTS_CHANNEL_ID;
   let messages: DiscordMessage[];
   try {
-    messages = await discordFetch<DiscordMessage[]>(`/channels/${channelId}/messages?limit=50`);
+    messages = await discordFetch<DiscordMessage[]>(
+      `/channels/${channelId}/messages?limit=${ANNOUNCEMENT_MESSAGE_LIMIT}`,
+    );
   } catch (error) {
     if (isMissingAccess(error)) {
       result.errors.push(
@@ -275,21 +298,41 @@ async function syncAnnouncementReactions(result: DiscordEngagementSyncResult): P
       continue;
     }
 
+    const completeKey = `reaction_scan_complete:${message.id}`;
+    if ((await getSyncState(completeKey)) === "1") {
+      continue;
+    }
+
+    const seenUsers = new Set<string>();
+    let allReactionsFetched = true;
+
     for (const reaction of message.reactions) {
       if (reaction.count <= 0) {
         continue;
       }
 
+      await sleep(REACTION_FETCH_DELAY_MS);
+
       let users: DiscordUser[];
       try {
         users = await fetchReactionUsers(channelId, message.id, reaction.emoji);
       } catch (error) {
+        if (isRateLimited(error)) {
+          allReactionsFetched = false;
+          break;
+        }
         const msg = error instanceof Error ? error.message : "Reaction fetch failed";
         result.errors.push(`react ${message.id}: ${msg}`);
+        allReactionsFetched = false;
         continue;
       }
 
       for (const user of users) {
+        if (seenUsers.has(user.id)) {
+          continue;
+        }
+        seenUsers.add(user.id);
+
         try {
           const credited = await tryCreditReaction(channelId, message.id, user.id);
           if (credited) {
@@ -302,6 +345,10 @@ async function syncAnnouncementReactions(result: DiscordEngagementSyncResult): P
           result.errors.push(`react ${message.id}/${user.id}: ${msg}`);
         }
       }
+    }
+
+    if (allReactionsFetched) {
+      await setSyncState(completeKey, "1");
     }
   }
 }
