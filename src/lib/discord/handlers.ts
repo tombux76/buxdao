@@ -34,6 +34,8 @@ import {
   getTopLevelUserId,
   type DiscordInteraction,
 } from "@/lib/discord/interaction-types";
+import { creditRewardAccount } from "@/lib/holder-rewards/credits";
+import { getHubUserIdByDiscordId } from "@/lib/holder-rewards/users";
 import { countNftsByCollection, getDiscordUserProfile, lookupDiscordUsernameByWallet } from "@/lib/discord/user-data";
 import type { CollectionConfig } from "@/content/site";
 
@@ -296,18 +298,79 @@ function handleHelp(): APIEmbed {
       { name: "/rank", value: "`cat` `mm` `mm3d` + **rank** — NFT by rarity rank", inline: false },
       { name: "/collections", value: "Floor, volume, supply for a collection", inline: false },
       { name: "/profile", value: "Your Hub profile, wallets, $BUX, NFT counts", inline: false },
-      { name: "/addclaim", value: "Disabled — use GraveStake staking + Holder Hub", inline: false },
+      { name: "/addclaim", value: "Admin: credit $BUX to a Hub-linked user", inline: false },
       { name: "Holder Hub", value: hubLink(), inline: false },
     ],
   };
 }
 
-function handleAddClaim(): APIEmbed {
+async function handleAddClaim(interaction: DiscordInteraction): Promise<APIEmbed> {
+  if (!isAdmin(interaction)) {
+    return {
+      title: "Admin only",
+      description: "Only admins can use `/addclaim`.",
+      color: 0xff4d4d,
+    };
+  }
+
+  const targetDiscordId = getTopLevelUserId(interaction, "user");
+  const amount = getOptionInt(interaction.data?.options ?? [], "amount");
+  if (!targetDiscordId || amount == null) {
+    return {
+      title: "Usage",
+      description: "`/addclaim user:<member> amount:<whole BUX>`",
+      color: 0xff4d4d,
+    };
+  }
+
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return {
+      title: "Invalid amount",
+      description: "Amount must be a positive whole number of $BUX.",
+      color: 0xff4d4d,
+    };
+  }
+
+  const hubUserId = await getHubUserIdByDiscordId(targetDiscordId);
+  if (!hubUserId) {
+    return {
+      title: "User not linked",
+      description: `That Discord user has not logged into the [Holder Hub](${hubLink()}) yet.`,
+      color: 0xff4d4d,
+    };
+  }
+
+  const result = await creditRewardAccount({
+    userId: hubUserId,
+    source: "admin",
+    amountBux: amount,
+    dedupKey: `admin:${interaction.id}`,
+    metadata: {
+      adminDiscordId: getInvokerId(interaction),
+      targetDiscordId,
+    },
+  });
+
+  if (!result.ok) {
+    return {
+      title: "Credit failed",
+      description: result.reason,
+      color: 0xff4d4d,
+    };
+  }
+
+  if (!result.credited) {
+    return {
+      title: "Already processed",
+      description: "This credit was already applied.",
+      color: 0x888888,
+    };
+  }
+
   return {
-    title: "Command disabled",
-    description:
-      "Manual BUX claims are no longer used. Earn $BUX via [GraveStake](https://gravestake.io) staking. Link wallets on the Holder Hub for profile commands.",
-    color: 0x888888,
+    title: "Claim credited",
+    description: `Credited **${formatBux(amount)}** $BUX.\nNew unclaimed balance: **${formatBux(result.newBalanceBux)}** $BUX`,
+    color: 0x4dff4d,
   };
 }
 
@@ -349,7 +412,7 @@ export async function handleApplicationCommand(interaction: DiscordInteraction):
     case "profile":
       return { embeds: [await handleProfile(interaction)] };
     case "addclaim":
-      return { embeds: [handleAddClaim()], ephemeral: true };
+      return { embeds: [await handleAddClaim(interaction)], ephemeral: true };
     case "help":
       return { embeds: [handleHelp()] };
     default:

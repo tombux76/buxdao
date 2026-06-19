@@ -29,7 +29,7 @@ BUXDAO slash commands are handled by the **Interactions Endpoint** on the Next.j
 | `/rank` | HowRare.is rank → Helius owner + image |
 | `/collections` | GraveMarket + Helius supply |
 | `/profile` | Hub-linked wallets + on-chain $BUX / NFTs |
-| `/addclaim` | Disabled (returns message — use GraveStake) |
+| `/addclaim` | Admin credit to Hub-linked user's claim account |
 | `/help` | Static command list |
 
 Legacy `/collections` choices were removed — re-register commands after deploy (see below).

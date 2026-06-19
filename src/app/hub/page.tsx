@@ -3,6 +3,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
 import { HubAuthErrors } from "@/components/hub/HubAuthErrors";
 import { HubProfileCard } from "@/components/hub/HubProfileCard";
+import { HubClaimSection } from "@/components/hub/HubClaimSection";
 import { HubSetupSteps } from "@/components/hub/HubSetupSteps";
 import { HubDashboard } from "@/components/hub/HubDashboard";
 import { hubContent, site } from "@/content/site";
@@ -40,6 +41,7 @@ export default function HubPage() {
       <Card glow="purple" className="space-y-4 p-5">
         <h3 className="text-lg font-semibold">Your dashboard</h3>
         <HubProfileCard />
+        <HubClaimSection />
         <HubDashboard />
       </Card>
     </div>

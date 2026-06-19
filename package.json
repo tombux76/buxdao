@@ -12,7 +12,8 @@
     "db:seed-roles": "node scripts/db-migrate.mjs db/seed-discord-role-catalog.sql",
     "holder-rewards-accrue": "npx tsx scripts/holder-rewards-accrue.ts",
     "discord-list-commands": "node scripts/discord-list-commands.mjs",
-    "discord-register-commands": "node scripts/discord-register-commands.mjs"
+    "discord-register-commands": "node scripts/discord-register-commands.mjs",
+    "discord-engagement-sync": "npx tsx scripts/discord-engagement-sync.ts"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.2",

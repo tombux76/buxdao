@@ -14,6 +14,7 @@ const DEFERRED_COMMANDS = new Set([
   "rank",
   "collections",
   "profile",
+  "addclaim",
 ]);
 
 export async function handleDiscordInteractionPost(request: NextRequest) {

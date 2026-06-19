@@ -1,8 +1,23 @@
 import { getRecentAccruals } from "@/lib/holder-rewards/accrual";
 import { getRewardAccount } from "@/lib/holder-rewards/accounts";
+import { getTodayEngagement } from "@/lib/holder-rewards/credits";
 import { buxRawToNumber, HOLDER_REWARDS_CLAIM_FEE_LAMPORTS } from "@/lib/holder-rewards/config";
 import { listLinkedWalletAddresses } from "@/lib/holder-rewards/wallet-auth";
 
+export async function getClaimRewardState(userId: string) {
+  const [account, todayEngagement] = await Promise.all([
+    getRewardAccount(userId),
+    getTodayEngagement(userId),
+  ]);
+
+  return {
+    unclaimedBalanceBux: account.unclaimedBalanceBux,
+    totalClaimedBux: account.totalClaimedBux,
+    todayEngagement,
+  };
+}
+
+/** @deprecated NFT daily accrual UI — use getClaimRewardState */
 export async function getHolderRewardState(userId: string) {
   const [account, recentAccruals, linkedWallets] = await Promise.all([
     getRewardAccount(userId),

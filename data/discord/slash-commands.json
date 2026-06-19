@@ -61,7 +61,7 @@
   },
   {
     "name": "addclaim",
-    "description": "Disabled — use GraveStake staking for $BUX rewards",
+    "description": "Admin: credit $BUX to a Hub-linked user's claim account",
     "options": [
       { "type": 6, "name": "user", "description": "User to award BUX to", "required": true },
       { "type": 4, "name": "amount", "description": "Amount of BUX to award", "required": true }

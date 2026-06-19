@@ -7,6 +7,7 @@ import { BuxdaoPostgresAdapter } from "@/lib/auth/pg-adapter";
 import { getPool } from "@/lib/db";
 import { saveDiscordProfile } from "@/lib/hub/discord-profile";
 import { saveTwitterLink } from "@/lib/hub/linked-social";
+import { ensureRewardAccount } from "@/lib/holder-rewards/accounts";
 
 const providers: Provider[] = [
   Discord({
@@ -69,6 +70,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (account.provider === "discord") {
         await saveDiscordProfile(userId, profile, account.providerAccountId, account.access_token);
+        await ensureRewardAccount(userId);
         return;
       }
 
@@ -88,6 +90,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (account.provider === "discord") {
         await saveDiscordProfile(userId, profile, account.providerAccountId, account.access_token);
+        await ensureRewardAccount(userId);
         return;
       }
 
