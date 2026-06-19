@@ -13,7 +13,27 @@ function authorizeCron(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization") ?? "";
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   const headerSecret = request.headers.get("x-cron-secret") ?? "";
-  return bearer === secret || headerSecret === secret;
+  const querySecret = request.nextUrl.searchParams.get("key") ?? "";
+  return bearer === secret || headerSecret === secret || querySecret === secret;
+}
+
+async function runSync() {
+  const result = await syncDiscordEngagementRewards();
+  return NextResponse.json({ ok: true, ...result });
+}
+
+export async function GET(request: NextRequest) {
+  if (!authorizeCron(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    return await runSync();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Sync failed";
+    console.error("[discord-engagement-sync]", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -22,8 +42,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await syncDiscordEngagementRewards();
-    return NextResponse.json({ ok: true, ...result });
+    return await runSync();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sync failed";
     console.error("[discord-engagement-sync]", message);

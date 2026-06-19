@@ -1,8 +1,15 @@
+# Manual fallback only. GitHub schedule triggers do not run reliably on many private
+# repos (zero scheduled runs is common). Vercel Hobby cannot run frequent crons.
+#
+# Production sync: use a free external scheduler (e.g. cron-job.org) to call:
+#   GET https://www.buxdao.com/api/holder-rewards/discord-engagement/sync
+#   Header: Authorization: Bearer <HOLDER_REWARDS_CRON_SECRET>
+#   (or x-cron-secret header, or ?key=<secret> query param on GET)
+# Every 5 minutes is fine; message cooldown is 5 min anyway.
+
 name: Discord engagement rewards
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
