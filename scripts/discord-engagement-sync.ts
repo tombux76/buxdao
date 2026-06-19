@@ -25,9 +25,16 @@ function loadEnvFile(path = ".env") {
 
 loadEnvFile();
 
-const result = await syncDiscordEngagementRewards();
-console.log(JSON.stringify(result, null, 2));
+async function main(): Promise<void> {
+  const result = await syncDiscordEngagementRewards();
+  console.log(JSON.stringify(result, null, 2));
 
-if (result.errors.length > 0) {
-  process.exitCode = 1;
+  if (result.errors.length > 0) {
+    process.exitCode = 1;
+  }
 }
+
+main().catch((error) => {
+  console.error("Discord engagement sync failed:", error);
+  process.exit(1);
+});
