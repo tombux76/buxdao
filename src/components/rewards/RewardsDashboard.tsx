@@ -8,6 +8,7 @@ import { Coins, Gift, Wallet } from "lucide-react";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { collectionConfigs } from "@/content/site";
 import { useHolderRewards } from "@/hooks/useHolderRewards";
+import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
 
 function formatBux(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -63,7 +64,7 @@ export function RewardsDashboard() {
         throw new Error("Missing claim details from server");
       }
 
-      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      const blockhash = await getLatestBlockhashForWallet();
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: publicKey!,

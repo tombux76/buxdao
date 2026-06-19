@@ -6,6 +6,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
+import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
 
 type ClaimRewardState = {
   unclaimedBalanceBux: number;
@@ -158,7 +159,7 @@ export function HubClaimSection() {
       const treasury = new PublicKey(prepareData.treasuryWallet);
       const from = new PublicKey(walletAddress);
 
-      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      const blockhash = await getLatestBlockhashForWallet();
 
       const transaction = new Transaction().add(
         SystemProgram.transfer({

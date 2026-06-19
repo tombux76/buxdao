@@ -5,15 +5,19 @@ import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-/** Public mainnet HTTP + WS — works in the browser without CORS issues. */
-const CLIENT_RPC_ENDPOINT = "https://api.mainnet-beta.solana.com";
-
 type WalletProvidersProps = {
   children: React.ReactNode;
 };
 
+function getBrowserRpcEndpoint(): string {
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/api/solana/rpc`;
+  }
+  return "http://127.0.0.1:3000/api/solana/rpc";
+}
+
 export function WalletProviders({ children }: WalletProvidersProps) {
-  const wallets = useMemo(() => [], []);
+  const rpcEndpoint = useMemo(() => getBrowserRpcEndpoint(), []);
 
   const connectionConfig = useMemo(
     () => ({
@@ -24,8 +28,8 @@ export function WalletProviders({ children }: WalletProvidersProps) {
   );
 
   return (
-    <ConnectionProvider endpoint={CLIENT_RPC_ENDPOINT} config={connectionConfig}>
-      <WalletProvider wallets={wallets} autoConnect>
+    <ConnectionProvider endpoint={rpcEndpoint} config={connectionConfig}>
+      <WalletProvider wallets={[]} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
