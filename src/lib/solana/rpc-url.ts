@@ -1,14 +1,39 @@
-/** Server-side Solana RPC — private URLs (QuickNode, Helius) must not be used in the browser. */
-export function getServerRpcUrl(): string {
-  const explicit = process.env.SOLANA_RPC_URL?.trim();
-  if (explicit) {
-    return explicit;
+function addUnique(urls: string[], url: string | undefined): void {
+  const trimmed = url?.trim();
+  if (trimmed && !urls.includes(trimmed)) {
+    urls.push(trimmed);
   }
+}
+
+/** Ordered RPC endpoints for server-side use (browser goes through /api/solana/rpc). */
+export function getServerRpcUrlCandidates(): string[] {
+  const urls: string[] = [];
+
+  addUnique(urls, process.env.SOLANA_RPC_URL);
+  // Still usable server-side if it was previously set for the browser.
+  addUnique(urls, process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
 
   const heliusKey = process.env.HELIUS_API_KEY?.trim();
   if (heliusKey) {
-    return `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusKey)}`;
+    addUnique(
+      urls,
+      `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusKey)}`,
+    );
   }
 
-  return "https://api.mainnet-beta.solana.com";
+  addUnique(urls, "https://api.mainnet-beta.solana.com");
+
+  return urls;
+}
+
+export function getServerRpcUrl(): string {
+  return getServerRpcUrlCandidates()[0] ?? "https://api.mainnet-beta.solana.com";
+}
+
+export function getServerRpcHost(): string {
+  try {
+    return new URL(getServerRpcUrl()).host;
+  } catch {
+    return "unknown";
+  }
 }

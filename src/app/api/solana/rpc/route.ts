@@ -1,28 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerRpcUrl } from "@/lib/solana/rpc-url";
+import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
-  const rpcUrl = getServerRpcUrl();
-  const body = await request.text();
-
-  let upstream: Response;
+function rpcHost(url: string): string {
   try {
-    upstream = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      cache: "no-store",
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "RPC upstream failed";
-    console.error("[solana-rpc-proxy]", message);
-    return NextResponse.json({ error: "RPC upstream failed" }, { status: 502 });
+    return new URL(url).host;
+  } catch {
+    return "unknown";
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+  const candidates = getServerRpcUrlCandidates();
+
+  if (candidates.length === 0) {
+    return NextResponse.json({ error: "RPC not configured" }, { status: 503 });
   }
 
-  return new NextResponse(await upstream.text(), {
-    status: upstream.status,
-    headers: { "Content-Type": "application/json" },
-  });
+  let lastError = "RPC upstream failed";
+
+  for (const rpcUrl of candidates) {
+    try {
+      const upstream = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+
+      const text = await upstream.text();
+      if (upstream.ok) {
+        return new NextResponse(text, {
+          status: upstream.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      lastError = `HTTP ${upstream.status}`;
+      console.error("[solana-rpc-proxy]", rpcHost(rpcUrl), lastError, text.slice(0, 200));
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "RPC upstream failed";
+      console.error("[solana-rpc-proxy]", rpcHost(rpcUrl), lastError);
+    }
+  }
+
+  return NextResponse.json({ error: "RPC upstream failed" }, { status: 502 });
 }
