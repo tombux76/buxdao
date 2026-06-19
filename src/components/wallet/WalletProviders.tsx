@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 type WalletProvidersProps = {
@@ -11,10 +10,13 @@ type WalletProvidersProps = {
 };
 
 export function WalletProviders({ children }: WalletProvidersProps) {
-  const endpoint =
-    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+  const [endpoint, setEndpoint] = useState("https://api.mainnet-beta.solana.com");
 
-  const wallets = useMemo(() => [new SolflareWalletAdapter()], []);
+  useEffect(() => {
+    setEndpoint(`${window.location.origin}/api/solana/rpc`);
+  }, []);
+
+  const wallets = useMemo(() => [], []);
 
   return (
     <ConnectionProvider endpoint={endpoint}>
