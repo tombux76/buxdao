@@ -140,6 +140,8 @@ export function HubClaimSection() {
       const treasury = new PublicKey(prepareData.treasuryWallet);
       const from = new PublicKey(walletAddress);
 
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: from,
@@ -147,10 +149,14 @@ export function HubClaimSection() {
           lamports: prepareData.feeLamports,
         }),
       );
+      transaction.recentBlockhash = blockhash;
 
       const signature = await sendTransaction(transaction, connection);
       setFeeTxSignature(signature);
-      await connection.confirmTransaction(signature, "confirmed");
+      await connection.confirmTransaction(
+        { signature, blockhash, lastValidBlockHeight },
+        "confirmed",
+      );
 
       setClaimStep("sending_bux");
       await confirmClaim(signature);

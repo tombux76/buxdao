@@ -18,8 +18,17 @@ export function WalletProviders({ children }: WalletProvidersProps) {
 
   const wallets = useMemo(() => [], []);
 
+  const connectionConfig = useMemo(
+    () => ({
+      commitment: "confirmed" as const,
+      // HTTP RPC uses our proxy; public WS for slot/signature subscriptions only.
+      wsEndpoint: "wss://api.mainnet-beta.solana.com",
+    }),
+    [],
+  );
+
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={connectionConfig}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
