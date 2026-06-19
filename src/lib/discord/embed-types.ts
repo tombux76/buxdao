@@ -32,6 +32,10 @@ export function solscanWalletUrl(wallet: string): string {
   return `https://solscan.io/account/${wallet}`;
 }
 
+export function graveMarketNftUrl(mint: string): string {
+  return `https://gravemarket.io/nft/${mint}`;
+}
+
 export function hubLink(): string {
   const base = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://www.buxdao.com";
   return `${base.replace(/\/$/, "")}/hub`;

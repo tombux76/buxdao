@@ -6,17 +6,23 @@ import {
   NFT_SUBCOMMAND_COLLECTION,
   RANK_SUBCOMMAND_COLLECTION,
 } from "@/lib/discord/config";
-import { lookupNftByNumber, lookupNftByRank } from "@/lib/discord/collection-index";
+import { lookupNftByNumber } from "@/lib/discord/collection-index";
+import {
+  collectionHasHowRareRanks,
+  lookupHowRareNftByMint,
+  lookupNftByRankFromHowRare,
+  type HowRareNft,
+} from "@/lib/discord/howrare";
 import type { APIEmbed } from "@/lib/discord/embed-types";
 import {
   collectionGifUrl,
   collectionLogoUrl,
   formatBux,
   formatSol,
+  graveMarketNftUrl,
   hexColorToEmbed,
   hubLink,
   shortWallet,
-  solscanNftUrl,
   solscanWalletUrl,
 } from "@/lib/discord/embed-types";
 import { fetchAsset } from "@/lib/discord/helius";
@@ -28,8 +34,8 @@ import {
   getTopLevelUserId,
   type DiscordInteraction,
 } from "@/lib/discord/interaction-types";
-import { countNftsByCollection, getDiscordUserProfile } from "@/lib/discord/user-data";
-import { getRankMultiplier } from "@/lib/holder-rewards/multipliers";
+import { countNftsByCollection, getDiscordUserProfile, lookupDiscordUsernameByWallet } from "@/lib/discord/user-data";
+import type { CollectionConfig } from "@/content/site";
 
 function isAdmin(interaction: DiscordInteraction): boolean {
   const adminRoles = getAdminRoleIds();
@@ -55,41 +61,60 @@ function collectionEmbedImage(config: { gif: string; accent: string }): Pick<API
   };
 }
 
-function buildNftEmbed(params: {
-  collectionName: string;
-  mint: string;
-  name: string;
-  number: number | null;
-  rank: number | null;
-  owner: string | null;
-  image: string | null;
-  collectionId: string;
-  collectionGif: string;
-  collectionAccent: string;
-}): APIEmbed {
-  const bonusMult = getRankMultiplier(params.mint, params.collectionId);
+async function formatOwnerField(owner: string): Promise<string> {
+  const discordUsername = await lookupDiscordUsernameByWallet(owner);
+  if (discordUsername) {
+    return `@${discordUsername.replace(/^@/, "")}`;
+  }
+  const label = shortWallet(owner);
+  return `[${label}](${solscanWalletUrl(owner)})`;
+}
+
+async function resolveHowRareEntry(
+  collectionId: string,
+  mint: string,
+  known?: HowRareNft | null,
+): Promise<HowRareNft | null> {
+  if (!collectionHasHowRareRanks(collectionId)) {
+    return null;
+  }
+  if (known) {
+    return known;
+  }
+  try {
+    return await lookupHowRareNftByMint(collectionId, mint);
+  } catch {
+    return null;
+  }
+}
+
+async function buildNftCommandEmbed(
+  config: CollectionConfig,
+  params: {
+    mint: string;
+    name: string;
+    owner: string | null;
+    image: string | null;
+    howRare?: HowRareNft | null;
+  },
+): Promise<APIEmbed> {
+  const howRare = await resolveHowRareEntry(config.id, params.mint, params.howRare);
   const fields = [
-    { name: "Collection", value: params.collectionName, inline: true },
-    ...(params.number != null ? [{ name: "Token #", value: String(params.number), inline: true }] : []),
-    ...(params.rank != null ? [{ name: "Rarity rank", value: String(params.rank), inline: true }] : []),
     { name: "Mint", value: `\`${params.mint}\``, inline: false },
-    ...(params.owner
-      ? [{ name: "Owner", value: `[${shortWallet(params.owner)}](${solscanWalletUrl(params.owner)})`, inline: true }]
-      : []),
-    ...(bonusMult > 1
-      ? [{ name: "Holder bonus", value: `${bonusMult}× daily rewards multiplier`, inline: true }]
+    ...(params.owner ? [{ name: "Owner", value: await formatOwnerField(params.owner), inline: true }] : []),
+    ...(howRare
+      ? [{ name: "Rank", value: `#${howRare.rank} · [HowRare.is](${howRare.link})`, inline: true }]
       : []),
   ];
 
   return {
     title: params.name,
-    url: solscanNftUrl(params.mint),
-    color: hexColorToEmbed(params.collectionAccent),
+    url: graveMarketNftUrl(params.mint),
+    color: hexColorToEmbed(config.accent),
+    thumbnail: { url: collectionLogoUrl(config.logo) },
     fields,
-    ...(params.image
-      ? { image: { url: params.image }, thumbnail: { url: collectionGifUrl(params.collectionGif) } }
-      : { image: { url: collectionGifUrl(params.collectionGif) } }),
-    footer: { text: "BUXDAO · on-chain via Helius" },
+    ...(params.image ? { image: { url: params.image } } : {}),
+    footer: { text: "BUXDAO · GraveMarket · HowRare.is" },
   };
 }
 
@@ -111,18 +136,14 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
 
   const live = await fetchAsset(indexed.mint);
   const owner = live?.ownership?.owner ?? indexed.owner;
+  const name = live?.content?.metadata?.name?.trim() || indexed.name;
+  const image = live?.content?.links?.image ?? indexed.image;
 
-  return buildNftEmbed({
-    collectionName: config.name,
-    collectionId,
-    collectionGif: config.gif,
-    collectionAccent: config.accent,
+  return buildNftCommandEmbed(config, {
     mint: indexed.mint,
-    name: indexed.name,
-    number: indexed.number,
-    rank: indexed.rank,
+    name,
     owner,
-    image: indexed.image,
+    image,
   });
 }
 
@@ -133,27 +154,36 @@ async function handleRank(subcommand: string, rank: number): Promise<APIEmbed> {
     return { title: "Unknown collection", description: "That subcommand is not supported.", color: 0xff4d4d };
   }
 
-  const indexed = await lookupNftByRank(collectionId, rank);
-  if (!indexed) {
+  let howRare;
+  try {
+    howRare = await lookupNftByRankFromHowRare(collectionId, rank);
+  } catch {
     return {
       title: `${config.name} rank #${rank}`,
-      description:
-        "No NFT with this rarity rank in the on-chain index. Rank metadata may be missing for some tokens.",
+      description: "Could not load rarity data from HowRare.is right now. Try again shortly.",
       ...collectionEmbedImage(config),
     };
   }
 
-  return buildNftEmbed({
-    collectionName: config.name,
-    collectionId,
-    collectionGif: config.gif,
-    collectionAccent: config.accent,
-    mint: indexed.mint,
-    name: indexed.name,
-    number: indexed.number,
-    rank: indexed.rank ?? rank,
-    owner: indexed.owner,
-    image: indexed.image,
+  if (!howRare) {
+    return {
+      title: `${config.name} rank #${rank}`,
+      description: "No NFT with this rarity rank on HowRare.is.",
+      ...collectionEmbedImage(config),
+    };
+  }
+
+  const live = await fetchAsset(howRare.mint);
+  const owner = live?.ownership?.owner ?? null;
+  const name = live?.content?.metadata?.name?.trim() || `${config.name} #${howRare.number}`;
+  const image = live?.content?.links?.image ?? null;
+
+  return buildNftCommandEmbed(config, {
+    mint: howRare.mint,
+    name,
+    owner,
+    image,
+    howRare,
   });
 }
 

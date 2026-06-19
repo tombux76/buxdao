@@ -135,3 +135,24 @@ export function countNftsByCollection(holdings: HubWalletHoldings): { name: stri
     count: holdings.collections[c.id]?.length ?? 0,
   }));
 }
+
+export async function lookupDiscordUsernameByWallet(wallet: string): Promise<string | null> {
+  if (!process.env.POSTGRES_URL) {
+    return null;
+  }
+
+  try {
+    const { rows } = await getPool().query<{ discord_username: string | null }>(
+      `SELECT u.discord_username
+       FROM user_wallets uw
+       JOIN users u ON u.id = uw.user_id
+       WHERE LOWER(uw.wallet_address) = LOWER($1)
+       LIMIT 1`,
+      [wallet],
+    );
+    const username = rows[0]?.discord_username?.trim();
+    return username || null;
+  } catch {
+    return null;
+  }
+}

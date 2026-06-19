@@ -26,7 +26,7 @@ BUXDAO slash commands are handled by the **Interactions Endpoint** on the Next.j
 | Command | Data source |
 |---------|-------------|
 | `/nft` | Helius DAS collection index + live owner |
-| `/rank` | Helius metadata `Rank` / `Rarity Rank` traits |
+| `/rank` | HowRare.is rank → Helius owner + image |
 | `/collections` | GraveMarket + Helius supply |
 | `/profile` | Hub-linked wallets + on-chain $BUX / NFTs |
 | `/addclaim` | Disabled (returns message — use GraveStake) |
@@ -70,6 +70,6 @@ Command definitions: `data/discord/slash-commands.json`
 
 ## Notes
 
-- First `/nft` or `/rank` call per collection may take several seconds (builds index from chain). Subsequent calls use in-memory cache on the same instance.
+- First `/nft` call per collection may take several seconds (builds index from chain). `/rank` loads HowRare.is rarity once per collection (~1–3s), then caches for ~1h on the same instance.
 - Users must link wallets on [Holder Hub](/hub) for profile commands.
 - Command definitions are **not** re-registered by this repo — they remain as registered on the old site. Update via Discord API only if command shapes change.
