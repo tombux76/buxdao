@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { Transaction } from "@solana/web3.js";
+import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { Coins, Gift, Wallet } from "lucide-react";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { collectionConfigs } from "@/content/site";
@@ -15,7 +15,7 @@ function formatBux(value: number): string {
 
 export function RewardsDashboard() {
   const { data: session, status: authStatus } = useSession();
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const { state, loading, error, refresh } = useHolderRewards();
   const [claiming, setClaiming] = useState(false);
@@ -35,7 +35,7 @@ export function RewardsDashboard() {
     !claiming;
 
   async function handleClaim() {
-    if (!walletAddress || !signTransaction) {
+    if (!walletAddress || !sendTransaction) {
       setClaimError("Connect a linked wallet to claim.");
       return;
     }
@@ -52,36 +52,42 @@ export function RewardsDashboard() {
       });
       const prepareData = (await prepareRes.json()) as {
         error?: string;
-        transaction?: string;
+        treasuryWallet?: string;
         amountBux?: number;
+        feeLamports?: number;
       };
       if (!prepareRes.ok) {
         throw new Error(prepareData.error ?? "Failed to prepare claim");
       }
-      if (!prepareData.transaction) {
-        throw new Error("Missing transaction from server");
+      if (!prepareData.treasuryWallet || prepareData.feeLamports == null) {
+        throw new Error("Missing claim details from server");
       }
 
-      const tx = Transaction.from(Buffer.from(prepareData.transaction, "base64"));
-      const signed = await signTransaction(tx);
-      const signature = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-        preflightCommitment: "confirmed",
-      });
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey!,
+          toPubkey: new PublicKey(prepareData.treasuryWallet),
+          lamports: prepareData.feeLamports,
+        }),
+      );
 
-      await connection.confirmTransaction(signature, "confirmed");
+      const feeSignature = await sendTransaction(transaction, connection);
+      await connection.confirmTransaction(feeSignature, "confirmed");
 
       let confirmed = false;
-      let retries = 3;
+      let retries = 5;
       let waitMs = 2000;
+      let buxTxSignature = feeSignature;
+
       while (retries > 0 && !confirmed) {
         const confirmRes = await fetch("/api/holder-rewards/claim/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ payoutWallet: walletAddress, signature }),
+          body: JSON.stringify({ payoutWallet: walletAddress, feeSignature }),
         });
         if (confirmRes.ok) {
+          const confirmData = (await confirmRes.json()) as { buxTxSignature?: string };
+          buxTxSignature = confirmData.buxTxSignature ?? feeSignature;
           confirmed = true;
           break;
         }
@@ -96,11 +102,11 @@ export function RewardsDashboard() {
       }
 
       if (!confirmed) {
-        throw new Error("Claim sent but confirmation timed out. Refresh in a moment.");
+        throw new Error("Fee received but $BUX payout timed out. Refresh in a moment.");
       }
 
       setClaimSuccess(
-        `Claimed ${formatBux(prepareData.amountBux ?? 0)} $BUX. View on Solscan: https://solscan.io/tx/${signature}`,
+        `Claimed ${formatBux(prepareData.amountBux ?? 0)} $BUX. View payout: https://solscan.io/tx/${buxTxSignature}`,
       );
       await refresh();
     } catch (err) {

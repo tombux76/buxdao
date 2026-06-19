@@ -18,6 +18,10 @@ export function getHolderRewardsCronSecret(): string {
   );
 }
 
+export function getTreasuryWallet(): string {
+  return process.env.TREASURY_WALLET?.trim() || "";
+}
+
 export function getProjectWallet(): string {
   return (
     process.env.PROJECT_WALLET?.trim() ||

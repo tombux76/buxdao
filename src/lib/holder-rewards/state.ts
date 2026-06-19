@@ -1,7 +1,11 @@
 import { getRecentAccruals } from "@/lib/holder-rewards/accrual";
 import { getRewardAccount } from "@/lib/holder-rewards/accounts";
 import { getTodayEngagement } from "@/lib/holder-rewards/credits";
-import { buxRawToNumber, HOLDER_REWARDS_CLAIM_FEE_LAMPORTS } from "@/lib/holder-rewards/config";
+import {
+  buxRawToNumber,
+  getTreasuryWallet,
+  HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
+} from "@/lib/holder-rewards/config";
 import { listLinkedWalletAddresses } from "@/lib/holder-rewards/wallet-auth";
 
 export async function getClaimRewardState(userId: string) {
@@ -13,6 +17,8 @@ export async function getClaimRewardState(userId: string) {
   return {
     unclaimedBalanceBux: account.unclaimedBalanceBux,
     totalClaimedBux: account.totalClaimedBux,
+    claimFeeSol: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS / 1e9,
+    treasuryWallet: getTreasuryWallet(),
     todayEngagement,
   };
 }

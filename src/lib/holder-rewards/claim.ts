@@ -1,41 +1,14 @@
-import {
-  createAssociatedTokenAccountInstruction,
-  createTransferInstruction,
-  getAccount,
-  getAssociatedTokenAddress,
-} from "@solana/spl-token";
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-} from "@solana/web3.js";
-import bs58 from "bs58";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { getPool } from "@/lib/db";
 import {
   buxRawToNumber,
-  getProjectWallet,
+  getTreasuryWallet,
   HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
 } from "@/lib/holder-rewards/config";
 import { acquireClaimLock, releaseClaimLock } from "@/lib/holder-rewards/claim-lock";
 import { getRewardAccount } from "@/lib/holder-rewards/accounts";
 import { isWalletLinkedToUser } from "@/lib/holder-rewards/wallet-auth";
-
-function loadKeypairFromSecret(secret: string): Keypair {
-  if (secret.startsWith("[")) {
-    const bytes = JSON.parse(secret) as number[];
-    if (!Array.isArray(bytes) || bytes.length !== 64) {
-      throw new Error("Invalid treasury private key array");
-    }
-    return Keypair.fromSecretKey(Uint8Array.from(bytes));
-  }
-  const decoded = bs58.decode(secret);
-  if (decoded.length !== 64) {
-    throw new Error("Invalid treasury private key length");
-  }
-  return Keypair.fromSecretKey(decoded);
-}
+import { sendTreasuryBuxRawTransfer } from "@/lib/solana/treasury";
 
 function getRpcUrl(): string {
   return (
@@ -47,30 +20,57 @@ function getRpcUrl(): string {
   );
 }
 
+export type PrepareClaimResult = {
+  treasuryWallet: string;
+  payoutWallet: string;
+  amountRaw: string;
+  amountBux: number;
+  feeLamports: number;
+  feeSol: number;
+  resumed: boolean;
+};
+
 export async function prepareHolderRewardClaim(params: {
   userId: string;
   payoutWallet: string;
-}): Promise<{ transaction: string; amountRaw: string; amountBux: number; feeLamports: number }> {
+}): Promise<PrepareClaimResult> {
   const linked = await isWalletLinkedToUser(params.userId, params.payoutWallet);
   if (!linked) {
     throw new Error("Payout wallet must be linked to your Hub account");
   }
 
+  const treasuryWallet = getTreasuryWallet();
+  if (!treasuryWallet) {
+    throw new Error("Treasury wallet is not configured");
+  }
+
+  const pool = getPool();
+  const existing = await pool.query<{ amount_raw: string; payout_wallet: string }>(
+    `SELECT amount_raw, payout_wallet FROM holder_reward_pending_claims WHERE user_id = $1`,
+    [params.userId],
+  );
+  const existingRow = existing.rows[0];
+  if (existingRow) {
+    if (existingRow.payout_wallet !== params.payoutWallet) {
+      throw new Error(
+        "Claim already in progress for another wallet. Complete it or wait a few minutes.",
+      );
+    }
+    const amountRaw = BigInt(existingRow.amount_raw);
+    return {
+      treasuryWallet,
+      payoutWallet: params.payoutWallet,
+      amountRaw: amountRaw.toString(),
+      amountBux: buxRawToNumber(amountRaw),
+      feeLamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
+      feeSol: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS / 1e9,
+      resumed: true,
+    };
+  }
+
   const account = await getRewardAccount(params.userId);
   if (account.unclaimedBalanceRaw <= BigInt(0)) {
     throw new Error("No unclaimed rewards available");
-  }
-
-  const projectWallet = getProjectWallet();
-  if (!projectWallet) {
-    throw new Error("PROJECT_WALLET is not configured");
-  }
-
-  const treasuryWallet = process.env.TREASURY_WALLET?.trim();
-  const treasuryPrivateKey = process.env.TREASURY_PRIVATE_KEY?.trim();
-  const mintAddress = process.env.BUX_TOKEN_MINT?.trim();
-  if (!treasuryWallet || !treasuryPrivateKey || !mintAddress) {
-    throw new Error("Treasury or BUX token is not configured");
   }
 
   const lock = await acquireClaimLock(
@@ -82,96 +82,24 @@ export async function prepareHolderRewardClaim(params: {
     throw new Error(lock.error);
   }
 
-  try {
-    const treasuryKeypair = loadKeypairFromSecret(treasuryPrivateKey);
-    if (treasuryKeypair.publicKey.toBase58() !== treasuryWallet) {
-      throw new Error("Treasury key mismatch");
-    }
-
-    const connection = new Connection(getRpcUrl(), "confirmed");
-    const mint = new PublicKey(mintAddress);
-    const userPublicKey = new PublicKey(params.payoutWallet);
-    const treasuryPublicKey = treasuryKeypair.publicKey;
-    const projectPublicKey = new PublicKey(projectWallet);
-
-    const userTokenAccount = await getAssociatedTokenAddress(mint, userPublicKey);
-    const treasuryTokenAccount = await getAssociatedTokenAddress(mint, treasuryPublicKey);
-    const transferAmount = account.unclaimedBalanceRaw;
-
-    const treasuryAccount = await getAccount(connection, treasuryTokenAccount);
-    if (treasuryAccount.amount < transferAmount) {
-      throw new Error("Treasury has insufficient $BUX for this claim");
-    }
-
-    const transaction = new Transaction();
-
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPublicKey,
-        toPubkey: projectPublicKey,
-        lamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
-      }),
-    );
-
-    let userAccountExists = false;
-    try {
-      await getAccount(connection, userTokenAccount);
-      userAccountExists = true;
-    } catch {
-      userAccountExists = false;
-    }
-
-    if (!userAccountExists) {
-      transaction.add(
-        createAssociatedTokenAccountInstruction(
-          userPublicKey,
-          userTokenAccount,
-          userPublicKey,
-          mint,
-        ),
-      );
-    }
-
-    transaction.add(
-      createTransferInstruction(
-        treasuryTokenAccount,
-        userTokenAccount,
-        treasuryPublicKey,
-        transferAmount,
-      ),
-    );
-
-    const { blockhash } = await connection.getLatestBlockhash("confirmed");
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPublicKey;
-    transaction.partialSign(treasuryKeypair);
-
-    const serialized = transaction.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false,
-    });
-
-    return {
-      transaction: Buffer.from(serialized).toString("base64"),
-      amountRaw: transferAmount.toString(),
-      amountBux: buxRawToNumber(transferAmount),
-      feeLamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
-    };
-  } catch (error) {
-    await releaseClaimLock(params.userId);
-    throw error;
-  }
+  return {
+    treasuryWallet,
+    payoutWallet: params.payoutWallet,
+    amountRaw: account.unclaimedBalanceRaw.toString(),
+    amountBux: buxRawToNumber(account.unclaimedBalanceRaw),
+    feeLamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
+    feeSol: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS / 1e9,
+    resumed: false,
+  };
 }
 
-async function verifyClaimTransaction(params: {
+async function verifyFeeTransaction(params: {
   signature: string;
   payoutWallet: string;
-  expectedAmountRaw: bigint;
+  feeLamports: number;
 }): Promise<void> {
-  const treasuryWallet = process.env.TREASURY_WALLET?.trim();
-  const mintAddress = process.env.BUX_TOKEN_MINT?.trim();
-  const projectWallet = getProjectWallet();
-  if (!treasuryWallet || !mintAddress || !projectWallet) {
+  const treasuryWallet = getTreasuryWallet();
+  if (!treasuryWallet) {
     throw new Error("Server configuration error");
   }
 
@@ -182,98 +110,114 @@ async function verifyClaimTransaction(params: {
   });
 
   if (!tx?.meta || tx.meta.err) {
-    throw new Error("Transaction not found or failed");
+    throw new Error("Fee transaction not found or failed");
   }
 
-  const meta = tx.meta;
   let solFeePaid = false;
-  let buxTransferred = false;
 
-  const instructions = tx.transaction.message.instructions;
-  for (const ix of instructions) {
+  const topLevel = tx.transaction.message.instructions;
+  for (const ix of topLevel) {
     if (!("parsed" in ix) || !ix.parsed) {
       continue;
     }
     const parsed = ix.parsed as { type?: string; info?: Record<string, unknown> };
-    if (parsed.type === "transfer" && parsed.info) {
-      const info = parsed.info;
-      const source = String(info.source ?? "");
-      const destination = String(info.destination ?? "");
-      const lamports = Number(info.lamports ?? 0);
-      if (
-        source === params.payoutWallet &&
-        destination === projectWallet &&
-        lamports === HOLDER_REWARDS_CLAIM_FEE_LAMPORTS
-      ) {
+    if (parsed.type !== "transfer" || !parsed.info) {
+      continue;
+    }
+    const info = parsed.info;
+    const source = String(info.source ?? "");
+    const destination = String(info.destination ?? "");
+    const lamports = Number(info.lamports ?? 0);
+    if (
+      source === params.payoutWallet &&
+      destination === treasuryWallet &&
+      lamports === params.feeLamports
+    ) {
+      solFeePaid = true;
+      break;
+    }
+  }
+
+  if (!solFeePaid) {
+    const accountKeys = tx.transaction.message.accountKeys;
+    let treasuryIndex = -1;
+    let payerIndex = -1;
+    for (let i = 0; i < accountKeys.length; i++) {
+      const key = accountKeys[i];
+      const pubkey =
+        typeof key === "object" && key !== null && "pubkey" in key
+          ? (key as { pubkey: PublicKey }).pubkey.toBase58()
+          : String(key);
+      if (pubkey === treasuryWallet) {
+        treasuryIndex = i;
+      }
+      if (pubkey === params.payoutWallet) {
+        payerIndex = i;
+      }
+    }
+    if (treasuryIndex >= 0 && payerIndex >= 0) {
+      const treasuryReceived =
+        (tx.meta.postBalances[treasuryIndex] ?? 0) - (tx.meta.preBalances[treasuryIndex] ?? 0);
+      const payerSent =
+        (tx.meta.preBalances[payerIndex] ?? 0) - (tx.meta.postBalances[payerIndex] ?? 0);
+      if (treasuryReceived >= params.feeLamports && payerSent >= params.feeLamports) {
         solFeePaid = true;
       }
     }
   }
 
-  const innerInstructions = meta.innerInstructions ?? [];
-  for (const inner of innerInstructions) {
-    for (const ix of inner.instructions) {
-      if (!("parsed" in ix) || !ix.parsed) {
-        continue;
-      }
-      const parsed = ix.parsed as { type?: string; info?: Record<string, unknown> };
-      if (parsed.type === "transferChecked" || parsed.type === "transfer") {
-        const info = parsed.info;
-        if (!info) {
-          continue;
-        }
-        const authority = String(info.authority ?? info.owner ?? "");
-        const tokenAmount = info.tokenAmount as { amount?: string } | undefined;
-        const amount = BigInt(String(info.amount ?? tokenAmount?.amount ?? "0"));
-        if (authority === treasuryWallet && amount === params.expectedAmountRaw) {
-          buxTransferred = true;
-        }
-      }
-    }
-  }
-
-  if (!meta.preTokenBalances || !meta.postTokenBalances) {
-    throw new Error("Could not verify token transfer");
-  }
-
-  if (!buxTransferred) {
-    for (const post of meta.postTokenBalances) {
-      if (post.mint !== mintAddress || post.owner !== params.payoutWallet) {
-        continue;
-      }
-      const pre = meta.preTokenBalances.find((p) => p.accountIndex === post.accountIndex);
-      const preAmt = BigInt(pre?.uiTokenAmount.amount ?? "0");
-      const postAmt = BigInt(post.uiTokenAmount.amount ?? "0");
-      if (postAmt - preAmt === params.expectedAmountRaw) {
-        buxTransferred = true;
-        break;
-      }
-    }
-  }
-
   if (!solFeePaid) {
-    throw new Error("Platform fee transfer not verified");
+    throw new Error(
+      "Claim fee not verified. Send the exact fee amount in SOL to the treasury wallet from your linked wallet.",
+    );
   }
-  if (!buxTransferred) {
-    throw new Error("BUX payout not verified");
+}
+
+async function waitForSignatureConfirmation(signature: string): Promise<void> {
+  const connection = new Connection(getRpcUrl(), "confirmed");
+  let status = null;
+  let retries = 8;
+  let waitTime = 1000;
+
+  while (retries > 0) {
+    status = await connection.getSignatureStatus(signature);
+    if (status?.value) {
+      break;
+    }
+    retries -= 1;
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, waitTime));
+      waitTime = Math.floor(waitTime * 1.5);
+    }
+  }
+
+  if (!status?.value) {
+    throw new Error("Fee transaction not found yet. Try again in a few seconds.");
+  }
+  if (status.value.err) {
+    throw new Error("Fee transaction failed on-chain");
+  }
+  if (!status.value.confirmationStatus || status.value.confirmationStatus === "processed") {
+    throw new Error("Fee transaction still processing");
   }
 }
 
 export async function confirmHolderRewardClaim(params: {
   userId: string;
   payoutWallet: string;
-  signature: string;
-}): Promise<{ amountBux: number; txSignature: string }> {
-  if (!params.signature || params.signature.length < 80) {
-    throw new Error("Invalid transaction signature");
+  feeSignature: string;
+}): Promise<{ amountBux: number; feeTxSignature: string; buxTxSignature: string }> {
+  if (!params.feeSignature || params.feeSignature.length < 80) {
+    throw new Error("Invalid fee transaction signature");
   }
 
   const pool = getPool();
-  const used = await pool.query(`SELECT 1 FROM holder_reward_used_tx_signatures WHERE tx_signature = $1`, [
-    params.signature,
-  ]);
-  if (used.rows.length > 0) {
-    throw new Error("Transaction signature already used");
+  const usedFee = await pool.query(
+    `SELECT 1 FROM holder_reward_used_tx_signatures WHERE tx_signature = $1`,
+    [params.feeSignature],
+  );
+  if (usedFee.rows.length > 0) {
+    throw new Error("Fee transaction signature already used");
   }
 
   const pending = await pool.query<{ amount_raw: string; payout_wallet: string }>(
@@ -290,37 +234,30 @@ export async function confirmHolderRewardClaim(params: {
 
   const amountRaw = BigInt(pendingRow.amount_raw);
 
-  const connection = new Connection(getRpcUrl(), "confirmed");
-  let status = null;
-  let retries = 5;
-  let waitTime = 1000;
-  while (retries > 0) {
-    status = await connection.getSignatureStatus(params.signature);
-    if (status?.value) {
-      break;
+  try {
+    await waitForSignatureConfirmation(params.feeSignature);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("failed on-chain")) {
+      await releaseClaimLock(params.userId);
     }
-    retries -= 1;
-    if (retries > 0) {
-      await new Promise((r) => setTimeout(r, waitTime));
-      waitTime = Math.floor(waitTime * 1.5);
-    }
+    throw error;
   }
 
-  if (!status?.value) {
-    throw new Error("Transaction not found yet. Try again in a few seconds.");
-  }
-  if (status.value.err) {
+  try {
+    await verifyFeeTransaction({
+      signature: params.feeSignature,
+      payoutWallet: params.payoutWallet,
+      feeLamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
+    });
+  } catch (error) {
     await releaseClaimLock(params.userId);
-    throw new Error("Transaction failed on-chain");
-  }
-  if (!status.value.confirmationStatus || status.value.confirmationStatus === "processed") {
-    throw new Error("Transaction still processing");
+    throw error;
   }
 
-  await verifyClaimTransaction({
-    signature: params.signature,
-    payoutWallet: params.payoutWallet,
-    expectedAmountRaw: amountRaw,
+  const buxTxSignature = await sendTreasuryBuxRawTransfer({
+    recipientWallet: params.payoutWallet,
+    amountRaw,
   });
 
   const client = await pool.connect();
@@ -353,13 +290,17 @@ export async function confirmHolderRewardClaim(params: {
         params.payoutWallet,
         amountRaw.toString(),
         HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
-        params.signature,
+        buxTxSignature,
       ],
     );
 
     await client.query(
       `INSERT INTO holder_reward_used_tx_signatures (tx_signature, user_id) VALUES ($1, $2)`,
-      [params.signature, params.userId],
+      [params.feeSignature, params.userId],
+    );
+    await client.query(
+      `INSERT INTO holder_reward_used_tx_signatures (tx_signature, user_id) VALUES ($1, $2)`,
+      [buxTxSignature, params.userId],
     );
 
     await client.query(`DELETE FROM holder_reward_pending_claims WHERE user_id = $1`, [params.userId]);
@@ -374,6 +315,11 @@ export async function confirmHolderRewardClaim(params: {
 
   return {
     amountBux: buxRawToNumber(amountRaw),
-    txSignature: params.signature,
+    feeTxSignature: params.feeSignature,
+    buxTxSignature,
   };
+}
+
+export async function cancelPendingClaim(userId: string): Promise<void> {
+  await releaseClaimLock(userId);
 }

@@ -23,3 +23,12 @@ export async function listLinkedWalletAddresses(userId: string): Promise<string[
   );
   return rows.map((r) => r.wallet_address);
 }
+
+export async function userHasLinkedWallet(userId: string): Promise<boolean> {
+  const pool = getPool();
+  const { rows } = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS(SELECT 1 FROM user_wallets WHERE user_id = $1) AS exists`,
+    [userId],
+  );
+  return rows[0]?.exists ?? false;
+}

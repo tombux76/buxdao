@@ -2,6 +2,7 @@ import { getPool } from "@/lib/db";
 import { ensureRewardAccount, getRewardAccount } from "@/lib/holder-rewards/accounts";
 import { buxRawToNumber, buxToRaw } from "@/lib/holder-rewards/config";
 import { getRewardDateEt } from "@/lib/holder-rewards/dates";
+import { userHasLinkedWallet } from "@/lib/holder-rewards/wallet-auth";
 
 export type RewardCreditSource = "admin" | "discord_message" | "discord_reaction";
 
@@ -16,7 +17,7 @@ export type CreditRewardParams = {
 
 export type CreditRewardResult =
   | { ok: true; credited: true; newBalanceBux: number }
-  | { ok: true; credited: false; reason: "duplicate" }
+  | { ok: true; credited: false; reason: "duplicate" | "no_linked_wallet" }
   | { ok: false; reason: string };
 
 function assertWholeBux(amountBux: number): void {
@@ -27,6 +28,13 @@ function assertWholeBux(amountBux: number): void {
 
 export async function creditRewardAccount(params: CreditRewardParams): Promise<CreditRewardResult> {
   assertWholeBux(params.amountBux);
+
+  if (params.source === "discord_message" || params.source === "discord_reaction") {
+    const hasWallet = await userHasLinkedWallet(params.userId);
+    if (!hasWallet) {
+      return { ok: true, credited: false, reason: "no_linked_wallet" };
+    }
+  }
 
   const amountRaw = buxToRaw(params.amountBux);
   const rewardDateEt = params.rewardDateEt ?? getRewardDateEt();

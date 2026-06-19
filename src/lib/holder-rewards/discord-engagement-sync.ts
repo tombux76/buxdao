@@ -14,7 +14,7 @@ import {
   getDiscordGuildId,
 } from "@/lib/holder-rewards/discord-engagement-config";
 import { getRewardDateEt, toEtDateString } from "@/lib/holder-rewards/dates";
-import { getHubUserIdByDiscordId } from "@/lib/holder-rewards/users";
+import { getEligibleHubUserIdForDiscordEngagement } from "@/lib/holder-rewards/users";
 import { getPool } from "@/lib/db";
 
 type DiscordChannel = { id: string; type: number; name?: string };
@@ -169,7 +169,7 @@ async function tryCreditMessage(message: DiscordMessage): Promise<boolean> {
     return false;
   }
 
-  const hubUserId = await getHubUserIdByDiscordId(authorId);
+  const hubUserId = await getEligibleHubUserIdForDiscordEngagement(authorId);
   if (!hubUserId) {
     return false;
   }
@@ -211,7 +211,7 @@ async function tryCreditReaction(
   messageId: string,
   discordUserId: string,
 ): Promise<boolean> {
-  const hubUserId = await getHubUserIdByDiscordId(discordUserId);
+  const hubUserId = await getEligibleHubUserIdForDiscordEngagement(discordUserId);
   if (!hubUserId) {
     return false;
   }

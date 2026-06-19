@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prepareHolderRewardClaim } from "@/lib/holder-rewards/claim";
-import { isHolderRewardsEnabled } from "@/lib/holder-rewards/config";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  if (!isHolderRewardsEnabled()) {
-    return NextResponse.json({ error: "Holder rewards are not enabled" }, { status: 404 });
-  }
-
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
