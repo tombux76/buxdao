@@ -30,6 +30,7 @@ type DiscordUser = { id: string; username?: string; bot?: boolean };
 
 export type DiscordEngagementSyncResult = {
   channelsScanned: number;
+  channelsSkippedAccess: number;
   messagesProcessed: number;
   messagesCredited: number;
   reactionsCredited: number;
@@ -38,6 +39,20 @@ export type DiscordEngagementSyncResult = {
 };
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5, 15]);
+
+class DiscordFetchError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "DiscordFetchError";
+  }
+}
+
+function isMissingAccess(error: unknown): boolean {
+  return error instanceof DiscordFetchError && error.status === 403;
+}
 
 async function discordFetch<T>(path: string): Promise<T> {
   const token = getDiscordBotToken();
@@ -57,7 +72,7 @@ async function discordFetch<T>(path: string): Promise<T> {
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Discord API ${response.status}: ${body.slice(0, 200)}`);
+    throw new DiscordFetchError(`Discord API ${response.status}: ${body.slice(0, 200)}`, response.status);
   }
 
   return response.json() as Promise<T>;
@@ -242,7 +257,18 @@ async function syncChannelMessages(
 
 async function syncAnnouncementReactions(result: DiscordEngagementSyncResult): Promise<void> {
   const channelId = DISCORD_ANNOUNCEMENTS_CHANNEL_ID;
-  const messages = await discordFetch<DiscordMessage[]>(`/channels/${channelId}/messages?limit=50`);
+  let messages: DiscordMessage[];
+  try {
+    messages = await discordFetch<DiscordMessage[]>(`/channels/${channelId}/messages?limit=50`);
+  } catch (error) {
+    if (isMissingAccess(error)) {
+      result.errors.push(
+        `Announcements channel (${channelId}): bot missing access — grant View Channel + Read Message History`,
+      );
+      return;
+    }
+    throw error;
+  }
 
   for (const message of messages) {
     if (!message.reactions?.length) {
@@ -288,6 +314,7 @@ export async function syncDiscordEngagementRewards(): Promise<DiscordEngagementS
 
   const result: DiscordEngagementSyncResult = {
     channelsScanned: 0,
+    channelsSkippedAccess: 0,
     messagesProcessed: 0,
     messagesCredited: 0,
     reactionsCredited: 0,
@@ -302,6 +329,10 @@ export async function syncDiscordEngagementRewards(): Promise<DiscordEngagementS
     try {
       await syncChannelMessages(channel.id, result);
     } catch (error) {
+      if (isMissingAccess(error)) {
+        result.channelsSkippedAccess += 1;
+        continue;
+      }
       const msg = error instanceof Error ? error.message : "Channel sync failed";
       result.errors.push(`channel ${channel.id}: ${msg}`);
     }
