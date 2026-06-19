@@ -11,7 +11,8 @@ export async function acquireClaimLock(
 
   await pool.query(
     `DELETE FROM holder_reward_pending_claims
-     WHERE created_at < NOW() - INTERVAL '${PENDING_TTL_MINUTES} minutes'`,
+     WHERE created_at < NOW() - INTERVAL '${PENDING_TTL_MINUTES} minutes'
+       AND fee_tx_signature IS NULL`,
   );
 
   const existing = await pool.query<{ amount_raw: string }>(

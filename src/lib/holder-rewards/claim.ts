@@ -11,6 +11,8 @@ import { isWalletLinkedToUser } from "@/lib/holder-rewards/wallet-auth";
 import { withServerConnection } from "@/lib/solana/server-rpc";
 import { sendTreasuryBuxRawTransfer } from "@/lib/solana/treasury";
 
+const CLAIM_ADVISORY_NAMESPACE = 847291;
+
 export type PrepareClaimResult = {
   treasuryWallet: string;
   payoutWallet: string;
@@ -23,7 +25,11 @@ export type PrepareClaimResult = {
   feeTxSignature: string | null;
 };
 
-async function syncPendingAmount(userId: string, payoutWallet: string): Promise<bigint> {
+function isValidTxSignature(signature: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(signature);
+}
+
+async function syncPendingAmountBeforeFee(userId: string, payoutWallet: string): Promise<bigint> {
   const account = await getRewardAccount(userId);
   if (account.unclaimedBalanceRaw <= BigInt(0)) {
     throw new Error("No unclaimed rewards available");
@@ -32,7 +38,7 @@ async function syncPendingAmount(userId: string, payoutWallet: string): Promise<
   await getPool().query(
     `UPDATE holder_reward_pending_claims
      SET amount_raw = $2
-     WHERE user_id = $1 AND payout_wallet = $3`,
+     WHERE user_id = $1 AND payout_wallet = $3 AND fee_tx_signature IS NULL`,
     [userId, account.unclaimedBalanceRaw.toString(), payoutWallet],
   );
 
@@ -72,23 +78,26 @@ export async function prepareHolderRewardClaim(params: {
       );
     }
 
-    const amountRaw = await syncPendingAmount(params.userId, params.payoutWallet);
-    const refreshed = await pool.query<{ fee_tx_signature: string | null }>(
-      `SELECT fee_tx_signature FROM holder_reward_pending_claims WHERE user_id = $1`,
+    const amountRaw = existingRow.fee_tx_signature
+      ? BigInt(existingRow.amount_raw)
+      : await syncPendingAmountBeforeFee(params.userId, params.payoutWallet);
+
+    const refreshed = await pool.query<{ fee_tx_signature: string | null; amount_raw: string }>(
+      `SELECT fee_tx_signature, amount_raw FROM holder_reward_pending_claims WHERE user_id = $1`,
       [params.userId],
     );
-    const feeTxSignature = refreshed.rows[0]?.fee_tx_signature ?? existingRow.fee_tx_signature;
+    const row = refreshed.rows[0] ?? existingRow;
 
     return {
       treasuryWallet,
       payoutWallet: params.payoutWallet,
-      amountRaw: amountRaw.toString(),
-      amountBux: buxRawToWholeBux(amountRaw),
+      amountRaw: row.amount_raw,
+      amountBux: buxRawToWholeBux(BigInt(row.amount_raw)),
       feeLamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
       feeSol: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS / 1e9,
       resumed: true,
-      feePaid: Boolean(feeTxSignature),
-      feeTxSignature,
+      feePaid: Boolean(row.fee_tx_signature),
+      feeTxSignature: row.fee_tx_signature,
     };
   }
 
@@ -139,6 +148,15 @@ async function verifyFeeTransaction(params: {
       throw new Error("Fee transaction not found or failed");
     }
 
+    const feePayer = tx.transaction.message.accountKeys[0];
+    const feePayerAddress =
+      typeof feePayer === "object" && feePayer !== null && "pubkey" in feePayer
+        ? (feePayer as { pubkey: PublicKey }).pubkey.toBase58()
+        : String(feePayer);
+    if (feePayerAddress !== params.payoutWallet) {
+      throw new Error("Fee transaction must be signed by the payout wallet");
+    }
+
     let solFeePaid = false;
 
     const topLevel = tx.transaction.message.instructions;
@@ -161,34 +179,6 @@ async function verifyFeeTransaction(params: {
       ) {
         solFeePaid = true;
         break;
-      }
-    }
-
-    if (!solFeePaid) {
-      const accountKeys = tx.transaction.message.accountKeys;
-      let treasuryIndex = -1;
-      let payerIndex = -1;
-      for (let i = 0; i < accountKeys.length; i++) {
-        const key = accountKeys[i];
-        const pubkey =
-          typeof key === "object" && key !== null && "pubkey" in key
-            ? (key as { pubkey: PublicKey }).pubkey.toBase58()
-            : String(key);
-        if (pubkey === treasuryWallet) {
-          treasuryIndex = i;
-        }
-        if (pubkey === params.payoutWallet) {
-          payerIndex = i;
-        }
-      }
-      if (treasuryIndex >= 0 && payerIndex >= 0) {
-        const treasuryReceived =
-          (tx.meta.postBalances[treasuryIndex] ?? 0) - (tx.meta.preBalances[treasuryIndex] ?? 0);
-        const payerSent =
-          (tx.meta.preBalances[payerIndex] ?? 0) - (tx.meta.postBalances[payerIndex] ?? 0);
-        if (treasuryReceived >= params.feeLamports && payerSent >= params.feeLamports) {
-          solFeePaid = true;
-        }
       }
     }
 
@@ -234,17 +224,65 @@ function isPermanentFeeError(message: string): boolean {
   return (
     message.includes("failed on-chain") ||
     message.includes("not verified") ||
+    message.includes("must be signed") ||
     message.includes("Invalid fee")
   );
 }
 
-async function recordPendingFeeSignature(userId: string, feeSignature: string): Promise<void> {
-  await getPool().query(
-    `UPDATE holder_reward_pending_claims
-     SET fee_tx_signature = $2
-     WHERE user_id = $1 AND fee_tx_signature IS NULL`,
-    [userId, feeSignature],
+async function findCompletedClaimByFee(feeSignature: string) {
+  const { rows } = await getPool().query<{
+    amount_raw: string;
+    tx_signature: string;
+    fee_tx_signature: string;
+  }>(
+    `SELECT amount_raw, tx_signature, fee_tx_signature
+     FROM holder_reward_claims WHERE fee_tx_signature = $1`,
+    [feeSignature],
   );
+  return rows[0] ?? null;
+}
+
+export async function recordPendingClaimFee(params: {
+  userId: string;
+  payoutWallet: string;
+  feeSignature: string;
+}): Promise<void> {
+  if (!isValidTxSignature(params.feeSignature)) {
+    throw new Error("Invalid transaction signature format");
+  }
+
+  const pool = getPool();
+  const account = await getRewardAccount(params.userId);
+
+  const result = await pool.query(
+    `UPDATE holder_reward_pending_claims
+     SET fee_tx_signature = $3,
+         amount_raw = $4
+     WHERE user_id = $1 AND payout_wallet = $2 AND fee_tx_signature IS NULL
+     RETURNING user_id`,
+    [
+      params.userId,
+      params.payoutWallet,
+      params.feeSignature,
+      account.unclaimedBalanceRaw.toString(),
+    ],
+  );
+
+  if (result.rowCount === 0) {
+    const existing = await pool.query<{ fee_tx_signature: string | null }>(
+      `SELECT fee_tx_signature FROM holder_reward_pending_claims WHERE user_id = $1`,
+      [params.userId],
+    );
+    if (!existing.rows[0]) {
+      throw new Error("No pending claim");
+    }
+    if (
+      existing.rows[0].fee_tx_signature &&
+      existing.rows[0].fee_tx_signature !== params.feeSignature
+    ) {
+      throw new Error("A different fee transaction is already recorded for this claim");
+    }
+  }
 }
 
 export async function confirmHolderRewardClaim(params: {
@@ -252,127 +290,159 @@ export async function confirmHolderRewardClaim(params: {
   payoutWallet: string;
   feeSignature: string;
 }): Promise<{ amountBux: number; feeTxSignature: string; buxTxSignature: string }> {
-  if (!params.feeSignature || params.feeSignature.length < 80) {
+  if (!isValidTxSignature(params.feeSignature)) {
     throw new Error("Invalid fee transaction signature");
   }
 
+  const linked = await isWalletLinkedToUser(params.userId, params.payoutWallet);
+  if (!linked) {
+    throw new Error("Payout wallet must be linked to your Hub account");
+  }
+
+  const existing = await findCompletedClaimByFee(params.feeSignature);
+  if (existing) {
+    return {
+      amountBux: buxRawToWholeBux(BigInt(existing.amount_raw)),
+      feeTxSignature: existing.fee_tx_signature,
+      buxTxSignature: existing.tx_signature,
+    };
+  }
+
   const pool = getPool();
-
-  const pending = await pool.query<{
-    amount_raw: string;
-    payout_wallet: string;
-    fee_tx_signature: string | null;
-  }>(
-    `SELECT amount_raw, payout_wallet, fee_tx_signature FROM holder_reward_pending_claims WHERE user_id = $1`,
-    [params.userId],
-  );
-  const pendingRow = pending.rows[0];
-  if (!pendingRow) {
-    throw new Error("No pending claim found. Start a new claim.");
-  }
-  if (pendingRow.payout_wallet !== params.payoutWallet) {
-    throw new Error("Payout wallet does not match pending claim");
-  }
-
-  const usedFee = await pool.query(
-    `SELECT 1 FROM holder_reward_used_tx_signatures WHERE tx_signature = $1`,
-    [params.feeSignature],
-  );
-  if (usedFee.rows.length > 0) {
-    throw new Error("This claim was already completed.");
-  }
-
-  await recordPendingFeeSignature(params.userId, params.feeSignature);
-
-  const amountRaw = await syncPendingAmount(params.userId, params.payoutWallet);
+  const client = await pool.connect();
+  const userIdNum = Number.parseInt(params.userId, 10);
 
   try {
-    await waitForSignatureConfirmation(params.feeSignature);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (isPermanentFeeError(message)) {
-      await releaseClaimLock(params.userId);
+    await client.query("SELECT pg_advisory_lock($1, $2)", [CLAIM_ADVISORY_NAMESPACE, userIdNum]);
+
+    const pending = await client.query<{
+      amount_raw: string;
+      payout_wallet: string;
+      fee_tx_signature: string | null;
+    }>(
+      `SELECT amount_raw, payout_wallet, fee_tx_signature
+       FROM holder_reward_pending_claims WHERE user_id = $1`,
+      [params.userId],
+    );
+    const pendingRow = pending.rows[0];
+    if (!pendingRow) {
+      throw new Error("No pending claim found. Start a new claim.");
     }
-    throw error;
-  }
+    if (pendingRow.payout_wallet !== params.payoutWallet) {
+      throw new Error("Payout wallet does not match pending claim");
+    }
+    if (pendingRow.fee_tx_signature && pendingRow.fee_tx_signature !== params.feeSignature) {
+      throw new Error("Fee signature does not match the recorded claim payment");
+    }
 
-  try {
+    const usedFee = await client.query(
+      `SELECT 1 FROM holder_reward_used_tx_signatures WHERE tx_signature = $1`,
+      [params.feeSignature],
+    );
+    if (usedFee.rows.length > 0) {
+      const completed = await findCompletedClaimByFee(params.feeSignature);
+      if (completed) {
+        return {
+          amountBux: buxRawToWholeBux(BigInt(completed.amount_raw)),
+          feeTxSignature: completed.fee_tx_signature,
+          buxTxSignature: completed.tx_signature,
+        };
+      }
+      throw new Error("This claim was already completed.");
+    }
+
+    const amountRaw = BigInt(pendingRow.amount_raw);
+    if (amountRaw <= BigInt(0)) {
+      throw new Error("Invalid claim amount");
+    }
+
+    await waitForSignatureConfirmation(params.feeSignature);
     await verifyFeeTransaction({
       signature: params.feeSignature,
       payoutWallet: params.payoutWallet,
       feeLamports: HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (isPermanentFeeError(message)) {
-      await releaseClaimLock(params.userId);
-    }
-    throw error;
-  }
 
-  const buxTxSignature = await sendTreasuryBuxRawTransfer({
-    recipientWallet: params.payoutWallet,
-    amountRaw,
-  });
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    const accountRes = await client.query<{ unclaimed_balance_raw: string }>(
-      `SELECT unclaimed_balance_raw FROM holder_reward_accounts WHERE user_id = $1 FOR UPDATE`,
-      [params.userId],
+    await client.query(
+      `UPDATE holder_reward_pending_claims SET fee_tx_signature = $2 WHERE user_id = $1 AND fee_tx_signature IS NULL`,
+      [params.userId, params.feeSignature],
     );
-    const currentRaw = BigInt(accountRes.rows[0]?.unclaimed_balance_raw ?? "0");
-    if (currentRaw < amountRaw) {
+
+    const accountCheck = await getRewardAccount(params.userId);
+    if (accountCheck.unclaimedBalanceRaw < amountRaw) {
       throw new Error("Insufficient unclaimed balance");
     }
 
-    await client.query(
-      `UPDATE holder_reward_accounts
-       SET unclaimed_balance_raw = unclaimed_balance_raw - $2,
-           total_claimed_raw = total_claimed_raw + $2,
-           updated_at = now()
-       WHERE user_id = $1`,
-      [params.userId, amountRaw.toString()],
-    );
+    const buxTxSignature = await sendTreasuryBuxRawTransfer({
+      recipientWallet: params.payoutWallet,
+      amountRaw,
+    });
 
-    await client.query(
-      `INSERT INTO holder_reward_claims (user_id, payout_wallet, amount_raw, fee_lamports, tx_signature)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
+    try {
+      await client.query("BEGIN");
+
+      const accountRes = await client.query<{ unclaimed_balance_raw: string }>(
+        `SELECT unclaimed_balance_raw FROM holder_reward_accounts WHERE user_id = $1 FOR UPDATE`,
+        [params.userId],
+      );
+      const currentRaw = BigInt(accountRes.rows[0]?.unclaimed_balance_raw ?? "0");
+      if (currentRaw < amountRaw) {
+        throw new Error("Insufficient unclaimed balance");
+      }
+
+      await client.query(
+        `UPDATE holder_reward_accounts
+         SET unclaimed_balance_raw = unclaimed_balance_raw - $2,
+             total_claimed_raw = total_claimed_raw + $2,
+             updated_at = now()
+         WHERE user_id = $1`,
+        [params.userId, amountRaw.toString()],
+      );
+
+      await client.query(
+        `INSERT INTO holder_reward_claims (user_id, payout_wallet, amount_raw, fee_lamports, tx_signature, fee_tx_signature)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          params.userId,
+          params.payoutWallet,
+          amountRaw.toString(),
+          HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
+          buxTxSignature,
+          params.feeSignature,
+        ],
+      );
+
+      await client.query(
+        `INSERT INTO holder_reward_used_tx_signatures (tx_signature, user_id) VALUES ($1, $2)`,
+        [params.feeSignature, params.userId],
+      );
+      await client.query(
+        `INSERT INTO holder_reward_used_tx_signatures (tx_signature, user_id) VALUES ($1, $2)`,
+        [buxTxSignature, params.userId],
+      );
+
+      await client.query(`DELETE FROM holder_reward_pending_claims WHERE user_id = $1`, [
         params.userId,
-        params.payoutWallet,
-        amountRaw.toString(),
-        HOLDER_REWARDS_CLAIM_FEE_LAMPORTS,
-        buxTxSignature,
-      ],
-    );
+      ]);
 
-    await client.query(
-      `INSERT INTO holder_reward_used_tx_signatures (tx_signature, user_id) VALUES ($1, $2)`,
-      [params.feeSignature, params.userId],
-    );
-    await client.query(
-      `INSERT INTO holder_reward_used_tx_signatures (tx_signature, user_id) VALUES ($1, $2)`,
-      [buxTxSignature, params.userId],
-    );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
 
-    await client.query(`DELETE FROM holder_reward_pending_claims WHERE user_id = $1`, [params.userId]);
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
+    return {
+      amountBux: buxRawToWholeBux(amountRaw),
+      feeTxSignature: params.feeSignature,
+      buxTxSignature,
+    };
   } finally {
+    await client.query("SELECT pg_advisory_unlock($1, $2)", [
+      CLAIM_ADVISORY_NAMESPACE,
+      userIdNum,
+    ]);
     client.release();
   }
-
-  return {
-    amountBux: buxRawToWholeBux(amountRaw),
-    feeTxSignature: params.feeSignature,
-    buxTxSignature,
-  };
 }
 
 export async function cancelPendingClaim(userId: string): Promise<void> {

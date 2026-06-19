@@ -308,8 +308,13 @@ CREATE TABLE holder_reward_claims (
   amount_raw BIGINT NOT NULL,
   fee_lamports BIGINT NOT NULL,
   tx_signature TEXT NOT NULL UNIQUE,
+  fee_tx_signature TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX idx_holder_reward_claims_fee_tx
+  ON holder_reward_claims (fee_tx_signature)
+  WHERE fee_tx_signature IS NOT NULL;
 
 CREATE INDEX idx_holder_reward_claims_user ON holder_reward_claims (user_id, created_at DESC);
 
