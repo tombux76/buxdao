@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
@@ -31,12 +31,14 @@ type PrepareClaimResult = {
   feeLamports: number;
   feeSol: number;
   resumed: boolean;
+  feePaid: boolean;
+  feeTxSignature: string | null;
 };
 
 type ClaimStep = "idle" | "ready" | "paying_fee" | "sending_bux" | "success";
 
 function formatBux(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return Math.floor(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
 function truncateAddress(address: string): string {
@@ -63,11 +65,13 @@ export function HubClaimSection() {
   const [feeTxSignature, setFeeTxSignature] = useState<string | null>(null);
   const [buxTxSignature, setBuxTxSignature] = useState<string | null>(null);
   const [claimedAmountBux, setClaimedAmountBux] = useState<number | null>(null);
+  const confirmingRef = useRef(false);
 
   const isAuthenticated = status === "authenticated" && !!session?.user;
   const walletAddress = publicKey?.toBase58() ?? "";
   const linkedAddresses = useMemo(() => new Set(wallets.map((w) => w.address)), [wallets]);
   const walletLinked = connected && walletAddress ? linkedAddresses.has(walletAddress) : false;
+  const feeAlreadyPaid = Boolean(prepareData?.feePaid || feeTxSignature);
 
   const refreshState = useCallback(async () => {
     const res = await fetch("/api/holder-rewards/state");
@@ -94,11 +98,97 @@ export function HubClaimSection() {
       .finally(() => setLoading(false));
   }, [isAuthenticated, refreshState]);
 
+  const confirmClaim = useCallback(
+    async (signature: string) => {
+      if (!walletAddress) {
+        return;
+      }
+
+      if (confirmingRef.current) {
+        return;
+      }
+      confirmingRef.current = true;
+
+      try {
+        let confirmed = false;
+        let retries = 8;
+        let waitMs = 2000;
+        let lastError = "Failed to complete claim";
+
+        while (retries > 0 && !confirmed) {
+          const confirmRes = await fetch("/api/holder-rewards/claim/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ payoutWallet: walletAddress, feeSignature: signature }),
+          });
+
+          const confirmBody = (await confirmRes.json()) as {
+            error?: string;
+            amountBux?: number;
+            buxTxSignature?: string;
+            feeTxSignature?: string;
+          };
+
+          if (confirmRes.ok) {
+            setClaimedAmountBux(confirmBody.amountBux ?? prepareData?.amountBux ?? 0);
+            setBuxTxSignature(confirmBody.buxTxSignature ?? null);
+            setFeeTxSignature(confirmBody.feeTxSignature ?? signature);
+            confirmed = true;
+            break;
+          }
+
+          lastError = confirmBody.error ?? lastError;
+          if (confirmRes.status === 202) {
+            await new Promise((r) => setTimeout(r, waitMs));
+            waitMs = Math.floor(waitMs * 1.5);
+            retries -= 1;
+            continue;
+          }
+          throw new Error(lastError);
+        }
+
+        if (!confirmed) {
+          throw new Error("Payout still processing. Wait a moment and tap Complete claim again.");
+        }
+
+        setClaimStep("success");
+        setPrepareData(null);
+        setClaimError(null);
+        const nextState = await refreshState();
+        setState(nextState);
+      } finally {
+        confirmingRef.current = false;
+      }
+    },
+    [walletAddress, prepareData?.amountBux, refreshState],
+  );
+
+  useEffect(() => {
+    if (claimStep !== "sending_bux" || !feeTxSignature) {
+      return;
+    }
+    void confirmClaim(feeTxSignature).catch((err: Error) => {
+      setClaimError(err.message);
+    });
+  }, [claimStep, feeTxSignature, confirmClaim]);
+
   const canStartClaim =
     isAuthenticated &&
     walletLinked &&
     (state?.unclaimedBalanceBux ?? 0) > 0 &&
     claimStep === "idle";
+
+  async function applyPrepareResult(prepareBody: PrepareClaimResult) {
+    setPrepareData(prepareBody);
+
+    if (prepareBody.feePaid && prepareBody.feeTxSignature) {
+      setFeeTxSignature(prepareBody.feeTxSignature);
+      setClaimStep("sending_bux");
+      return;
+    }
+
+    setClaimStep("ready");
+  }
 
   async function handleStartClaim() {
     if (!walletAddress || !sendTransaction) {
@@ -107,7 +197,6 @@ export function HubClaimSection() {
     }
 
     setClaimError(null);
-    setFeeTxSignature(null);
     setBuxTxSignature(null);
     setClaimedAmountBux(null);
 
@@ -122,43 +211,27 @@ export function HubClaimSection() {
         throw new Error(prepareBody.error ?? "Failed to prepare claim");
       }
 
-      setPrepareData(prepareBody);
-      setClaimStep("ready");
+      if (!prepareBody.feePaid) {
+        setFeeTxSignature(null);
+      }
+
+      await applyPrepareResult(prepareBody);
     } catch (err) {
       setClaimError(err instanceof Error ? err.message : "Failed to start claim");
     }
   }
 
   async function handlePayFee() {
-    if (!prepareData || !walletAddress || !sendTransaction) {
-      return;
-    }
-
-    setClaimError(null);
-
-    // Fee already sent — never broadcast a second fee tx.
-    if (feeTxSignature) {
-      setClaimStep("sending_bux");
-      try {
-        await confirmClaim(feeTxSignature);
-      } catch (err) {
-        setClaimError(
-          err instanceof Error
-            ? err.message
-            : "Could not complete $BUX payout. Use Retry below — do not pay the fee again.",
-        );
-      }
+    if (!prepareData || !walletAddress || !sendTransaction || feeAlreadyPaid) {
       return;
     }
 
     setClaimStep("paying_fee");
-
-    let signature: string | null = null;
+    setClaimError(null);
 
     try {
       const treasury = new PublicKey(prepareData.treasuryWallet);
       const from = new PublicKey(walletAddress);
-
       const blockhash = await getLatestBlockhashForWallet();
 
       const transaction = new Transaction().add(
@@ -170,37 +243,21 @@ export function HubClaimSection() {
       );
       transaction.recentBlockhash = blockhash;
 
-      signature = await sendTransaction(transaction, connection);
+      const signature = await sendTransaction(transaction, connection);
+      await fetch("/api/holder-rewards/claim/record-fee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payoutWallet: walletAddress, feeSignature: signature }),
+      });
       setFeeTxSignature(signature);
-
       setClaimStep("sending_bux");
-      await confirmClaim(signature);
     } catch (err) {
-      if (signature) {
-        setFeeTxSignature(signature);
-        setClaimStep("sending_bux");
-        setClaimError(
-          "Fee transaction sent. Do not pay again — retrying $BUX payout…",
-        );
-        try {
-          await confirmClaim(signature);
-          return;
-        } catch (confirmErr) {
-          setClaimError(
-            confirmErr instanceof Error
-              ? `${confirmErr.message} Fee tx: ${signature.slice(0, 8)}… — use Retry payout, do not pay again.`
-              : "Fee sent but payout failed. Use Retry payout — do not pay the fee again.",
-          );
-        }
-        return;
-      }
-
       setClaimStep("ready");
       setClaimError(err instanceof Error ? err.message : "Fee payment failed");
     }
   }
 
-  async function handleRetryPayout() {
+  async function handleCompleteClaim() {
     if (!feeTxSignature) {
       return;
     }
@@ -209,69 +266,14 @@ export function HubClaimSection() {
     try {
       await confirmClaim(feeTxSignature);
     } catch (err) {
-      setClaimError(
-        err instanceof Error
-          ? err.message
-          : "Payout still pending. Wait a moment and retry — do not pay the fee again.",
-      );
+      setClaimError(err instanceof Error ? err.message : "Could not complete claim");
     }
   }
 
-  async function confirmClaim(signature: string) {
-    if (!walletAddress) {
-      return;
+  async function resetClaimFlow() {
+    if (prepareData && !feeAlreadyPaid) {
+      await fetch("/api/holder-rewards/claim/cancel", { method: "POST" }).catch(() => null);
     }
-
-    let confirmed = false;
-    let retries = 5;
-    let waitMs = 2000;
-    let lastError = "Failed to complete claim";
-
-    while (retries > 0 && !confirmed) {
-      const confirmRes = await fetch("/api/holder-rewards/claim/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payoutWallet: walletAddress, feeSignature: signature }),
-      });
-
-      const confirmBody = (await confirmRes.json()) as {
-        error?: string;
-        amountBux?: number;
-        buxTxSignature?: string;
-        feeTxSignature?: string;
-      };
-
-      if (confirmRes.ok) {
-        setClaimedAmountBux(confirmBody.amountBux ?? prepareData?.amountBux ?? 0);
-        setBuxTxSignature(confirmBody.buxTxSignature ?? null);
-        setFeeTxSignature(confirmBody.feeTxSignature ?? signature);
-        confirmed = true;
-        break;
-      }
-
-      lastError = confirmBody.error ?? lastError;
-      if (confirmRes.status === 202) {
-        await new Promise((r) => setTimeout(r, waitMs));
-        waitMs = Math.floor(waitMs * 1.5);
-        retries -= 1;
-        continue;
-      }
-      throw new Error(lastError);
-    }
-
-    if (!confirmed) {
-      throw new Error(
-        "Fee received but $BUX payout is still processing. Refresh in a moment — your fee is recorded.",
-      );
-    }
-
-    setClaimStep("success");
-    setPrepareData(null);
-    const nextState = await refreshState();
-    setState(nextState);
-  }
-
-  function resetClaimFlow() {
     setClaimStep("idle");
     setPrepareData(null);
     setClaimError(null);
@@ -328,7 +330,7 @@ export function HubClaimSection() {
                   </p>
                   {feeTxSignature && (
                     <p>
-                      Step 1 (your fee):{" "}
+                      Fee:{" "}
                       <a
                         href={solscanTxUrl(feeTxSignature)}
                         target="_blank"
@@ -341,7 +343,7 @@ export function HubClaimSection() {
                   )}
                   {buxTxSignature && (
                     <p>
-                      Step 2 ($BUX payout):{" "}
+                      $BUX payout:{" "}
                       <a
                         href={solscanTxUrl(buxTxSignature)}
                         target="_blank"
@@ -354,7 +356,7 @@ export function HubClaimSection() {
                   )}
                   <button
                     type="button"
-                    onClick={resetClaimFlow}
+                    onClick={() => void resetClaimFlow()}
                     className="mt-2 text-xs text-muted underline hover:text-foreground"
                   >
                     Done
@@ -384,7 +386,7 @@ export function HubClaimSection() {
                   onClick={() => void handleStartClaim()}
                   className="w-full rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan py-3 text-sm font-semibold text-bg-deep transition enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Claim $BUX
+                  Claim {formatBux(state.unclaimedBalanceBux)} $BUX
                 </button>
               )}
 
@@ -394,73 +396,66 @@ export function HubClaimSection() {
                 prepareData && (
                   <div className="space-y-4 rounded-xl border border-border bg-bg-deep/40 p-4">
                     <div>
-                      <p className="text-sm font-medium">Two-step claim</p>
+                      <p className="text-sm font-medium">
+                        Claiming {formatBux(prepareData.amountBux)} $BUX
+                      </p>
                     </div>
 
-                    <ol className="space-y-3 text-sm">
-                      <li className="flex gap-3">
-                        <span
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            claimStep === "paying_fee" || claimStep === "sending_bux"
-                              ? "bg-accent-green text-bg-deep"
-                              : "bg-accent-purple text-white"
-                          }`}
-                        >
-                          {claimStep === "sending_bux" ? "✓" : "1"}
-                        </span>
-                        <div>
-                          <p className="font-medium">You pay the claim fee</p>
-                          <p className="text-xs text-muted">
-                            Send exactly{" "}
-                            <span className="font-mono text-foreground">{prepareData.feeSol} SOL</span> to{" "}
-                            <span className="font-mono text-foreground">
-                              {truncateAddress(prepareData.treasuryWallet)}
-                            </span>
-                            . You&apos;ll approve this in your wallet.
-                          </p>
-                        </div>
-                      </li>
-                      <li className="flex gap-3">
-                        <span
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            claimStep === "sending_bux"
-                              ? "bg-accent-purple text-white"
-                              : "bg-border text-muted"
-                          }`}
-                        >
-                          2
-                        </span>
-                        <div>
-                          <p className="font-medium">Treasury sends your $BUX</p>
-                          <p className="text-xs text-muted">
-                            Once the fee is confirmed, we transfer{" "}
-                            <span className="font-mono text-accent-gold">
-                              {formatBux(prepareData.amountBux)} $BUX
-                            </span>{" "}
-                            to{" "}
-                            <span className="font-mono text-foreground">
-                              {truncateAddress(prepareData.payoutWallet)}
-                            </span>
-                            . You don&apos;t sign this step.
-                          </p>
-                        </div>
-                      </li>
-                    </ol>
+                    {!feeAlreadyPaid && (
+                      <ol className="space-y-3 text-sm">
+                        <li className="flex gap-3">
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                              claimStep === "paying_fee" || claimStep === "sending_bux"
+                                ? "bg-accent-green text-bg-deep"
+                                : "bg-accent-purple text-white"
+                            }`}
+                          >
+                            1
+                          </span>
+                          <div>
+                            <p className="font-medium">Pay claim fee</p>
+                            <p className="text-xs text-muted">
+                              {prepareData.feeSol} SOL to{" "}
+                              {truncateAddress(prepareData.treasuryWallet)} — one-time wallet approval.
+                            </p>
+                          </div>
+                        </li>
+                        <li className="flex gap-3">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-border text-xs font-bold text-muted">
+                            2
+                          </span>
+                          <div>
+                            <p className="font-medium">Receive $BUX</p>
+                            <p className="text-xs text-muted">
+                              Treasury sends {formatBux(prepareData.amountBux)} $BUX to your wallet.
+                            </p>
+                          </div>
+                        </li>
+                      </ol>
+                    )}
+
+                    {feeAlreadyPaid && (
+                      <p className="text-sm text-muted">
+                        Fee paid. Sending {formatBux(prepareData.amountBux)} $BUX from treasury — no
+                        further wallet approval needed.
+                      </p>
+                    )}
 
                     {claimError && <p className="text-sm text-red-400">{claimError}</p>}
 
-                    {claimStep === "ready" && (
+                    {claimStep === "ready" && !feeAlreadyPaid && (
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => void handlePayFee()}
                           className="flex-1 rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan py-3 text-sm font-semibold text-bg-deep"
                         >
-                          Pay {prepareData.feeSol} SOL &amp; continue
+                          Pay {prepareData.feeSol} SOL
                         </button>
                         <button
                           type="button"
-                          onClick={resetClaimFlow}
+                          onClick={() => void resetClaimFlow()}
                           className="rounded-xl border border-border px-4 py-3 text-sm text-muted hover:border-border-strong"
                         >
                           Cancel
@@ -471,7 +466,7 @@ export function HubClaimSection() {
                     {claimStep === "paying_fee" && (
                       <div className="flex items-center gap-2 text-sm text-muted">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Waiting for wallet approval and fee confirmation…
+                        Approve the fee in your wallet…
                       </div>
                     )}
 
@@ -479,15 +474,15 @@ export function HubClaimSection() {
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 text-sm text-muted">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Sending {formatBux(prepareData.amountBux)} $BUX from treasury…
+                          Sending {formatBux(prepareData.amountBux)} $BUX…
                         </div>
-                        {feeTxSignature && claimError && (
+                        {claimError && (
                           <button
                             type="button"
-                            onClick={() => void handleRetryPayout()}
+                            onClick={() => void handleCompleteClaim()}
                             className="w-full rounded-xl border border-accent-gold/40 py-3 text-sm font-semibold text-accent-gold hover:border-accent-gold"
                           >
-                            Retry $BUX payout (fee already paid)
+                            Complete claim (no wallet needed)
                           </button>
                         )}
                       </div>

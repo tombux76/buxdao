@@ -35,6 +35,12 @@ export function buxRawToNumber(raw: bigint | string | number): number {
   return Number(n) / 10 ** BUX_DECIMALS;
 }
 
+/** Whole $BUX amounts (rewards are always integers). */
+export function buxRawToWholeBux(raw: bigint | string | number): number {
+  const n = typeof raw === "bigint" ? raw : BigInt(raw);
+  return Number(n / BigInt(10 ** BUX_DECIMALS));
+}
+
 export function buxToRaw(amountBux: number): bigint {
   return BigInt(Math.floor(amountBux * 10 ** BUX_DECIMALS));
 }

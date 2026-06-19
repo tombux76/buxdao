@@ -6,6 +6,7 @@ import {
 } from "@solana/spl-token";
 import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import bs58 from "bs58";
+import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 function loadKeypairFromSecret(secret: string): Keypair {
   if (secret.startsWith("[")) {
@@ -24,13 +25,7 @@ function loadKeypairFromSecret(secret: string): Keypair {
 }
 
 function getRpcUrl(): string {
-  return (
-    process.env.SOLANA_RPC_URL ||
-    process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
-    (process.env.HELIUS_API_KEY
-      ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY)}`
-      : "https://api.mainnet-beta.solana.com")
-  );
+  return getServerRpcUrlCandidates()[0] ?? "https://api.mainnet-beta.solana.com";
 }
 
 async function sendBuxTransferFromWallet(params: {
@@ -130,62 +125,72 @@ export async function sendTreasuryBuxRawTransfer(params: {
     throw new Error("Treasury key mismatch");
   }
 
-  const connection = new Connection(getRpcUrl(), "confirmed");
   const mint = new PublicKey(mintAddress);
   const recipient = new PublicKey(params.recipientWallet);
   const treasuryPublicKey = treasuryKeypair.publicKey;
-
-  const recipientAta = await getAssociatedTokenAddress(mint, recipient);
-  const treasuryAta = await getAssociatedTokenAddress(mint, treasuryPublicKey);
 
   if (params.amountRaw <= BigInt(0)) {
     throw new Error("Invalid transfer amount");
   }
 
-  const treasuryAccount = await getAccount(connection, treasuryAta);
-  if (treasuryAccount.amount < params.amountRaw) {
-    throw new Error("Treasury has insufficient $BUX for this claim");
+  let lastError: Error | null = null;
+  for (const rpcUrl of getServerRpcUrlCandidates()) {
+    try {
+      const connection = new Connection(rpcUrl, "confirmed");
+      const recipientAta = await getAssociatedTokenAddress(mint, recipient);
+      const treasuryAta = await getAssociatedTokenAddress(mint, treasuryPublicKey);
+
+      const treasuryAccount = await getAccount(connection, treasuryAta);
+      if (treasuryAccount.amount < params.amountRaw) {
+        throw new Error("Treasury has insufficient $BUX for this claim");
+      }
+
+      const transaction = new Transaction();
+
+      try {
+        await getAccount(connection, recipientAta);
+      } catch {
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            treasuryPublicKey,
+            recipientAta,
+            recipient,
+            mint,
+          ),
+        );
+      }
+
+      transaction.add(
+        createTransferInstruction(treasuryAta, recipientAta, treasuryPublicKey, params.amountRaw),
+      );
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = treasuryPublicKey;
+      transaction.sign(treasuryKeypair);
+
+      const signature = await connection.sendRawTransaction(transaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+      });
+
+      const confirmation = await connection.confirmTransaction(
+        { signature, blockhash, lastValidBlockHeight },
+        "confirmed",
+      );
+
+      if (confirmation.value.err) {
+        throw new Error("On-chain $BUX transfer failed");
+      }
+
+      return signature;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error("[treasury-bux-send]", rpcUrl, lastError.message);
+    }
   }
 
-  const transaction = new Transaction();
-
-  try {
-    await getAccount(connection, recipientAta);
-  } catch {
-    transaction.add(
-      createAssociatedTokenAccountInstruction(
-        treasuryPublicKey,
-        recipientAta,
-        recipient,
-        mint,
-      ),
-    );
-  }
-
-  transaction.add(
-    createTransferInstruction(treasuryAta, recipientAta, treasuryPublicKey, params.amountRaw),
-  );
-
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = treasuryPublicKey;
-  transaction.sign(treasuryKeypair);
-
-  const signature = await connection.sendRawTransaction(transaction.serialize(), {
-    skipPreflight: false,
-    preflightCommitment: "confirmed",
-  });
-
-  const confirmation = await connection.confirmTransaction(
-    { signature, blockhash, lastValidBlockHeight },
-    "confirmed",
-  );
-
-  if (confirmation.value.err) {
-    throw new Error("On-chain $BUX transfer failed");
-  }
-
-  return signature;
+  throw lastError ?? new Error("Treasury payout failed");
 }
 
 /** Casino collect / game payouts */

@@ -317,6 +317,7 @@ CREATE TABLE holder_reward_pending_claims (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   payout_wallet TEXT NOT NULL,
   amount_raw BIGINT NOT NULL,
+  fee_tx_signature TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
