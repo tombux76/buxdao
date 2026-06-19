@@ -102,9 +102,7 @@ async function buildNftCommandEmbed(
   const fields = [
     { name: "Mint", value: `\`${params.mint}\``, inline: false },
     ...(params.owner ? [{ name: "Owner", value: await formatOwnerField(params.owner), inline: true }] : []),
-    ...(howRare
-      ? [{ name: "Rank", value: `#${howRare.rank} · [HowRare.is](${howRare.link})`, inline: true }]
-      : []),
+    ...(howRare ? [{ name: "Rank", value: `#${howRare.rank}`, inline: true }] : []),
   ];
 
   return {
@@ -114,7 +112,7 @@ async function buildNftCommandEmbed(
     thumbnail: { url: collectionLogoUrl(config.logo) },
     fields,
     ...(params.image ? { image: { url: params.image } } : {}),
-    footer: { text: "BUXDAO · GraveMarket · HowRare.is" },
+    footer: { text: "BUXDAO · GraveMarket" },
   };
 }
 
