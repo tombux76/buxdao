@@ -125,7 +125,7 @@ async function fetchReactionUsers(
   for (let page = 0; page < 10; page += 1) {
     const query = after ? `?after=${after}&limit=100` : "?limit=100";
     const batch = await discordFetch<DiscordUser[]>(
-      `/channels/${channelId}/messages/${messageId}/reactions/${encoded}/users${query}`,
+      `/channels/${channelId}/messages/${messageId}/reactions/${encoded}${query}`,
     );
     users.push(...batch.filter((u) => !u.bot));
     if (batch.length < 100) {
