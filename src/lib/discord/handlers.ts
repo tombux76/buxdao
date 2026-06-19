@@ -36,7 +36,7 @@ import {
 } from "@/lib/discord/interaction-types";
 import { creditRewardAccount } from "@/lib/holder-rewards/credits";
 import { getHubUserIdByDiscordId } from "@/lib/holder-rewards/users";
-import { countNftsByCollection, getDiscordUserProfile, lookupDiscordUsernameByWallet } from "@/lib/discord/user-data";
+import { countNftsByCollection, getDiscordDisplayById, getDiscordUserProfile, lookupDiscordUsernameByWallet } from "@/lib/discord/user-data";
 import type { CollectionConfig } from "@/content/site";
 
 function isAdmin(interaction: DiscordInteraction): boolean {
@@ -367,10 +367,14 @@ async function handleAddClaim(interaction: DiscordInteraction): Promise<APIEmbed
     };
   }
 
+  const display = await getDiscordDisplayById(targetDiscordId);
+  const displayName = display.username ? `@${display.username.replace(/^@/, "")}` : "Hub user";
+
   return {
-    title: "Claim credited",
+    title: displayName,
     description: `Credited **${formatBux(amount)}** $BUX.\nNew unclaimed balance: **${formatBux(result.newBalanceBux)}** $BUX`,
     color: 0x4dff4d,
+    thumbnail: { url: display.avatarUrl },
   };
 }
 

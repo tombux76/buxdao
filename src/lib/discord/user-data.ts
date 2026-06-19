@@ -156,3 +156,51 @@ export async function lookupDiscordUsernameByWallet(wallet: string): Promise<str
     return null;
   }
 }
+
+export async function getDiscordDisplayById(discordId: string): Promise<{
+  username: string | null;
+  avatarUrl: string;
+}> {
+  const { rows } = await getPool().query<{ discord_username: string | null; discord_image: string | null }>(
+    `SELECT u.discord_username, u.discord_image
+     FROM users u
+     LEFT JOIN accounts a ON a."userId" = u.id AND a.provider = 'discord'
+     WHERE u.discord_id = $1 OR a."providerAccountId" = $1
+     LIMIT 1`,
+    [discordId],
+  );
+
+  const row = rows[0];
+  let username = row?.discord_username?.trim() || null;
+  let avatarUrl = row?.discord_image?.trim() || null;
+
+  const token = process.env.DISCORD_BOT_TOKEN?.trim();
+  if (token && (!username || !avatarUrl)) {
+    try {
+      const res = await fetch(`https://discord.com/api/v10/users/${discordId}`, {
+        headers: { Authorization: `Bot ${token}` },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const user = (await res.json()) as {
+          username?: string;
+          global_name?: string | null;
+          avatar?: string | null;
+        };
+        if (!username) {
+          username = user.global_name?.trim() || user.username?.trim() || null;
+        }
+        if (!avatarUrl && user.avatar) {
+          avatarUrl = `https://cdn.discordapp.com/avatars/${discordId}/${user.avatar}.png`;
+        }
+      }
+    } catch {
+      // fall through to defaults
+    }
+  }
+
+  return {
+    username,
+    avatarUrl: avatarUrl || (await resolveDiscordAvatarUrl(discordId, null)),
+  };
+}
