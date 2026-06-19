@@ -133,14 +133,32 @@ export function HubClaimSection() {
       return;
     }
 
-    setClaimStep("paying_fee");
     setClaimError(null);
+
+    // Fee already sent — never broadcast a second fee tx.
+    if (feeTxSignature) {
+      setClaimStep("sending_bux");
+      try {
+        await confirmClaim(feeTxSignature);
+      } catch (err) {
+        setClaimError(
+          err instanceof Error
+            ? err.message
+            : "Could not complete $BUX payout. Use Retry below — do not pay the fee again.",
+        );
+      }
+      return;
+    }
+
+    setClaimStep("paying_fee");
+
+    let signature: string | null = null;
 
     try {
       const treasury = new PublicKey(prepareData.treasuryWallet);
       const from = new PublicKey(walletAddress);
 
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
 
       const transaction = new Transaction().add(
         SystemProgram.transfer({
@@ -151,18 +169,50 @@ export function HubClaimSection() {
       );
       transaction.recentBlockhash = blockhash;
 
-      const signature = await sendTransaction(transaction, connection);
+      signature = await sendTransaction(transaction, connection);
       setFeeTxSignature(signature);
-      await connection.confirmTransaction(
-        { signature, blockhash, lastValidBlockHeight },
-        "confirmed",
-      );
 
       setClaimStep("sending_bux");
       await confirmClaim(signature);
     } catch (err) {
+      if (signature) {
+        setFeeTxSignature(signature);
+        setClaimStep("sending_bux");
+        setClaimError(
+          "Fee transaction sent. Do not pay again — retrying $BUX payout…",
+        );
+        try {
+          await confirmClaim(signature);
+          return;
+        } catch (confirmErr) {
+          setClaimError(
+            confirmErr instanceof Error
+              ? `${confirmErr.message} Fee tx: ${signature.slice(0, 8)}… — use Retry payout, do not pay again.`
+              : "Fee sent but payout failed. Use Retry payout — do not pay the fee again.",
+          );
+        }
+        return;
+      }
+
       setClaimStep("ready");
       setClaimError(err instanceof Error ? err.message : "Fee payment failed");
+    }
+  }
+
+  async function handleRetryPayout() {
+    if (!feeTxSignature) {
+      return;
+    }
+    setClaimError(null);
+    setClaimStep("sending_bux");
+    try {
+      await confirmClaim(feeTxSignature);
+    } catch (err) {
+      setClaimError(
+        err instanceof Error
+          ? err.message
+          : "Payout still pending. Wait a moment and retry — do not pay the fee again.",
+      );
     }
   }
 
@@ -425,9 +475,20 @@ export function HubClaimSection() {
                     )}
 
                     {claimStep === "sending_bux" && (
-                      <div className="flex items-center gap-2 text-sm text-muted">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Fee confirmed — sending {formatBux(prepareData.amountBux)} $BUX from treasury…
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm text-muted">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Sending {formatBux(prepareData.amountBux)} $BUX from treasury…
+                        </div>
+                        {feeTxSignature && claimError && (
+                          <button
+                            type="button"
+                            onClick={() => void handleRetryPayout()}
+                            className="w-full rounded-xl border border-accent-gold/40 py-3 text-sm font-semibold text-accent-gold hover:border-accent-gold"
+                          >
+                            Retry $BUX payout (fee already paid)
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

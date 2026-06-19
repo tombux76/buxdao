@@ -63,6 +63,7 @@ export function RewardsDashboard() {
         throw new Error("Missing claim details from server");
       }
 
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: publicKey!,
@@ -70,9 +71,9 @@ export function RewardsDashboard() {
           lamports: prepareData.feeLamports,
         }),
       );
+      transaction.recentBlockhash = blockhash;
 
       const feeSignature = await sendTransaction(transaction, connection);
-      await connection.confirmTransaction(feeSignature, "confirmed");
 
       let confirmed = false;
       let retries = 5;
