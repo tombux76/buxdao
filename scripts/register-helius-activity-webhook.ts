@@ -38,9 +38,16 @@ function getArg(flag: string): string | undefined {
 
 loadEnvFile();
 
+const HELIUS_WEBHOOKS_API = "https://mainnet.helius-rpc.com/v0/webhooks";
+
+function heliusWebhooksUrl(apiKey: string, webhookId?: string): string {
+  const url = new URL(webhookId ? `${HELIUS_WEBHOOKS_API}/${webhookId}` : HELIUS_WEBHOOKS_API);
+  url.searchParams.set("api-key", apiKey);
+  return url.toString();
+}
+
 async function listWebhooks(apiKey: string) {
-  const response = await fetch("https://api-mainnet.helius-rpc.com/v0/webhooks", {
-    headers: { Authorization: `Bearer ${apiKey}` },
+  const response = await fetch(heliusWebhooksUrl(apiKey), {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -50,10 +57,9 @@ async function listWebhooks(apiKey: string) {
 }
 
 async function createWebhook(apiKey: string, body: Record<string, unknown>) {
-  const response = await fetch("https://api-mainnet.helius-rpc.com/v0/webhooks", {
+  const response = await fetch(heliusWebhooksUrl(apiKey), {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -66,10 +72,9 @@ async function createWebhook(apiKey: string, body: Record<string, unknown>) {
 }
 
 async function updateWebhook(apiKey: string, webhookId: string, body: Record<string, unknown>) {
-  const response = await fetch(`https://api-mainnet.helius-rpc.com/v0/webhooks/${webhookId}`, {
+  const response = await fetch(heliusWebhooksUrl(apiKey, webhookId), {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
