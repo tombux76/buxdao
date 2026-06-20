@@ -60,6 +60,68 @@ function normalizeSignature(txHash: string): string {
   return txHash.trim();
 }
 
+function gravemarketItemEventToActivityEvent(
+  mint: string,
+  event: Record<string, unknown>,
+): GravemarketActivityEvent | null {
+  const eventType = typeof event.event_type === "string" ? event.event_type : undefined;
+  const txHash = typeof event.tx_hash === "string" ? event.tx_hash : undefined;
+  const eventTime = typeof event.event_time === "string" ? event.event_time : undefined;
+  if (!eventType || !txHash || !eventTime) {
+    return null;
+  }
+
+  const itemName = typeof event.item_name === "string" ? event.item_name : null;
+  const imageUrl = typeof event.image_url === "string" ? event.image_url : null;
+
+  return {
+    event_type: eventType,
+    tx_hash: txHash,
+    event_time: eventTime,
+    marketplace: typeof event.marketplace === "string" ? event.marketplace : "gravemarket",
+    from_address: typeof event.from_address === "string" ? event.from_address : null,
+    to_address: typeof event.to_address === "string" ? event.to_address : null,
+    price: typeof event.price === "number" ? event.price : null,
+    currency: typeof event.currency === "string" ? event.currency : null,
+    market_items: {
+      name: itemName,
+      image_url: imageUrl,
+      thumbnail_url: imageUrl,
+    },
+  };
+}
+
+async function fetchSupplementaryItemActivity(
+  client: NonNullable<ReturnType<typeof getGravemarketClient>>,
+  config: CollectionConfig,
+  mint: string,
+  since: Date,
+): Promise<GravemarketActivityEvent[]> {
+  try {
+    const page = await client.items.activity(mint, { limit: 10 });
+    const events: GravemarketActivityEvent[] = [];
+    for (const raw of page.data ?? []) {
+      const mapped = gravemarketItemEventToActivityEvent(mint, raw as Record<string, unknown>);
+      if (!mapped?.event_time) {
+        continue;
+      }
+      if (new Date(mapped.event_time) <= since) {
+        continue;
+      }
+      if (mapped.marketplace?.toLowerCase() !== "gravemarket") {
+        continue;
+      }
+      if (!mapEventType(mapped.event_type)) {
+        continue;
+      }
+      events.push(mapped);
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 function priceToLamports(price: number | null | undefined, currency: string | null | undefined): number | null {
   if (price == null || !Number.isFinite(price) || price <= 0) {
     return null;
@@ -82,15 +144,39 @@ async function resolveMintForEvent(
     null;
 
   const tokenNumber = parseTokenNumber(itemName);
-  if (tokenNumber != null) {
-    const indexed = await lookupNftByNumber(config.id, tokenNumber);
-    if (indexed) {
-      return {
-        mint: indexed.mint,
-        name: itemName || indexed.name,
-        image: image || indexed.image,
-      };
+  if (tokenNumber == null) {
+    return null;
+  }
+
+  const client = getGravemarketClient();
+  if (client) {
+    try {
+      const page = await client.collections.items(config.id, {
+        search: `#${tokenNumber}`,
+        limit: 10,
+      });
+      const match = (page.data ?? []).find(
+        (item) => parseTokenNumber(item.name ?? "") === tokenNumber && item.token_address,
+      );
+      if (match?.token_address) {
+        return {
+          mint: match.token_address,
+          name: itemName || match.name || `${config.name} #${tokenNumber}`,
+          image: image || match.thumbnail_url || match.image_url || null,
+        };
+      }
+    } catch {
+      // fall through to on-chain index
     }
+  }
+
+  const indexed = await lookupNftByNumber(config.id, tokenNumber);
+  if (indexed) {
+    return {
+      mint: indexed.mint,
+      name: itemName || indexed.name,
+      image: image || indexed.image,
+    };
   }
 
   return null;
@@ -190,7 +276,7 @@ export async function syncGravemarketActivity(): Promise<GravemarketActivitySync
 
     try {
       const since = new Date((await getLastGravemarketEventTime(slug)).getTime() - OVERLAP_MS);
-      let maxEventTime = since;
+      let maxProcessedEventTime = since;
 
       const page = await client.collections.activity(slug, {
         limit: PAGE_LIMIT,
@@ -205,9 +291,6 @@ export async function syncGravemarketActivity(): Promise<GravemarketActivitySync
 
       for (const event of ordered) {
         const eventTime = event.event_time ? new Date(event.event_time) : null;
-        if (eventTime && eventTime > maxEventTime) {
-          maxEventTime = eventTime;
-        }
 
         if (eventTime && eventTime <= since) {
           result.skipped += 1;
@@ -230,6 +313,14 @@ export async function syncGravemarketActivity(): Promise<GravemarketActivitySync
           const outcome = await processGravemarketEvent(config, event);
           if (outcome === "posted") {
             result.posted += 1;
+            if (eventTime && eventTime > maxProcessedEventTime) {
+              maxProcessedEventTime = eventTime;
+            }
+          } else if (outcome === "duplicate") {
+            result.skipped += 1;
+            if (eventTime && eventTime > maxProcessedEventTime) {
+              maxProcessedEventTime = eventTime;
+            }
           } else {
             result.skipped += 1;
           }
@@ -240,8 +331,63 @@ export async function syncGravemarketActivity(): Promise<GravemarketActivitySync
         }
       }
 
-      if (events.length > 0) {
-        await setLastGravemarketEventTime(slug, maxEventTime);
+      // Collection activity omits some GraveMarket delists; item activity has them.
+      const mintsToCheck = new Set<string>();
+      for (const event of ordered) {
+        const eventTime = event.event_time ? new Date(event.event_time) : null;
+        if (!eventTime || eventTime <= since) {
+          continue;
+        }
+        if (event.marketplace?.toLowerCase() !== "gravemarket") {
+          continue;
+        }
+        const resolved = await resolveMintForEvent(config, event);
+        if (resolved?.mint) {
+          mintsToCheck.add(resolved.mint);
+        }
+      }
+
+      const seenTx = new Set(
+        ordered.map((event) => (event.tx_hash ? normalizeSignature(event.tx_hash) : "")).filter(Boolean),
+      );
+
+      for (const mint of mintsToCheck) {
+        const supplementary = await fetchSupplementaryItemActivity(client, config, mint, since);
+        for (const event of supplementary) {
+          const txHash = event.tx_hash ? normalizeSignature(event.tx_hash) : "";
+          if (!txHash || seenTx.has(txHash)) {
+            continue;
+          }
+          seenTx.add(txHash);
+
+          result.eventsMatched += 1;
+          try {
+            const outcome = await processGravemarketEvent(config, event);
+            if (outcome === "posted") {
+              result.posted += 1;
+              const eventTime = event.event_time ? new Date(event.event_time) : null;
+              if (eventTime && eventTime > maxProcessedEventTime) {
+                maxProcessedEventTime = eventTime;
+              }
+            } else if (outcome === "duplicate") {
+              result.skipped += 1;
+              const eventTime = event.event_time ? new Date(event.event_time) : null;
+              if (eventTime && eventTime > maxProcessedEventTime) {
+                maxProcessedEventTime = eventTime;
+              }
+            } else {
+              result.skipped += 1;
+            }
+          } catch (error) {
+            result.errors.push(
+              `${slug}:${event.tx_hash ?? "?"}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+      }
+
+      if (maxProcessedEventTime > since) {
+        await setLastGravemarketEventTime(slug, maxProcessedEventTime);
       }
     } catch (error) {
       result.errors.push(`${slug}: ${error instanceof Error ? error.message : String(error)}`);

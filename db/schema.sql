@@ -363,4 +363,27 @@ CREATE TABLE discord_engagement_sync_state (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- NFT activity alerts (Helius webhooks + GraveMarket/GraveStake sync)
+CREATE TABLE IF NOT EXISTS nft_activity_processed (
+  signature TEXT NOT NULL,
+  mint TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (signature, mint, event_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_nft_activity_processed_created ON nft_activity_processed (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS gravemarket_activity_sync_state (
+  collection_slug TEXT PRIMARY KEY,
+  last_event_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS gravestake_activity_sync_state (
+  collection_slug TEXT PRIMARY KEY,
+  last_block_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 COMMIT;

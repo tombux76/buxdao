@@ -3,6 +3,7 @@ import { buildActivityEmbed, type NftActivityEventType } from "@/lib/discord/nft
 import { getCollectionByMint, isMarketplaceSource, isWalletToWalletTransfer } from "@/lib/nft-activity/config";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
 import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
+import { parseGravemarketEvents } from "@/lib/nft-activity/gravemarket-parser";
 import type { CollectionConfig } from "@/content/site";
 
 type HeliusNftRef = { mint?: string; tokenStandard?: string };
@@ -23,11 +24,18 @@ type HeliusTokenTransfer = {
 };
 export type HeliusEnhancedTx = {
   signature?: string;
+  feePayer?: string;
   type?: string;
   source?: string;
   description?: string;
   events?: { nft?: HeliusNftEvent };
   tokenTransfers?: HeliusTokenTransfer[];
+  instructions?: Array<{ programId?: string }>;
+  meta?: {
+    logMessages?: string[];
+    preTokenBalances?: Array<{ mint?: string }>;
+    postTokenBalances?: Array<{ mint?: string }>;
+  };
 };
 
 export type ParsedActivityEvent = {
@@ -144,6 +152,16 @@ export function parseHeliusActivityEvents(tx: HeliusEnhancedTx): ParsedActivityE
   const eventType = mapHeliusType(heliusType);
 
   if (heliusType === "TRANSFER") {
+    const gravemarket = parseGravemarketEvents(tx);
+    if (gravemarket.length > 0) {
+      return gravemarket.map((event) => ({
+        signature: event.signature,
+        mint: event.mint,
+        eventType: event.eventType,
+        marketplace: "GRAVE_MARKET",
+        seller: event.seller,
+      }));
+    }
     return parseTransfer(tx);
   }
 

@@ -34,6 +34,8 @@ export const MARKETPLACE_MONITOR_ADDRESSES = [
   /** Tensor swap + marketplace */
   "TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hYbdXZp9R8",
   "TCMPaqyCSx2KABk68Shruf4rp7CxcNi8hYbdXZp9R8",
+  /** GraveMarket (Solana Deads) */
+  "GRAVENNCLF1daKeBAHCvbD2Pw12xLMY6GGM2e4LChwcd",
 ] as const;
 
 export function getWebhookMonitorAddresses(): string[] {
