@@ -23,7 +23,7 @@ import {
   solscanWalletUrl,
 } from "@/lib/discord/embed-types";
 import { buildNftEmbed } from "@/lib/discord/nft-embed";
-import { fetchAsset } from "@/lib/discord/helius";
+import { fetchAsset, resolveAssetImage } from "@/lib/discord/helius";
 import {
   getInvokerId,
   getOptionInt,
@@ -93,7 +93,7 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
   const live = await fetchAsset(indexed.mint);
   const owner = live?.ownership?.owner ?? indexed.owner;
   const name = live?.content?.metadata?.name?.trim() || indexed.name;
-  const image = live?.content?.links?.image ?? indexed.image;
+  const image = (await resolveAssetImage(live)) ?? indexed.image;
 
   return buildNftCommandEmbed(config, {
     mint: indexed.mint,
@@ -132,7 +132,7 @@ async function handleRank(subcommand: string, rank: number): Promise<APIEmbed> {
   const live = await fetchAsset(howRare.mint);
   const owner = live?.ownership?.owner ?? null;
   const name = live?.content?.metadata?.name?.trim() || `${config.name} #${howRare.number}`;
-  const image = live?.content?.links?.image ?? null;
+  const image = await resolveAssetImage(live);
 
   return buildNftCommandEmbed(config, {
     mint: howRare.mint,

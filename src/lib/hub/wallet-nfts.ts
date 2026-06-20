@@ -2,17 +2,9 @@ import { collectionConfigs, tokenConfig, type CollectionConfig } from "@/content
 import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-const HELIUS_RPC = "https://mainnet.helius-rpc.com";
+import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
 
-type DasAsset = {
-  id?: string;
-  ownership?: { owner?: string };
-  content?: {
-    metadata?: { name?: string };
-    links?: { image?: string };
-  };
-  grouping?: { group_key?: string; group_value?: string }[];
-};
+const HELIUS_RPC = "https://mainnet.helius-rpc.com";
 
 export type HubNft = {
   mint: string;
@@ -61,7 +53,7 @@ function parseNftNumber(name: string): number | null {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-function assetToHubNft(asset: DasAsset, staked: boolean): HubNft | null {
+async function assetToHubNft(asset: DasAsset, staked: boolean): Promise<HubNft | null> {
   const mint = asset.id;
   if (!mint) {
     return null;
@@ -71,7 +63,7 @@ function assetToHubNft(asset: DasAsset, staked: boolean): HubNft | null {
     mint,
     name,
     number: parseNftNumber(name),
-    image: asset.content?.links?.image ?? null,
+    image: await resolveAssetImage(asset),
     staked,
   };
 }
@@ -226,7 +218,7 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
     if (!config) {
       continue;
     }
-    const nft = assetToHubNft(asset, false);
+    const nft = await assetToHubNft(asset, false);
     if (!nft || seenMints.has(nft.mint)) {
       continue;
     }
@@ -234,16 +226,17 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
     collections[config.id].push(nft);
   }
 
-  collectionConfigs.forEach((config, index) => {
+  for (let index = 0; index < collectionConfigs.length; index += 1) {
+    const config = collectionConfigs[index];
     for (const asset of stakedByCollection[index]) {
-      const nft = assetToHubNft(asset, true);
+      const nft = await assetToHubNft(asset, true);
       if (!nft || seenMints.has(nft.mint)) {
         continue;
       }
       seenMints.add(nft.mint);
       collections[config.id].push(nft);
     }
-  });
+  }
 
   for (const config of collectionConfigs) {
     collections[config.id] = sortNfts(collections[config.id]);

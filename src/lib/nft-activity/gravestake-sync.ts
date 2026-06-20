@@ -1,5 +1,5 @@
 import { collectionConfigs } from "@/content/site";
-import { fetchAsset } from "@/lib/discord/helius";
+import { fetchAsset, resolveAssetImage } from "@/lib/discord/helius";
 import { buildActivityEmbed } from "@/lib/discord/nft-embed";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
 import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
@@ -143,7 +143,7 @@ async function processGravestakeEvent(
 
   const live = await fetchAsset(event.mint);
   const name = live?.content?.metadata?.name?.trim() || `${config.name} NFT`;
-  const image = live?.content?.links?.image ?? null;
+  const image = await resolveAssetImage(live);
   const owner = event.eventType === "stake" ? config.stakingWallet ?? null : event.staker;
 
   const embed = await buildActivityEmbed(config, {

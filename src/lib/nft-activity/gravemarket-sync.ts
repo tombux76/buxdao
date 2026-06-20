@@ -1,6 +1,6 @@
 import { getCollectionConfig } from "@/lib/discord/config";
 import { lookupNftByNumber } from "@/lib/discord/collection-index";
-import { fetchAsset } from "@/lib/discord/helius";
+import { fetchAsset, resolveAssetImage } from "@/lib/discord/helius";
 import { buildActivityEmbed, type NftActivityEventType } from "@/lib/discord/nft-embed";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
 import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
@@ -143,7 +143,7 @@ async function processGravemarketEvent(
 
   const live = await fetchAsset(resolved.mint);
   name = live?.content?.metadata?.name?.trim() || name;
-  image = live?.content?.links?.image ?? image;
+  image = (await resolveAssetImage(live)) ?? image;
   owner = owner ?? live?.ownership?.owner ?? null;
 
   const embed = await buildActivityEmbed(config, {

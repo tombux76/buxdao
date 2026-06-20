@@ -1,4 +1,4 @@
-import { fetchAsset } from "@/lib/discord/helius";
+import { fetchAsset, resolveAssetImage } from "@/lib/discord/helius";
 import { buildActivityEmbed, type NftActivityEventType } from "@/lib/discord/nft-embed";
 import { getCollectionByMint, isMarketplaceSource, isWalletToWalletTransfer } from "@/lib/nft-activity/config";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
@@ -219,7 +219,7 @@ export async function processHeliusActivityPayload(payload: unknown): Promise<Pr
 
         const asset = await fetchAsset(event.mint);
         const name = asset?.content?.metadata?.name?.trim() || `${config.name} NFT`;
-        const image = asset?.content?.links?.image ?? null;
+        const image = await resolveAssetImage(asset);
         const owner =
           event.eventType === "transfer"
             ? event.to ?? null
