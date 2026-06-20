@@ -25,6 +25,21 @@ export function getCollectionMintAddresses(): string[] {
   return collectionConfigs.map((c) => c.collectionMint);
 }
 
+/** Helius fires when a monitored address appears in the tx — listings/sales use marketplace programs, not collection mints. */
+export const MARKETPLACE_MONITOR_ADDRESSES = [
+  /** Magic Eden v2 marketplace program */
+  "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K",
+  /** Magic Eden escrow / listed NFT token owner */
+  "1BWutmTvYPwDtmw9abTkS4Ssr8no61spGAvW1X6NDix",
+  /** Tensor swap + marketplace */
+  "TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hYbdXZp9R8",
+  "TCMPaqyCSx2KABk68Shruf4rp7CxcNi8hYbdXZp9R8",
+] as const;
+
+export function getWebhookMonitorAddresses(): string[] {
+  return [...MARKETPLACE_MONITOR_ADDRESSES];
+}
+
 const COLLECTION_BY_MINT = new Map(collectionConfigs.map((c) => [c.collectionMint, c]));
 
 export function getCollectionByMint(collectionMint: string) {

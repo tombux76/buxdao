@@ -7,8 +7,8 @@
  */
 import { readFileSync } from "node:fs";
 import {
-  getCollectionMintAddresses,
   getHeliusWebhookSecret,
+  getWebhookMonitorAddresses,
   NFT_ACTIVITY_EVENT_TYPES,
 } from "../src/lib/nft-activity/config";
 
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   const webhookURL =
     getArg("--url") ?? `${siteUrl.replace(/\/$/, "")}/api/nft-activity/webhook`;
   const secret = getHeliusWebhookSecret();
-  const accountAddresses = getCollectionMintAddresses();
+  const accountAddresses = getWebhookMonitorAddresses();
 
   const body: Record<string, unknown> = {
     webhookURL,
@@ -118,7 +118,7 @@ async function main(): Promise<void> {
     : await createWebhook(apiKey, body);
 
   console.log(JSON.stringify(result, null, 2));
-  console.log(`\nWebhook ${match ? "updated" : "created"} for ${accountAddresses.length} collections → ${webhookURL}`);
+  console.log(`\nWebhook ${match ? "updated" : "created"} for ${accountAddresses.length} monitor addresses → ${webhookURL}`);
 }
 
 main().catch((error) => {
