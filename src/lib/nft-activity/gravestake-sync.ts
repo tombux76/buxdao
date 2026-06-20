@@ -1,0 +1,210 @@
+import { collectionConfigs } from "@/content/site";
+import { fetchAsset } from "@/lib/discord/helius";
+import { buildActivityEmbed } from "@/lib/discord/nft-embed";
+import { markActivityProcessed } from "@/lib/nft-activity/dedup";
+import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
+import { parseGravestakeTransaction, type ParsedGravestakeEvent } from "@/lib/nft-activity/gravestake-parser";
+import {
+  getLastGravestakeBlockTime,
+  setLastGravestakeBlockTime,
+} from "@/lib/nft-activity/gravestake-sync-state";
+import type { CollectionConfig } from "@/content/site";
+
+const OVERLAP_SEC = 5 * 60;
+const SIGNATURE_LIMIT = 25;
+
+type SignatureInfo = {
+  signature: string;
+  blockTime: number | null;
+  err: unknown;
+};
+
+type RpcTransaction = Parameters<typeof parseGravestakeTransaction>[2];
+
+export type GravestakeActivitySyncResult = {
+  poolsPolled: number;
+  signaturesFetched: number;
+  eventsMatched: number;
+  posted: number;
+  skipped: number;
+  errors: string[];
+};
+
+function getLiveStakingCollections(): CollectionConfig[] {
+  return collectionConfigs.filter((config) => config.stakeLive && config.stakingWallet);
+}
+
+function getHeliusRpcUrl(): string {
+  const apiKey = process.env.HELIUS_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("HELIUS_API_KEY is not configured");
+  }
+  return `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(apiKey)}`;
+}
+
+async function heliusRpc<T>(method: string, params: unknown): Promise<T> {
+  const response = await fetch(getHeliusRpcUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: "1", method, params }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Helius RPC failed (${response.status})`);
+  }
+
+  const payload = (await response.json()) as { result?: T; error?: { message?: string } };
+  if (payload.error) {
+    throw new Error(payload.error.message ?? "Helius RPC error");
+  }
+
+  return payload.result as T;
+}
+
+async function fetchRecentSignatures(poolWallet: string): Promise<SignatureInfo[]> {
+  const result = await heliusRpc<SignatureInfo[] | null>("getSignaturesForAddress", [
+    poolWallet,
+    { limit: SIGNATURE_LIMIT },
+  ]);
+  return result ?? [];
+}
+
+async function fetchTransaction(signature: string): Promise<RpcTransaction | null> {
+  return heliusRpc<RpcTransaction | null>("getTransaction", [
+    signature,
+    { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
+  ]);
+}
+
+async function resolveCollectionForMint(
+  mint: string,
+  expectedCollectionMint: string,
+): Promise<boolean> {
+  const asset = await fetchAsset(mint);
+  const collectionMint = asset?.grouping?.find((group) => group.group_key === "collection")?.group_value;
+  return collectionMint === expectedCollectionMint;
+}
+
+async function processGravestakeEvent(
+  config: CollectionConfig,
+  event: ParsedGravestakeEvent,
+): Promise<"posted" | "skipped" | "duplicate"> {
+  const belongs = await resolveCollectionForMint(event.mint, config.collectionMint);
+  if (!belongs) {
+    return "skipped";
+  }
+
+  const isNew = await markActivityProcessed({
+    signature: event.signature,
+    mint: event.mint,
+    eventType: event.eventType,
+  });
+  if (!isNew) {
+    return "duplicate";
+  }
+
+  const live = await fetchAsset(event.mint);
+  const name = live?.content?.metadata?.name?.trim() || `${config.name} NFT`;
+  const image = live?.content?.links?.image ?? null;
+  const owner = event.eventType === "stake" ? config.stakingWallet ?? null : event.staker;
+
+  const embed = await buildActivityEmbed(config, {
+    mint: event.mint,
+    name,
+    image,
+    owner,
+    eventType: event.eventType,
+    staker: event.staker,
+    platform: "GraveStake",
+    signature: event.signature,
+  });
+
+  await postActivityEmbed(embed);
+  return "posted";
+}
+
+export async function syncGravestakeActivity(): Promise<GravestakeActivitySyncResult> {
+  const result: GravestakeActivitySyncResult = {
+    poolsPolled: 0,
+    signaturesFetched: 0,
+    eventsMatched: 0,
+    posted: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  const livePools = getLiveStakingCollections();
+  if (livePools.length === 0) {
+    return result;
+  }
+
+  for (const config of livePools) {
+    const poolWallet = config.stakingWallet;
+    if (!poolWallet) {
+      continue;
+    }
+
+    result.poolsPolled += 1;
+
+    try {
+      const sinceSec =
+        Math.floor((await getLastGravestakeBlockTime(config.id)).getTime() / 1000) - OVERLAP_SEC;
+      const signatures = await fetchRecentSignatures(poolWallet);
+      result.signaturesFetched += signatures.length;
+
+      let maxBlockTime = sinceSec;
+
+      const ordered = [...signatures]
+        .filter((entry) => !entry.err && entry.blockTime != null)
+        .sort((a, b) => (a.blockTime ?? 0) - (b.blockTime ?? 0));
+
+      for (const entry of ordered) {
+        const blockTime = entry.blockTime ?? 0;
+        if (blockTime > maxBlockTime) {
+          maxBlockTime = blockTime;
+        }
+
+        if (blockTime <= sinceSec) {
+          result.skipped += 1;
+          continue;
+        }
+
+        const tx = await fetchTransaction(entry.signature);
+        if (!tx) {
+          result.skipped += 1;
+          continue;
+        }
+
+        const parsed = parseGravestakeTransaction(entry.signature, blockTime, tx, poolWallet);
+        if (!parsed) {
+          result.skipped += 1;
+          continue;
+        }
+
+        result.eventsMatched += 1;
+
+        try {
+          const outcome = await processGravestakeEvent(config, parsed);
+          if (outcome === "posted") {
+            result.posted += 1;
+          } else {
+            result.skipped += 1;
+          }
+        } catch (error) {
+          result.errors.push(
+            `${config.id}:${entry.signature}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      if (ordered.length > 0) {
+        await setLastGravestakeBlockTime(config.id, new Date(maxBlockTime * 1000));
+      }
+    } catch (error) {
+      result.errors.push(`${config.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return result;
+}

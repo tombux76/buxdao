@@ -12,7 +12,14 @@ import {
 import { lookupDiscordUsernameByWallet } from "@/lib/discord/user-data";
 import type { CollectionConfig } from "@/content/site";
 
-export type NftActivityEventType = "sale" | "list" | "delist" | "transfer" | "burn";
+export type NftActivityEventType =
+  | "sale"
+  | "list"
+  | "delist"
+  | "transfer"
+  | "burn"
+  | "stake"
+  | "unstake";
 
 const EVENT_LABELS: Record<NftActivityEventType, string> = {
   sale: "Sale",
@@ -20,6 +27,8 @@ const EVENT_LABELS: Record<NftActivityEventType, string> = {
   delist: "Delisted",
   transfer: "Transfer",
   burn: "Burned",
+  stake: "Staked",
+  unstake: "Unstaked",
 };
 
 export async function formatWalletField(wallet: string): Promise<string> {
@@ -115,19 +124,25 @@ export async function buildActivityEmbed(
     priceLamports?: number | null;
     seller?: string | null;
     buyer?: string | null;
+    staker?: string | null;
     from?: string | null;
     to?: string | null;
     marketplace?: string | null;
+    platform?: string | null;
     signature: string;
   },
 ): Promise<APIEmbed> {
   const howRare = await resolveHowRareEntry(config.id, params.mint, params.howRare);
   const eventLabel = EVENT_LABELS[params.eventType];
   const marketplaceLabel = formatMarketplaceLabel(params.marketplace);
+  const platformLabel = params.platform ?? marketplaceLabel;
 
   const fields: APIEmbed["fields"] = [
     { name: "Event", value: eventLabel, inline: true },
     ...(marketplaceLabel ? [{ name: "Marketplace", value: marketplaceLabel, inline: true }] : []),
+    ...(platformLabel && !marketplaceLabel
+      ? [{ name: "Platform", value: platformLabel, inline: true }]
+      : []),
     ...(params.priceLamports != null && params.priceLamports > 0
       ? [{ name: "Price", value: `${formatSol(params.priceLamports / 1e9)} SOL`, inline: true }]
       : []),
@@ -149,6 +164,9 @@ export async function buildActivityEmbed(
   if (params.owner && params.eventType === "burn") {
     fields.push({ name: "Burned by", value: await formatWalletField(params.owner), inline: true });
   }
+  if (params.staker) {
+    fields.push({ name: "Staker", value: await formatWalletField(params.staker), inline: true });
+  }
   if (howRare) {
     fields.push({ name: "Rank", value: `#${howRare.rank}`, inline: true });
   }
@@ -159,7 +177,7 @@ export async function buildActivityEmbed(
     inline: false,
   });
 
-  const footerParts = ["BUXDAO", marketplaceLabel ?? eventLabel].filter(Boolean);
+  const footerParts = ["BUXDAO", platformLabel ?? eventLabel].filter(Boolean);
 
   return {
     title: `${eventLabel} · ${params.name}`,
