@@ -8,8 +8,6 @@ import {
 } from "@/lib/discord/config";
 import { lookupNftByNumber } from "@/lib/discord/collection-index";
 import {
-  collectionHasHowRareRanks,
-  lookupHowRareNftByMint,
   lookupNftByRankFromHowRare,
   type HowRareNft,
 } from "@/lib/discord/howrare";
@@ -19,12 +17,12 @@ import {
   collectionLogoUrl,
   formatBux,
   formatSol,
-  graveMarketNftUrl,
   hexColorToEmbed,
   hubLink,
   shortWallet,
   solscanWalletUrl,
 } from "@/lib/discord/embed-types";
+import { buildNftEmbed } from "@/lib/discord/nft-embed";
 import { fetchAsset } from "@/lib/discord/helius";
 import {
   getInvokerId,
@@ -36,7 +34,7 @@ import {
 } from "@/lib/discord/interaction-types";
 import { creditRewardAccount } from "@/lib/holder-rewards/credits";
 import { getHubUserIdByDiscordId } from "@/lib/holder-rewards/users";
-import { countNftsByCollection, getDiscordDisplayById, getDiscordUserProfile, lookupDiscordUsernameByWallet } from "@/lib/discord/user-data";
+import { countNftsByCollection, getDiscordDisplayById, getDiscordUserProfile } from "@/lib/discord/user-data";
 import type { CollectionConfig } from "@/content/site";
 
 function isAdmin(interaction: DiscordInteraction): boolean {
@@ -63,33 +61,6 @@ function collectionEmbedImage(config: { gif: string; accent: string }): Pick<API
   };
 }
 
-async function formatOwnerField(owner: string): Promise<string> {
-  const discordUsername = await lookupDiscordUsernameByWallet(owner);
-  if (discordUsername) {
-    return `@${discordUsername.replace(/^@/, "")}`;
-  }
-  const label = shortWallet(owner);
-  return `[${label}](${solscanWalletUrl(owner)})`;
-}
-
-async function resolveHowRareEntry(
-  collectionId: string,
-  mint: string,
-  known?: HowRareNft | null,
-): Promise<HowRareNft | null> {
-  if (!collectionHasHowRareRanks(collectionId)) {
-    return null;
-  }
-  if (known) {
-    return known;
-  }
-  try {
-    return await lookupHowRareNftByMint(collectionId, mint);
-  } catch {
-    return null;
-  }
-}
-
 async function buildNftCommandEmbed(
   config: CollectionConfig,
   params: {
@@ -100,22 +71,7 @@ async function buildNftCommandEmbed(
     howRare?: HowRareNft | null;
   },
 ): Promise<APIEmbed> {
-  const howRare = await resolveHowRareEntry(config.id, params.mint, params.howRare);
-  const fields = [
-    { name: "Mint", value: `\`${params.mint}\``, inline: false },
-    ...(params.owner ? [{ name: "Owner", value: await formatOwnerField(params.owner), inline: true }] : []),
-    ...(howRare ? [{ name: "Rank", value: `#${howRare.rank}`, inline: true }] : []),
-  ];
-
-  return {
-    title: params.name,
-    url: graveMarketNftUrl(params.mint),
-    color: hexColorToEmbed(config.accent),
-    thumbnail: { url: collectionLogoUrl(config.logo) },
-    fields,
-    ...(params.image ? { image: { url: params.image } } : {}),
-    footer: { text: "BUXDAO · GraveMarket" },
-  };
+  return buildNftEmbed(config, params);
 }
 
 async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed> {

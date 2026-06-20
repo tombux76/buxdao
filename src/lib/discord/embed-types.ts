@@ -32,6 +32,10 @@ export function solscanWalletUrl(wallet: string): string {
   return `https://solscan.io/account/${wallet}`;
 }
 
+export function solscanTxUrl(signature: string): string {
+  return `https://solscan.io/tx/${signature}`;
+}
+
 export function graveMarketNftUrl(mint: string): string {
   return `https://gravemarket.io/nft/${mint}`;
 }
