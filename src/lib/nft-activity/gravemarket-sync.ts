@@ -194,7 +194,6 @@ export async function syncGravemarketActivity(): Promise<GravemarketActivitySync
 
       const page = await client.collections.activity(slug, {
         limit: PAGE_LIMIT,
-        marketplace: "gravemarket",
       });
 
       const events = (page as { data?: GravemarketActivityEvent[] }).data ?? [];
