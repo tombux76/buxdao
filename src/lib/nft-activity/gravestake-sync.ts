@@ -6,12 +6,15 @@ import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
 import { parseGravestakeTransaction, type ParsedGravestakeEvent } from "@/lib/nft-activity/gravestake-parser";
 import {
   getLastGravestakeBlockTime,
+  hasGravestakeSyncState,
   setLastGravestakeBlockTime,
 } from "@/lib/nft-activity/gravestake-sync-state";
 import type { CollectionConfig } from "@/content/site";
 
 const OVERLAP_SEC = 5 * 60;
-const SIGNATURE_LIMIT = 25;
+const INCREMENTAL_SIGNATURE_LIMIT = 25;
+const BACKFILL_PAGE_SIZE = 100;
+const BACKFILL_MAX_PAGES = 200;
 
 type SignatureInfo = {
   signature: string;
@@ -62,12 +65,46 @@ async function heliusRpc<T>(method: string, params: unknown): Promise<T> {
   return payload.result as T;
 }
 
-async function fetchRecentSignatures(poolWallet: string): Promise<SignatureInfo[]> {
+async function fetchSignaturePage(
+  poolWallet: string,
+  limit: number,
+  before?: string,
+): Promise<SignatureInfo[]> {
+  const options: { limit: number; before?: string } = { limit };
+  if (before) {
+    options.before = before;
+  }
+
   const result = await heliusRpc<SignatureInfo[] | null>("getSignaturesForAddress", [
     poolWallet,
-    { limit: SIGNATURE_LIMIT },
+    options,
   ]);
   return result ?? [];
+}
+
+async function fetchIncrementalSignatures(poolWallet: string): Promise<SignatureInfo[]> {
+  return fetchSignaturePage(poolWallet, INCREMENTAL_SIGNATURE_LIMIT);
+}
+
+async function fetchAllSignatures(poolWallet: string): Promise<SignatureInfo[]> {
+  const all: SignatureInfo[] = [];
+  let before: string | undefined;
+
+  for (let page = 0; page < BACKFILL_MAX_PAGES; page += 1) {
+    const batch = await fetchSignaturePage(poolWallet, BACKFILL_PAGE_SIZE, before);
+    if (batch.length === 0) {
+      break;
+    }
+
+    all.push(...batch);
+    before = batch[batch.length - 1]?.signature;
+
+    if (batch.length < BACKFILL_PAGE_SIZE || !before) {
+      break;
+    }
+  }
+
+  return all;
 }
 
 async function fetchTransaction(signature: string): Promise<RpcTransaction | null> {
@@ -148,16 +185,20 @@ export async function syncGravestakeActivity(): Promise<GravestakeActivitySyncRe
     result.poolsPolled += 1;
 
     try {
+      const isBackfill = !(await hasGravestakeSyncState(config.id));
       const sinceSec =
-        Math.floor((await getLastGravestakeBlockTime(config.id)).getTime() / 1000) - OVERLAP_SEC;
-      const signatures = await fetchRecentSignatures(poolWallet);
+        Math.floor((await getLastGravestakeBlockTime(config.id)).getTime() / 1000) -
+        (isBackfill ? 0 : OVERLAP_SEC);
+      const signatures = isBackfill
+        ? await fetchAllSignatures(poolWallet)
+        : await fetchIncrementalSignatures(poolWallet);
       result.signaturesFetched += signatures.length;
-
-      let maxBlockTime = sinceSec;
 
       const ordered = [...signatures]
         .filter((entry) => !entry.err && entry.blockTime != null)
         .sort((a, b) => (a.blockTime ?? 0) - (b.blockTime ?? 0));
+
+      let maxBlockTime = sinceSec;
 
       for (const entry of ordered) {
         const blockTime = entry.blockTime ?? 0;
@@ -198,6 +239,7 @@ export async function syncGravestakeActivity(): Promise<GravestakeActivitySyncRe
         }
       }
 
+      // Backfill only marks the pool caught up after a full pass (dedup prevents reposts on retry).
       if (ordered.length > 0) {
         await setLastGravestakeBlockTime(config.id, new Date(maxBlockTime * 1000));
       }
