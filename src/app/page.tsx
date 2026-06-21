@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
+import { HeroActions } from "@/components/home/HeroActions";
 import { HeroTitle } from "@/components/home/HeroTitle";
 import { LiveProductStrip } from "@/components/ui/LiveProductStrip";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -13,13 +14,7 @@ export default function HomePage() {
       <section className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-12">
         <div className="order-2 lg:order-1">
           <HeroTitle title={hero.title} subtitle={hero.subtitle} />
-          <Link
-            href="/hub"
-            className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan px-5 py-2.5 text-sm font-semibold text-bg-deep"
-          >
-            Open Holder Hub
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <HeroActions />
         </div>
         <div className="order-1 lg:order-2">
           <HeroCarousel />

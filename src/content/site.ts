@@ -345,6 +345,65 @@ export const hubContent = {
   note: "Connect Discord to activate your profile. Wallet linking and holdings view coming next.",
 };
 
+/** Copy for Discord engagement rewards — keep in sync with `discord-engagement-config.ts`. */
+export const discordEngagement = {
+  modalTitle: "Engage to earn $BUX",
+  intro:
+    "Earn $BUX by participating in the BUXDAO Discord. Credits land in your Holder Hub claim balance — separate from GraveStake staking.",
+  eligibility: {
+    title: "Who qualifies",
+    items: [
+      "Log into the Holder Hub with Discord.",
+      "Link at least one Solana wallet on your Hub profile.",
+      "Use the same Discord account in our server.",
+    ],
+  },
+  rewards: {
+    title: "Rewards",
+    items: [
+      {
+        label: "Messages",
+        amount: "1 $BUX",
+        detail: "Per qualifying message in eligible channels (min. 10 characters).",
+      },
+      {
+        label: "Reactions",
+        amount: "2 $BUX",
+        detail: "Per reaction on a post in #announcements (once per announcement per user).",
+      },
+    ],
+    limits: [
+      "Up to 50 message rewards per day.",
+      "5-minute cooldown between message rewards.",
+      "Daily totals reset at midnight US Eastern.",
+    ],
+  },
+  channels: {
+    title: "Eligible channels",
+    items: [
+      {
+        label: "Messages",
+        detail: "Any public text channel in the BUXDAO Discord — chat, announcements, and forum channels.",
+      },
+      {
+        label: "Reactions",
+        detail: "#announcements only.",
+      },
+    ],
+  },
+  claim: {
+    title: "Claim account & payout",
+    items: [
+      "One claim balance per Hub profile — not per wallet.",
+      "Engagement credits sync automatically from Discord (usually within a few minutes).",
+      "Open Holder Hub → Claim rewards to withdraw your unclaimed $BUX.",
+      "Connect a wallet that is linked on your Hub profile, approve a small SOL platform fee, then sign to receive $BUX to that wallet.",
+      "Admin bonus credits may also appear in the same balance.",
+    ],
+  },
+  cta: "Open Holder Hub to claim",
+} as const;
+
 export const buxPage = {
   headline: "$BUX — tokenomics kept simple",
   principles: [
