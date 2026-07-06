@@ -2,6 +2,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { tokenConfig } from "@/content/site";
 import { getSolPrice } from "@/lib/sol-price";
 import { buildRawHolders, isNonPublicSupplyWallet, type RawHolder } from "@/lib/bux/helius-holders";
+import { getHeliusRpcUrlCandidates, hasHeliusApiKey } from "@/lib/helius-rpc";
 
 export type TokenMetrics = {
   totalSupply: number;
@@ -16,9 +17,8 @@ export type TokenMetrics = {
 async function fetchLiquidityPoolSol(): Promise<number> {
   const rpcUrl =
     process.env.SOLANA_RPC_URL ||
-    (process.env.HELIUS_API_KEY
-      ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
-      : "https://api.mainnet-beta.solana.com");
+    getHeliusRpcUrlCandidates()[0] ||
+    "https://api.mainnet-beta.solana.com";
 
   let onChainSol = 0;
   try {
@@ -34,7 +34,7 @@ async function fetchLiquidityPoolSol(): Promise<number> {
 
 export async function fetchTokenMetrics(holdersInput?: RawHolder[]): Promise<TokenMetrics | null> {
   const holders = holdersInput ?? (await buildRawHolders());
-  if (holders.length === 0 && !process.env.HELIUS_API_KEY) {
+  if (holders.length === 0 && !hasHeliusApiKey()) {
     return null;
   }
 

@@ -1,36 +1,7 @@
 import { tokenConfig } from "@/content/site";
+import { getHeliusRpcUrlCandidates, heliusRpc } from "@/lib/helius-rpc";
 
-const HELIUS_RPC = "https://mainnet.helius-rpc.com";
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-
-async function heliusRpc<T>(method: string, params: unknown): Promise<T | null> {
-  const apiKey = process.env.HELIUS_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-
-  try {
-    const response = await fetch(`${HELIUS_RPC}/?api-key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "1", method, params }),
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      return null;
-    }
-    const payload = (await response.json()) as { result?: T };
-    return payload.result ?? null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 /** Whole $BUX balance for a wallet (9 decimals). */
 export async function fetchCasinoBuxBalance(wallet: string): Promise<number> {
@@ -49,6 +20,7 @@ export async function fetchCasinoBuxBalance(wallet: string): Promise<number> {
         ],
       },
     ],
+    { softFail: true, timeoutMs: 30_000 },
   );
 
   if (!result?.length) {
@@ -76,8 +48,9 @@ export async function fetchCasinoBuxBalance(wallet: string): Promise<number> {
 
 /** Server-side RPC (may include Helius API key). Never expose to the browser. */
 export function getCasinoRpcUrl(): string {
-  if (process.env.HELIUS_API_KEY?.trim()) {
-    return `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY.trim())}`;
+  const heliusUrls = getHeliusRpcUrlCandidates();
+  if (heliusUrls.length > 0) {
+    return heliusUrls[0]!;
   }
   return getPublicCasinoRpcUrl();
 }

@@ -1,5 +1,6 @@
 import { collectionConfigs } from "@/content/site";
 import { fetchAsset, resolveAssetImage } from "@/lib/discord/helius";
+import { heliusRpc } from "@/lib/helius-rpc";
 import { buildActivityEmbed } from "@/lib/discord/nft-embed";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
 import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
@@ -37,32 +38,9 @@ function getLiveStakingCollections(): CollectionConfig[] {
   return collectionConfigs.filter((config) => config.stakeLive && config.stakingWallet);
 }
 
-function getHeliusRpcUrl(): string {
-  const apiKey = process.env.HELIUS_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("HELIUS_API_KEY is not configured");
-  }
-  return `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(apiKey)}`;
-}
-
-async function heliusRpc<T>(method: string, params: unknown): Promise<T> {
-  const response = await fetch(getHeliusRpcUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "1", method, params }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Helius RPC failed (${response.status})`);
-  }
-
-  const payload = (await response.json()) as { result?: T; error?: { message?: string } };
-  if (payload.error) {
-    throw new Error(payload.error.message ?? "Helius RPC error");
-  }
-
-  return payload.result as T;
+async function heliusRpcStrict<T>(method: string, params: unknown): Promise<T> {
+  const result = await heliusRpc<T>(method, params);
+  return result as T;
 }
 
 async function fetchSignaturePage(
@@ -75,7 +53,7 @@ async function fetchSignaturePage(
     options.before = before;
   }
 
-  const result = await heliusRpc<SignatureInfo[] | null>("getSignaturesForAddress", [
+  const result = await heliusRpcStrict<SignatureInfo[] | null>("getSignaturesForAddress", [
     poolWallet,
     options,
   ]);
@@ -108,7 +86,7 @@ async function fetchAllSignatures(poolWallet: string): Promise<SignatureInfo[]> 
 }
 
 async function fetchTransaction(signature: string): Promise<RpcTransaction | null> {
-  return heliusRpc<RpcTransaction | null>("getTransaction", [
+  return heliusRpcStrict<RpcTransaction | null>("getTransaction", [
     signature,
     { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
   ]);

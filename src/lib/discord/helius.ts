@@ -85,37 +85,7 @@ export async function resolveAssetImage(asset: DasAsset | null | undefined): Pro
   return fetchMetadataImage(jsonUri);
 }
 
-const HELIUS_RPC = "https://mainnet.helius-rpc.com";
-
-export async function heliusRpc<T>(method: string, params: unknown): Promise<T | null> {
-  const apiKey = process.env.HELIUS_API_KEY;
-  if (!apiKey) {
-    throw new Error("HELIUS_API_KEY is not configured");
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-
-  try {
-    const response = await fetch(`${HELIUS_RPC}/?api-key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "1", method, params }),
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      throw new Error(`Helius RPC failed (${response.status})`);
-    }
-    const payload = (await response.json()) as { result?: T; error?: { message?: string } };
-    if (payload.error) {
-      throw new Error(payload.error.message ?? "Helius RPC error");
-    }
-    return payload.result ?? null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+import { heliusRpc } from "@/lib/helius-rpc";
 
 export async function fetchAsset(mint: string): Promise<DasAsset | null> {
   return heliusRpc<DasAsset>("getAsset", { id: mint });

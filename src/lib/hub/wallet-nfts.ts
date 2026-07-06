@@ -3,8 +3,7 @@ import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
-
-const HELIUS_RPC = "https://mainnet.helius-rpc.com";
+import { heliusRpc, hasHeliusApiKey } from "@/lib/helius-rpc";
 
 export type HubNft = {
   mint: string;
@@ -19,33 +18,11 @@ export type HubWalletHoldings = {
   collections: Record<string, HubNft[]>;
 };
 
-async function heliusRpc<T>(method: string, params: unknown): Promise<T | null> {
-  const apiKey = process.env.HELIUS_API_KEY;
-  if (!apiKey) {
+async function heliusRpcSoft<T>(method: string, params: unknown): Promise<T | null> {
+  if (!hasHeliusApiKey()) {
     return null;
   }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-
-  try {
-    const response = await fetch(`${HELIUS_RPC}/?api-key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "1", method, params }),
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      return null;
-    }
-    const payload = (await response.json()) as { result?: T };
-    return payload.result ?? null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 30_000 });
 }
 
 function parseNftNumber(name: string): number | null {
@@ -78,7 +55,7 @@ async function fetchAssetsByOwner(wallet: string): Promise<DasAsset[]> {
   let page = 1;
 
   while (page <= 20) {
-    const result = await heliusRpc<{ items?: DasAsset[]; total?: number }>("getAssetsByOwner", {
+    const result = await heliusRpcSoft<{ items?: DasAsset[]; total?: number }>("getAssetsByOwner", {
       ownerAddress: wallet,
       page,
       limit: 1000,
@@ -117,7 +94,7 @@ async function fetchStakedNftsForWallet(
   let page = 1;
 
   while (page <= 50) {
-    const result = await heliusRpc<{ items?: DasAsset[] }>("getAssetsByGroup", {
+    const result = await heliusRpcSoft<{ items?: DasAsset[] }>("getAssetsByGroup", {
       groupKey: "collection",
       groupValue: config.collectionMint,
       page,
@@ -155,7 +132,7 @@ function sortNfts(nfts: HubNft[]): HubNft[] {
 
 async function fetchBuxBalance(wallet: string): Promise<number> {
   const mint = tokenConfig.mint;
-  const result = await heliusRpc<{ account: { data: string | [string, string] } }[]>(
+  const result = await heliusRpcSoft<{ account: { data: string | [string, string] } }[]>(
     "getProgramAccounts",
     [
       TOKEN_PROGRAM_ID.toBase58(),

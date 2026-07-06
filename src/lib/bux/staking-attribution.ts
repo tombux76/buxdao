@@ -1,4 +1,5 @@
-const HELIUS_API = "https://api.helius.xyz/v0";
+import { hasHeliusApiKey, heliusRestFetch } from "@/lib/helius-rpc";
+
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 type HeliusTransfer = {
@@ -24,35 +25,35 @@ export async function fetchStakingDepositors(stakingWallet: string): Promise<Map
     return cached.map;
   }
 
-  const apiKey = process.env.HELIUS_API_KEY;
   const depositors = new Map<string, string>();
-  if (!apiKey) {
+  if (!hasHeliusApiKey()) {
     return depositors;
   }
 
   let before: string | undefined;
   for (let page = 0; page < 30; page++) {
-    const url = new URL(`${HELIUS_API}/addresses/${stakingWallet}/transactions`);
-    url.searchParams.set("api-key", apiKey);
-    url.searchParams.set("limit", "100");
-    if (before) {
-      url.searchParams.set("before", before);
-    }
+    const response = await heliusRestFetch(
+      `/v0/addresses/${stakingWallet}/transactions`,
+      {},
+      {
+        searchParams: {
+          limit: "100",
+          before,
+        },
+        timeoutMs: 20_000,
+        softFail: true,
+      },
+    );
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
+    if (!response.ok) {
+      break;
+    }
 
     let txs: HeliusParsedTx[];
     try {
-      const response = await fetch(url.toString(), { signal: controller.signal, cache: "no-store" });
-      if (!response.ok) {
-        break;
-      }
       txs = (await response.json()) as HeliusParsedTx[];
     } catch {
       break;
-    } finally {
-      clearTimeout(timeout);
     }
 
     if (!Array.isArray(txs) || txs.length === 0) {

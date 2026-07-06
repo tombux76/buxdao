@@ -1,3 +1,5 @@
+import { getHeliusRpcUrlCandidates } from "@/lib/helius-rpc";
+
 function addUnique(urls: string[], url: string | undefined): void {
   const trimmed = url?.trim();
   if (trimmed && !urls.includes(trimmed)) {
@@ -13,12 +15,8 @@ export function getServerRpcUrlCandidates(): string[] {
   // Still usable server-side if it was previously set for the browser.
   addUnique(urls, process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
 
-  const heliusKey = process.env.HELIUS_API_KEY?.trim();
-  if (heliusKey) {
-    addUnique(
-      urls,
-      `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusKey)}`,
-    );
+  for (const heliusUrl of getHeliusRpcUrlCandidates()) {
+    addUnique(urls, heliusUrl);
   }
 
   addUnique(urls, "https://api.mainnet-beta.solana.com");

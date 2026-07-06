@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchHubWalletHoldings } from "@/lib/hub/wallet-nfts";
 import { fetchTokenMetrics } from "@/lib/bux/metrics";
+import { hasHeliusApiKey } from "@/lib/helius-rpc";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "wallet query param required" }, { status: 400 });
   }
 
-  if (!process.env.HELIUS_API_KEY) {
+  if (!hasHeliusApiKey()) {
     return NextResponse.json({ error: "Helius not configured" }, { status: 503 });
   }
 

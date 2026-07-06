@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { runDailyAccrual } from "@/lib/holder-rewards/accrual";
 import { getRewardDateEt } from "@/lib/holder-rewards/dates";
+import { hasHeliusApiKey } from "@/lib/helius-rpc";
 
 function loadEnvFile(path = ".env") {
   try {
@@ -44,8 +45,8 @@ if (!process.env.POSTGRES_URL) {
   console.error("POSTGRES_URL is required");
   process.exit(1);
 }
-if (!process.env.HELIUS_API_KEY) {
-  console.error("HELIUS_API_KEY is required");
+if (!hasHeliusApiKey()) {
+  console.error("HELIUS_API_KEY (or HELIUS_API_KEY_2) is required");
   process.exit(1);
 }
 
