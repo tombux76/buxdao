@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 
 type DiscordAuthButtonProps = {
@@ -36,10 +37,15 @@ export function DiscordAuthButton({
   callbackUrl = "/hub",
 }: DiscordAuthButtonProps) {
   const { data: session, status } = useSession();
+  const [mounted, setMounted] = useState(false);
 
-  if (status === "loading") {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || status === "loading") {
     return (
-      <button type="button" disabled className={`${className} opacity-60`}>
+      <button type="button" disabled className={`${className} opacity-60`} aria-busy="true">
         {profile ? "Loading…" : compact ? "…" : "Loading…"}
       </button>
     );
