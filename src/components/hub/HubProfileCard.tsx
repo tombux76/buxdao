@@ -11,10 +11,12 @@ export function HubProfileCard() {
 
   if (!isAuthenticated) {
     return (
-      <p className="text-sm text-muted">
-        Use the steps above to connect your accounts. Your holdings, roles, and $BUX cashout value
-        will appear here once you&apos;re set up.
-      </p>
+      <div className="rounded-xl border border-dashed border-border bg-bg-deep/30 p-4">
+        <p className="text-sm text-muted">
+          Your profile appears here after Discord login. Holdings, roles, claim balance, and cashout
+          unlock as you connect and verify.
+        </p>
+      </div>
     );
   }
 

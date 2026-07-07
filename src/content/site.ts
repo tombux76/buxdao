@@ -21,13 +21,13 @@ export const site = {
 } as const;
 
 export const tokenConfig = {
+  name: "$BUX",
   mint: "AaKrMsZkuAdJL6TKZbj7X1VaH5qWioL7oDHagQZa1w59",
-  communityWallet: "3WNHW6sr1sQdbRjovhPrxgEJdWASZ43egGWMMNrhgoRR",
-  /** Added to on-chain community wallet balance for cashout pool display */
-  liquidityOffsetSol: 33.25,
+  /** SOL liquidity wallet — royalties, project funds, cashout pool */
+  communityWallet: "DvDj1YAg4aM2xxXhLtXE9kheuUDhLRuaR6TWcUVEBN66",
   exemptWallets: [
+    /** BUX treasury */
     "FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75",
-    "7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR",
     /** Magic Eden V2 authority / escrow — not a community holder */
     "1BWutmTvYPwDtmw9abTkS4Ssr8no61spGAvW1X6NDix",
   ],
@@ -119,7 +119,8 @@ export const collectionConfigs: CollectionConfig[] = [
     gif: "/gifs/mm.gif",
     graveMarketUrl: "https://gravemarket.io/collection/money-monsters",
     graveStakeUrl: "https://gravestake.io/p/money-monsters",
-    stakeLive: false,
+    stakeLive: true,
+    stakingWallet: "AbRPmEHSAubSktYYeuqdXXsnbww1VrzZogkhQgw5iDa7",
     dailyBuxYield: 5,
   },
   {
@@ -333,7 +334,7 @@ export const merchContent = {
 
 export const hubContent = {
   title: "Holder Hub",
-  subtitle: "Connect Discord, X, and your wallets to view holdings, roles, and $BUX cashout value.",
+  subtitle: "Connect Discord, link wallets, and manage $BUX — view holdings, claim rewards, and cash out to SOL.",
   verifyBanner:
     "Verify in Discord to receive holder roles — use the verify button in our server after connecting your wallet.",
   steps: [
@@ -342,7 +343,7 @@ export const hubContent = {
     { step: 3, title: "Connect wallet(s)", body: "Add one or more Solana wallets to view NFT holdings." },
     { step: 4, title: "Verify in Discord", body: "Use the GraveKeeper verify embed in our Discord server for holder roles." },
   ],
-  note: "Connect Discord to activate your profile. Wallet linking and holdings view coming next.",
+  note: "Log in with Discord to unlock your profile, holdings, and cashout.",
 };
 
 /** Copy for Discord engagement rewards — keep in sync with `discord-engagement-config.ts`. */
@@ -404,32 +405,65 @@ export const discordEngagement = {
   cta: "Open Holder Hub to claim",
 } as const;
 
+/** Holder Hub $BUX → SOL cashout — keep fee/limits in sync with `src/lib/cashout/config.ts`. */
+export const cashoutContent = {
+  title: "Cash out $BUX",
+  intro:
+    "Exchange $BUX for SOL at the live token rate from our liquidity pool. Fees stay in the pool to support the token.",
+  howItWorks: {
+    title: "How it works",
+    steps: [
+      "You send $BUX to the liquidity wallet (sign an SPL transfer in your wallet).",
+      "Net SOL is paid automatically to your linked payout wallet.",
+    ],
+  },
+  requirements: {
+    title: "Gated to holders",
+    items: [
+      "Log into Holder Hub with Discord.",
+      "Link the Solana wallet you want SOL paid to.",
+      "Hold at least one NFT from any BUXDAO collection in a linked wallet (on-chain check).",
+    ],
+  },
+  perks: {
+    title: "Holder perks",
+  },
+  ctaLoggedOut: "Log in with Discord to check your fee tier, limits, and cash out.",
+  ctaNeedWallet: "Connect and link a wallet to cash out.",
+} as const;
+
 export const buxPage = {
-  headline: "$BUX — tokenomics kept simple",
+  headline: "$BUX — backed by our liquidity wallet",
+  liquidityLabel: "Liquidity wallet balance",
   principles: [
-    "Our token is not tradable on coin exchanges — earn $BUX through staking and ecosystem participation.",
-    "Value is tied to our community liquidity pool, not external pump-and-dump traders.",
-    "$BUX can be cashed out for SOL from our private liquidity pool (cashout launching soon).",
-    "The BUX team works voluntarily so revenue can be added to the liquidity pool.",
+    "Our token is not tradable on coin exchanges — earn $BUX through GraveStake, Discord engagement, and ecosystem participation.",
+    "Value is tied to SOL in our liquidity wallet divided by public $BUX supply (including unclaimed rewards).",
+    "Cashout fees flow straight back into the wallet so the pool stays sustainable.",
   ],
+  supplyBreakdownNote:
+    "Exempt supply is $BUX held in the BUX treasury and the five collection staking pool wallets. Unclaimed rewards count toward public supply for token value.",
   revenueSources: [
     {
-      title: "NFT Sales Royalties",
-      description: "8% of all 5 main collection NFT sales (providing royalties are paid).",
+      title: "Collection royalties",
+      description: "8% on secondary sales across all 5 main collections — paid to the liquidity wallet.",
+    },
+    {
+      title: "BUX Casino",
+      description: "0.002 SOL from every casino transaction.",
     },
     {
       title: "Slotto.gg",
-      description: "2% of all monthly lottery ticket sales.",
+      description: "2% of all Solana ticket sales on Slotto.gg.",
     },
     {
-      title: "Casino & raffles",
-      description: "Micro fees from BUX Casino games and on-site raffles.",
-    },
-    {
-      title: "Services",
-      description: "Profits from dev and artwork produced for other projects.",
+      title: "Partner sites",
+      description: "0.0005 SOL from transactions on other sites we built.",
     },
   ],
+  revenueHighlight: {
+    title: "Celeb Catz mint (soon)",
+    description: "50 new celebs to mint — proceeds added to the wallet (~25 SOL expected).",
+  },
   leaderboardNote: "Listed NFTs are not included in holder counts.",
   leaderboardFilters: [
     { value: "bux,nfts", label: "BUX + NFTs" },

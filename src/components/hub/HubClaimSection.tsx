@@ -5,8 +5,10 @@ import { useSession } from "next-auth/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { CheckCircle2, Loader2 } from "lucide-react";
+import { DiscordLoginButton } from "@/components/hub/ProfileConnectActions";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
+import { discordEngagement } from "@/content/site";
 
 type ClaimRewardState = {
   unclaimedBalanceBux: number;
@@ -283,7 +285,26 @@ export function HubClaimSection() {
   }
 
   if (!isAuthenticated) {
-    return null;
+    return (
+      <div className="tile-border space-y-4 rounded-xl bg-bg-deep/50 p-4 sm:p-5">
+        <div>
+          <p className="text-xs uppercase text-muted">Claim rewards</p>
+          <p className="mt-1 text-sm text-muted">{discordEngagement.intro}</p>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-bg-deep/30 p-4 text-sm text-muted">
+          <p className="font-medium text-foreground">{discordEngagement.eligibility.title}</p>
+          <ul className="mt-2 space-y-1.5">
+            {discordEngagement.eligibility.items.map((item) => (
+              <li key={item} className="flex gap-2">
+                <span className="text-accent-purple">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <DiscordLoginButton fullWidth />
+      </div>
+    );
   }
 
   return (

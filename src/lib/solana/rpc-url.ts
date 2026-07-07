@@ -12,8 +12,6 @@ export function getServerRpcUrlCandidates(): string[] {
   const urls: string[] = [];
 
   addUnique(urls, process.env.SOLANA_RPC_URL);
-  // Still usable server-side if it was previously set for the browser.
-  addUnique(urls, process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
 
   for (const heliusUrl of getHeliusRpcUrlCandidates()) {
     addUnique(urls, heliusUrl);

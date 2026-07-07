@@ -12,6 +12,8 @@ See **[docs/staking-and-holders.md](./docs/staking-and-holders.md)** before enab
 
 **Discord slash commands** — Interactions webhook at `/api/discord/interactions`. **[docs/discord-slash-commands.md](./docs/discord-slash-commands.md)**.
 
+**Discord live stats channels** — Locked voice channels renamed by cron. **[docs/discord-stats-channels.md](./docs/discord-stats-channels.md)**.
+
 ## Database
 
 Unified Postgres schema (auth, wallets, merch, casino): **[docs/database.md](./docs/database.md)**. Apply with `npm run db:schema`.

@@ -45,6 +45,24 @@ export async function getRewardAccount(userId: string): Promise<HolderRewardAcco
   };
 }
 
+/** Sum of all Hub users' unclaimed Discord engagement / admin credits ($BUX). */
+export async function getTotalUnclaimedDiscordBux(): Promise<number> {
+  if (!process.env.POSTGRES_URL) {
+    return 0;
+  }
+
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query<{ total_raw: string | null }>(
+      `SELECT COALESCE(SUM(unclaimed_balance_raw), 0)::text AS total_raw FROM holder_reward_accounts`,
+    );
+    const totalRaw = BigInt(rows[0]?.total_raw ?? "0");
+    return buxRawToNumber(totalRaw);
+  } catch {
+    return 0;
+  }
+}
+
 export async function resetAllRewardBalances(): Promise<number> {
   const pool = getPool();
   const { rowCount } = await pool.query(

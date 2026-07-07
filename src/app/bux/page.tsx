@@ -7,9 +7,13 @@ import { buxPage, tokenConfig } from "@/content/site";
 
 type TokenMetrics = {
   totalSupply: number;
+  heldPublicSupply: number;
   publicSupply: number;
   exemptSupply: number;
-  liquidityPool: number;
+  unclaimedStakingRewards: number;
+  unclaimedDiscordRewards: number;
+  walletBalanceSol: number;
+  liquidityWallet: string;
   solPrice: number;
   tokenValue: number;
   tokenValueUsd: number;
@@ -35,6 +39,17 @@ function formatSol(value: number): string {
   return value.toFixed(2);
 }
 
+
+function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div>
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className="mt-1 font-mono text-lg">{value}</dd>
+      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
+    </div>
+  );
+}
+
 export default function BuxPage() {
   const [viewType, setViewType] = useState("bux,nfts");
   const [collection, setCollection] = useState("all");
@@ -42,6 +57,8 @@ export default function BuxPage() {
   const [holders, setHolders] = useState<HolderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const liquidityWallet = metrics?.liquidityWallet ?? tokenConfig.communityWallet;
 
   useEffect(() => {
     setLoading(true);
@@ -68,7 +85,92 @@ export default function BuxPage() {
     <div className="space-y-12">
       <section>
         <h1 className="text-3xl font-bold md:text-4xl">{buxPage.headline}</h1>
-        <Card className="mt-6 space-y-4 p-5">
+
+        <Card glow="gold" className="mt-6 overflow-hidden p-0">
+          <div className="grid lg:grid-cols-2">
+            <div className="border-b border-border/50 p-6 md:p-8 lg:border-b-0 lg:border-r">
+              <p className="text-2xl font-bold text-accent-gold">{tokenConfig.name}</p>
+              <a
+                href={`https://solscan.io/token/${tokenConfig.mint}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block break-all font-mono text-xs text-accent-cyan hover:underline"
+                title={tokenConfig.mint}
+              >
+                {tokenConfig.mint}
+              </a>
+
+              <p className="mt-6 text-sm uppercase tracking-wide text-muted">{buxPage.liquidityLabel}</p>
+              <p className="mt-2 font-mono text-4xl font-bold text-accent-gold md:text-5xl">
+                {metrics ? `${formatSol(metrics.walletBalanceSol)} SOL` : loading ? "…" : "—"}
+              </p>
+              {metrics && metrics.solPrice > 0 ? (
+                <p className="mt-2 font-mono text-sm text-muted">
+                  ≈ $
+                  {(metrics.walletBalanceSol * metrics.solPrice).toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  USD
+                </p>
+              ) : null}
+              <a
+                href={`https://solscan.io/account/${liquidityWallet}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-block break-all font-mono text-sm text-muted hover:text-accent-cyan hover:underline"
+                title={liquidityWallet}
+              >
+                {liquidityWallet}
+              </a>
+            </div>
+
+            <div className="border-b border-border/50 p-6 md:p-8 lg:border-b-0">
+              <h2 className="text-xl font-semibold">Token stats</h2>
+              <p className="mt-2 text-xs text-muted">{buxPage.supplyBreakdownNote}</p>
+
+              <dl className="mt-4 grid grid-cols-2 gap-4">
+                <StatTile
+                  label="Total supply"
+                  value={metrics ? formatSupply(metrics.totalSupply) : loading ? "…" : "—"}
+                />
+                <StatTile
+                  label="Exempt supply"
+                  value={metrics ? formatSupply(metrics.exemptSupply) : loading ? "…" : "—"}
+                  hint="BUX treasury + staking pool wallets"
+                />
+                <StatTile
+                  label="Unclaimed staking rewards"
+                  value={metrics ? formatSupply(metrics.unclaimedStakingRewards) : loading ? "…" : "—"}
+                  hint="Accrued on GraveStake, not yet claimed"
+                />
+                <StatTile
+                  label="Unclaimed Discord rewards"
+                  value={metrics ? formatSupply(metrics.unclaimedDiscordRewards) : loading ? "…" : "—"}
+                  hint="Hub balances not yet claimed to wallet"
+                />
+              </dl>
+            </div>
+          </div>
+
+          <dl className="grid gap-4 border-t border-border/50 p-6 sm:grid-cols-3 md:px-8 md:py-6">
+            <StatTile
+              label="Public supply"
+              value={metrics ? formatSupply(metrics.publicSupply) : loading ? "…" : "—"}
+              hint="Held in wallets + unclaimed rewards"
+            />
+            <StatTile
+              label="Token value"
+              value={metrics ? `${formatSol(metrics.tokenValue)} SOL` : loading ? "…" : "—"}
+              hint="Wallet balance ÷ public supply"
+            />
+            <StatTile
+              label="USD value"
+              value={metrics ? `$${metrics.tokenValueUsd.toFixed(4)}` : loading ? "…" : "—"}
+            />
+          </dl>
+        </Card>
+
+        <Card className="mt-4 space-y-4 p-5">
           {buxPage.principles.map((line) => (
             <p key={line} className="text-sm text-muted">
               {line}
@@ -77,55 +179,10 @@ export default function BuxPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card glow="gold" className="p-5">
-          <h2 className="mb-4 text-xl font-semibold">Token metrics</h2>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-muted">Total supply</dt>
-              <dd className="font-mono text-lg">
-                {metrics ? formatSupply(metrics.totalSupply) : loading ? "…" : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">Public supply</dt>
-              <dd className="font-mono text-lg">
-                {metrics ? formatSupply(metrics.publicSupply) : loading ? "…" : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">Exempt supply</dt>
-              <dd className="font-mono text-lg">
-                {metrics ? formatSupply(metrics.exemptSupply) : loading ? "…" : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">Liquidity pool</dt>
-              <dd className="font-mono text-lg">
-                {metrics ? `${formatSol(metrics.liquidityPool)} SOL` : loading ? "…" : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">Token value</dt>
-              <dd className="font-mono text-lg">
-                {metrics ? `${formatSol(metrics.tokenValue)} SOL` : loading ? "…" : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">USD value</dt>
-              <dd className="font-mono text-lg">
-                {metrics ? `$${metrics.tokenValueUsd.toFixed(4)}` : loading ? "…" : "—"}
-              </dd>
-            </div>
-          </dl>
-          <p className="mt-4 break-all font-mono text-[10px] text-muted">
-            Mint: {tokenConfig.mint}
-          </p>
-        </Card>
-
+      <section>
         <Card className="p-5">
           <h2 className="mb-4 text-xl font-semibold">Revenue sources</h2>
-          <ul className="space-y-4">
+          <ul className="grid gap-4 sm:grid-cols-2">
             {buxPage.revenueSources.map((source) => (
               <li key={source.title}>
                 <p className="font-medium">{source.title}</p>
@@ -133,6 +190,10 @@ export default function BuxPage() {
               </li>
             ))}
           </ul>
+          <div className="mt-4 border-t border-border/50 pt-4">
+            <p className="font-medium">{buxPage.revenueHighlight.title}</p>
+            <p className="text-sm text-muted">{buxPage.revenueHighlight.description}</p>
+          </div>
         </Card>
       </section>
 

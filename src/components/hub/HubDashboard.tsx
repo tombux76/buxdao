@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { DiscordRolesDisplay } from "@/components/hub/DiscordRolesDisplay";
+import { HubCashoutSection } from "@/components/hub/HubCashoutSection";
 import { useHubRoles } from "@/hooks/useHubRoles";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { collectionConfigs } from "@/content/site";
@@ -122,48 +123,49 @@ export function HubDashboard() {
       .finally(() => setLoading(false));
   }, [ready, publicKey]);
 
-  if (!discordReady || !walletConnected) {
-    return (
-      <p className="text-sm text-muted">
-        {!discordReady && !walletConnected
-          ? "Log in with Discord and connect your wallet to view your dashboard."
-          : !discordReady
-            ? "Log in with Discord to unlock your dashboard."
-            : "Connect your wallet to load your NFTs and $BUX balance."}
-      </p>
-    );
-  }
-
-  if (!walletLinked) {
-    return (
-      <p className="text-sm text-muted">
-        Sign the message to link your wallet — use the &quot;Sign to link wallet&quot; button above.
-      </p>
-    );
-  }
-
-  if (loading) {
-    return <p className="text-sm text-muted">Loading your holdings…</p>;
-  }
-
-  if (error) {
-    return <p className="text-sm text-red-400">{error}</p>;
-  }
-
-  if (!data) {
-    return null;
-  }
-
   const activeCollection = collectionConfigs.find((c) => c.id === activeTab) ?? collectionConfigs[0];
-  const activeNfts = data.collections[activeTab] ?? [];
-  const totalNfts = Object.values(data.collections).reduce((sum, list) => sum + list.length, 0);
+  const activeNfts = data?.collections[activeTab] ?? [];
+  const totalNfts = data
+    ? Object.values(data.collections).reduce((sum, list) => sum + list.length, 0)
+    : 0;
+
+  function renderHoldingsPanel() {
+    if (!discordReady) {
+      return (
+        <p className="py-8 text-center text-sm text-muted">
+          Log in with Discord to view your NFT holdings and balances.
+        </p>
+      );
+    }
+    if (!walletConnected) {
+      return (
+        <p className="py-8 text-center text-sm text-muted">
+          Connect your wallet to load your NFTs and $BUX balance.
+        </p>
+      );
+    }
+    if (!walletLinked) {
+      return (
+        <p className="py-8 text-center text-sm text-muted">
+          Sign the message to link your wallet — use the &quot;Sign to link wallet&quot; button above.
+        </p>
+      );
+    }
+    if (loading) {
+      return <p className="py-8 text-center text-sm text-muted">Loading your holdings…</p>;
+    }
+    if (error) {
+      return <p className="py-8 text-center text-sm text-red-400">{error}</p>;
+    }
+    return <NftGrid nfts={activeNfts} />;
+  }
 
   return (
     <div className="space-y-5">
       <div className="border-b border-border">
         <div className="flex gap-1 overflow-x-auto pb-px">
           {collectionConfigs.map((collection) => {
-            const count = data.collections[collection.id]?.length ?? 0;
+            const count = data?.collections[collection.id]?.length ?? 0;
             const isActive = collection.id === activeTab;
             return (
               <button
@@ -199,12 +201,15 @@ export function HubDashboard() {
           <div>
             <h4 className="font-semibold">{activeCollection.name}</h4>
             <p className="text-xs text-muted">
-              {activeNfts.length} NFT{activeNfts.length === 1 ? "" : "s"}
-              {totalNfts > 0 ? ` · ${totalNfts} total across collections` : ""}
+              {ready && data
+                ? `${activeNfts.length} NFT${activeNfts.length === 1 ? "" : "s"}${
+                    totalNfts > 0 ? ` · ${totalNfts} total across collections` : ""
+                  }`
+                : "Your holdings appear here once Discord and a linked wallet are connected."}
             </p>
           </div>
         </div>
-        <NftGrid nfts={activeNfts} />
+        {renderHoldingsPanel()}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -213,21 +218,19 @@ export function HubDashboard() {
         </div>
         <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
           <p className="text-xs uppercase text-muted">$BUX balance</p>
-          <p className="mt-1 font-mono text-accent-gold">{formatBux(data.buxBalance)}</p>
+          <p className="mt-1 font-mono text-accent-gold">
+            {data ? formatBux(data.buxBalance) : "—"}
+          </p>
         </div>
         <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
           <p className="text-xs uppercase text-muted">Cashout value</p>
-          <p className="mt-1 font-mono text-accent-gold">{formatSol(data.cashoutSol)} SOL</p>
+          <p className="mt-1 font-mono text-accent-gold">
+            {data ? `${formatSol(data.cashoutSol)} SOL` : "—"}
+          </p>
         </div>
       </div>
 
-      <button
-        type="button"
-        disabled
-        className="w-full rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan py-3 text-sm font-semibold text-bg-deep opacity-50"
-      >
-        Cash out $BUX (coming soon)
-      </button>
+      <HubCashoutSection />
     </div>
   );
 }

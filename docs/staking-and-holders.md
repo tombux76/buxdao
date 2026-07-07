@@ -25,11 +25,11 @@ When a collection’s staking pool goes live on GraveStake, update **`src/conten
 |------------------|------------------------------------------------------|----------------|
 | Fcked Catz       | https://gravestake.io/p/fcked-catz                   | `9ykXGCGJF8LL3MRMmhrhDtXKfKXpaY1NcJeJQWAPCpfz` |
 | Celebrity Catz   | https://gravestake.io/p/celebrity-catz               | `7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR` |
+| Money Monsters   | https://gravestake.io/p/money-monsters               | `AbRPmEHSAubSktYYeuqdXXsnbww1VrzZogkhQgw5iDa7` |
 
 ## Still to enable (when pools launch)
 
-- Money Monsters — `graveStakeUrl` already set; add `stakeLive: true` + `stakingWallet`
-- A.I. BitBots — same
+- A.I. BitBots — add `stakeLive: true` + `stakingWallet`
 - Money Monsters 3D — same
 
 ## What the code does automatically
@@ -44,9 +44,10 @@ Once `stakingWallet` is set on a collection:
 
 These are in `tokenConfig.exemptWallets` and are never shown on holder tables:
 
-- `FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75` — project/treasury
-- `7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR` — also Celebrity Catz staking pool
+- `FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75` — BUX treasury
 - `1BWutmTvYPwDtmw9abTkS4Ssr8no61spGAvW1X6NDix` — Magic Eden V2 authority / escrow
+
+Staking pool wallets are configured per collection via `stakingWallet` and are excluded automatically.
 
 ## Key files
 
