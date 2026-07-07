@@ -428,6 +428,14 @@ export const cashoutContent = {
   perks: {
     title: "Holder perks",
   },
+  limits: {
+    title: "Limits",
+    items: [
+      "One cashout every 14 days per Hub account (cooldown starts when SOL is paid out).",
+      "Up to 1.5 SOL net per cashout.",
+      "Whale role required for net payouts above 0.5 SOL.",
+    ],
+  },
   ctaLoggedOut: "Log in with Discord to check your fee tier, limits, and cash out.",
   ctaNeedWallet: "Connect and link a wallet to cash out.",
 } as const;

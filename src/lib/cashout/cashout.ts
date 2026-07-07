@@ -10,6 +10,7 @@ import {
   getCashoutEligibility,
   getCashoutFeeBps,
   quoteCashoutSol,
+  assertCashoutCooldownAllowed,
   userHasHolderNft,
   userHasWhaleRole,
   validateCashoutAmount,
@@ -106,6 +107,8 @@ export async function prepareCashout(params: {
     }
     return rowToPrepareResult(existingRow, true);
   }
+
+  await assertCashoutCooldownAllowed(params.userId);
 
   const [hasHolderNft, hasWhaleRole, feeBps, metrics, holdings] = await Promise.all([
     userHasHolderNft(params.userId),

@@ -15,6 +15,7 @@ export const WHALE_REQUIRED_ABOVE_SOL_NET = 0.5;
 export const DEFAULT_FEE_BPS = 1000; // 10%
 export const BUXDAO5_FEE_BPS = 500; // 5%
 export const MIN_CASHOUT_BUX = 1;
+export const CASHOUT_COOLDOWN_DAYS = 14;
 export const PENDING_CASHOUT_TTL_MINUTES = 15;
 export const BUX_DECIMALS = 9;
 

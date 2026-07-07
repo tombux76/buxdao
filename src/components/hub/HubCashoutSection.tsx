@@ -33,6 +33,11 @@ type CashoutEligibility = {
   tokenValue: number;
   maxBuxCashout: number;
   liquidityReady: boolean;
+  cooldownDays: number;
+  cooldownActive: boolean;
+  lastCashoutAt: string | null;
+  cooldownEndsAt: string | null;
+  cooldownDaysRemaining: number;
 };
 
 type PrepareCashoutResult = {
@@ -60,6 +65,14 @@ function formatSol(value: number): string {
     return value.toFixed(6);
   }
   return value.toFixed(4);
+}
+
+function formatCooldownDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function solscanTxUrl(signature: string): string {
@@ -279,7 +292,7 @@ export function HubCashoutSection() {
             </ul>
           )}
 
-          <div className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <p className="text-xs text-muted">Your fee</p>
               <p className="font-medium">
@@ -290,6 +303,20 @@ export function HubCashoutSection() {
             <div>
               <p className="text-xs text-muted">Max per cashout</p>
               <p className="font-medium">{eligibility.maxSolNet} SOL net</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Cooldown</p>
+              {eligibility.cooldownActive && eligibility.cooldownEndsAt ? (
+                <p className="font-medium text-amber-400">
+                  {eligibility.cooldownDaysRemaining} day
+                  {eligibility.cooldownDaysRemaining === 1 ? "" : "s"} left ·{" "}
+                  {formatCooldownDate(eligibility.cooldownEndsAt)}
+                </p>
+              ) : (
+                <p className="font-medium text-accent-green">
+                  Ready · {eligibility.cooldownDays}-day between cashouts
+                </p>
+              )}
             </div>
           </div>
 

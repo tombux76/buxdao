@@ -1,9 +1,11 @@
 import { fetchHubWalletHoldings } from "@/lib/hub/wallet-nfts";
 import { getDiscordRolesForUser } from "@/lib/hub/discord-roles";
 import { listLinkedWalletAddresses, isWalletLinkedToUser } from "@/lib/holder-rewards/wallet-auth";
+import { getPool } from "@/lib/db";
 import {
   BUXDAO5_FEE_BPS,
   BUXDAO5_ROLE_ID,
+  CASHOUT_COOLDOWN_DAYS,
   DEFAULT_FEE_BPS,
   MAX_CASHOUT_SOL_NET,
   WHALE_REQUIRED_ABOVE_SOL_NET,
@@ -34,7 +36,81 @@ export type CashoutEligibility = {
   tokenValue: number;
   maxBuxCashout: number;
   liquidityReady: boolean;
+  cooldownDays: number;
+  cooldownActive: boolean;
+  lastCashoutAt: string | null;
+  cooldownEndsAt: string | null;
+  cooldownDaysRemaining: number;
 };
+
+export type CashoutCooldownStatus = {
+  cooldownDays: number;
+  lastCashoutAt: Date | null;
+  cooldownEndsAt: Date | null;
+  cooldownActive: boolean;
+  cooldownDaysRemaining: number;
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export async function getCashoutCooldownStatus(userId: string): Promise<CashoutCooldownStatus> {
+  const pool = getPool();
+  const { rows } = await pool.query<{ completed_at: Date | null }>(
+    `SELECT completed_at
+     FROM cashout_transactions
+     WHERE user_id = $1 AND status = 'completed' AND completed_at IS NOT NULL
+     ORDER BY completed_at DESC
+     LIMIT 1`,
+    [userId],
+  );
+
+  const lastCashoutAt = rows[0]?.completed_at ?? null;
+  if (!lastCashoutAt) {
+    return {
+      cooldownDays: CASHOUT_COOLDOWN_DAYS,
+      lastCashoutAt: null,
+      cooldownEndsAt: null,
+      cooldownActive: false,
+      cooldownDaysRemaining: 0,
+    };
+  }
+
+  const cooldownEndsAt = new Date(lastCashoutAt.getTime() + CASHOUT_COOLDOWN_DAYS * MS_PER_DAY);
+  const now = Date.now();
+  const cooldownActive = now < cooldownEndsAt.getTime();
+  const msRemaining = cooldownActive ? cooldownEndsAt.getTime() - now : 0;
+  const cooldownDaysRemaining = cooldownActive ? Math.ceil(msRemaining / MS_PER_DAY) : 0;
+
+  return {
+    cooldownDays: CASHOUT_COOLDOWN_DAYS,
+    lastCashoutAt,
+    cooldownEndsAt: cooldownActive ? cooldownEndsAt : null,
+    cooldownActive,
+    cooldownDaysRemaining,
+  };
+}
+
+export function formatCashoutCooldownReason(status: CashoutCooldownStatus): string {
+  if (!status.cooldownActive || !status.cooldownEndsAt) {
+    return "";
+  }
+
+  const dateLabel = status.cooldownEndsAt.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const dayWord = status.cooldownDaysRemaining === 1 ? "day" : "days";
+
+  return `${status.cooldownDays}-day cooldown active — next cashout ${dateLabel} (${status.cooldownDaysRemaining} ${dayWord} remaining).`;
+}
+
+export async function assertCashoutCooldownAllowed(userId: string): Promise<void> {
+  const cooldown = await getCashoutCooldownStatus(userId);
+  if (cooldown.cooldownActive) {
+    throw new Error(formatCashoutCooldownReason(cooldown));
+  }
+}
 
 function hasAnyRole(memberRoleIds: string[], targets: readonly string[]): boolean {
   const set = new Set(memberRoleIds);
@@ -76,13 +152,15 @@ export async function getCashoutEligibility(params: {
   const reasons: string[] = [];
   const linked = await isWalletLinkedToUser(params.userId, params.payoutWallet);
 
-  const [hasHolderNft, hasWhaleRole, feeBps, metrics, holdings, rolesResult] = await Promise.all([
+  const [hasHolderNft, hasWhaleRole, feeBps, metrics, holdings, rolesResult, cooldown] =
+    await Promise.all([
     userHasHolderNft(params.userId),
     userHasWhaleRole(params.userId),
     getCashoutFeeBps(params.userId),
     fetchTokenMetrics(),
     fetchHubWalletHoldings(params.payoutWallet),
     getDiscordRolesForUser(params.userId),
+    getCashoutCooldownStatus(params.userId),
   ]);
 
   const hasBuxdao5 = rolesResult.roles.some((role) => role.id === BUXDAO5_ROLE_ID);
@@ -104,6 +182,9 @@ export async function getCashoutEligibility(params: {
   }
   if (!liquidityReady) {
     reasons.push("Cashout pool is not configured on the server yet.");
+  }
+  if (cooldown.cooldownActive) {
+    reasons.push(formatCashoutCooldownReason(cooldown));
   }
 
   const feeMultiplier = 1 - feeBps / 10_000;
@@ -129,6 +210,11 @@ export async function getCashoutEligibility(params: {
     tokenValue,
     maxBuxCashout: Math.min(maxBuxCashout, Math.floor(buxBalance)),
     liquidityReady,
+    cooldownDays: cooldown.cooldownDays,
+    cooldownActive: cooldown.cooldownActive,
+    lastCashoutAt: cooldown.lastCashoutAt?.toISOString() ?? null,
+    cooldownEndsAt: cooldown.cooldownEndsAt?.toISOString() ?? null,
+    cooldownDaysRemaining: cooldown.cooldownDaysRemaining,
   };
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   BUXDAO5_FEE_BPS,
+  CASHOUT_COOLDOWN_DAYS,
   DEFAULT_FEE_BPS,
   MAX_CASHOUT_SOL_NET,
   WHALE_REQUIRED_ABOVE_SOL_NET,
@@ -54,7 +55,7 @@ export function HubCashoutRules() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <p className="text-xs uppercase text-muted">{cashoutContent.requirements.title}</p>
           <ul className="mt-2 space-y-1.5 text-sm text-muted">
@@ -87,11 +88,17 @@ export function HubCashoutRules() {
                 5 Discord role (verified holder across all five collections)
               </span>
             </li>
+          </ul>
+        </div>
+
+        <div className="sm:col-span-2 lg:col-span-1">
+          <p className="text-xs uppercase text-muted">{cashoutContent.limits.title}</p>
+          <ul className="mt-2 space-y-1.5 text-sm text-muted">
             <li className="flex gap-2">
               <span className="text-accent-cyan">•</span>
               <span>
-                <strong className="text-foreground">Whale roles (🐋)</strong> required for net payouts
-                above {WHALE_REQUIRED_ABOVE_SOL_NET} SOL
+                <strong className="text-foreground">{CASHOUT_COOLDOWN_DAYS}-day cooldown</strong> between
+                cashouts per Hub account
               </span>
             </li>
             <li className="flex gap-2">
@@ -99,6 +106,13 @@ export function HubCashoutRules() {
               <span>
                 Up to <strong className="text-foreground">{MAX_CASHOUT_SOL_NET} SOL net</strong> per
                 cashout
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-accent-cyan">•</span>
+              <span>
+                <strong className="text-foreground">Whale roles (🐋)</strong> required for net payouts
+                above {WHALE_REQUIRED_ABOVE_SOL_NET} SOL
               </span>
             </li>
           </ul>
