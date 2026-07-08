@@ -180,7 +180,8 @@ export const collectionConfigs: CollectionConfig[] = [
     gif: "/gifs/bitbot.gif",
     graveMarketUrl: "https://gravemarket.io/collection/ai-bitbots",
     graveStakeUrl: "https://gravestake.io/p/ai-bitbots",
-    stakeLive: false,
+    stakeLive: true,
+    stakingWallet: "41bBHw4CsbzYv2wHVthm5FbQx7UX7TLRr8tEZTnXHrJt",
     dailyBuxYield: 5,
   },
   {
@@ -194,7 +195,8 @@ export const collectionConfigs: CollectionConfig[] = [
     gif: "/gifs/mm3d.gif",
     graveMarketUrl: "https://gravemarket.io/collection/money-monsters-3d",
     graveStakeUrl: "https://gravestake.io/p/money-monsters-3d",
-    stakeLive: false,
+    stakeLive: true,
+    stakingWallet: "HWZaTrurJvXwNpXXVSYD3sc1vceVyjDLi4e1LFydGaQ",
     dailyBuxYield: 10,
   },
   {

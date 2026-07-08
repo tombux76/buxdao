@@ -26,11 +26,10 @@ When a collection’s staking pool goes live on GraveStake, update **`src/conten
 | Fcked Catz       | https://gravestake.io/p/fcked-catz                   | `9ykXGCGJF8LL3MRMmhrhDtXKfKXpaY1NcJeJQWAPCpfz` |
 | Celebrity Catz   | https://gravestake.io/p/celebrity-catz               | `7rJDJYRbG4pU9QyCaYMJjrjLs6E9C46NpCDguQGhWNMR` |
 | Money Monsters   | https://gravestake.io/p/money-monsters               | `AbRPmEHSAubSktYYeuqdXXsnbww1VrzZogkhQgw5iDa7` |
+| A.I. BitBots     | https://gravestake.io/p/ai-bitbots                   | `41bBHw4CsbzYv2wHVthm5FbQx7UX7TLRr8tEZTnXHrJt` |
+| Money Monsters 3D| https://gravestake.io/p/money-monsters-3d            | `HWZaTrurJvXwNpXXVSYD3sc1vceVyjDLi4e1LFydGaQ` |
 
-## Still to enable (when pools launch)
-
-- A.I. BitBots — add `stakeLive: true` + `stakingWallet`
-- Money Monsters 3D — same
+All five collection pools are now live on GraveStake.
 
 ## What the code does automatically
 
