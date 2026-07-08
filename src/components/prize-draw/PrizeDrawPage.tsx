@@ -238,6 +238,16 @@ export function PrizeDrawPage() {
         <p className="text-sm leading-relaxed text-muted">{content.intro}</p>
       </Card>
 
+      <Card glow="gold" className="flex items-start gap-4 border-l-2 border-l-accent-gold p-6">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-gold/15 ring-1 ring-accent-gold/40">
+          <Gift className="h-6 w-6 text-accent-gold" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-accent-gold">{content.noClaimTitle}</h3>
+          <p className="mt-1 text-sm leading-relaxed text-muted">{content.noClaimBody}</p>
+        </div>
+      </Card>
+
       {error && (
         <Card className="border-l-2 border-l-red-500/70 p-4 text-sm text-red-300">{error}</Card>
       )}

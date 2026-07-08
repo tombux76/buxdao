@@ -398,6 +398,9 @@ export const prizeDrawContent = {
     "Weekly community giveaway funded by Omerta Empire City founders bond yield — one random verified BUXDAO holder wins 50,000 EMPIRE.",
   intro:
     "The EMPIRE prize draw is a weekly giveaway for the BUXDAO community. Each week we send 50,000 $EMPIRE to one randomly selected holder. BUXDAO holds an Omerta – Empire City founders bond, and the bond is staked to earn roughly 10,000 $EMPIRE per day. Under Omerta's rules that yield must be distributed back to the community, so we pool it and give it away here. Every verified BUXDAO holder is automatically entered — there's nothing to buy and no ticket to claim. To be eligible, simply log in with Discord, link a Solana wallet, and hold at least one NFT from any of the five BUXDAO collections (which also gives you your holder role in Discord). Each person gets a single entry regardless of how many NFTs they hold, winners are paid straight to their first linked wallet, and past winners stay in the pool every week.",
+  noClaimTitle: "No need to enter or claim",
+  noClaimBody:
+    "Every verified BUXDAO holder is automatically entered into every weekly draw — there's no ticket to buy and nothing to sign up for. If you win, the 50,000 EMPIRE is sent straight to your linked wallet whether you're watching or not. Just stay a verified holder and you're always in.",
   prizeLabel: "Weekly prize",
   poolLabel: "Eligible holders",
   lastWinnerLabel: "Last winner",
