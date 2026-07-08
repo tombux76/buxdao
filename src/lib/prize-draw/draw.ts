@@ -1,4 +1,5 @@
 import { getPool } from "@/lib/db";
+import { getLinkedDiscord } from "@/lib/hub/discord-profile";
 import { postPrizeDrawAnnouncement } from "@/lib/prize-draw/discord-announce";
 import { buildEligiblePool, pickRandomWinner } from "@/lib/prize-draw/eligibility";
 import {
@@ -60,6 +61,10 @@ export async function preparePrizeDraw(params: {
   const decimals = await getEmpireDecimals();
   const amountRaw = empireToRaw(PRIZE_EMPIRE_AMOUNT, decimals);
 
+  const winnerDiscord = await getLinkedDiscord(winner.userId);
+  const winnerUsername = winnerDiscord?.username ?? winner.discordUsername;
+  const winnerImage = winnerDiscord?.image ?? null;
+
   const pool = getPool();
   await pool.query(
     `INSERT INTO prize_draw_pending (
@@ -79,8 +84,8 @@ export async function preparePrizeDraw(params: {
       params.userId,
       winner.userId,
       winner.discordId,
-      winner.discordUsername,
-      winner.discordImage,
+      winnerUsername,
+      winnerImage,
       winner.payoutWallet,
       amountRaw.toString(),
       entries.length,
@@ -94,8 +99,8 @@ export async function preparePrizeDraw(params: {
     prizeAmount: PRIZE_EMPIRE_AMOUNT,
     eligiblePoolSize: entries.length,
     winner: {
-      discordUsername: winner.discordUsername,
-      discordImage: winner.discordImage,
+      discordUsername: winnerUsername,
+      discordImage: winnerImage,
       payoutWallet: winner.payoutWallet,
     },
   };

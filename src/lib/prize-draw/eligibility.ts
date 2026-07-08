@@ -1,5 +1,6 @@
 import { getPool } from "@/lib/db";
-import { getDiscordRolesForUser } from "@/lib/hub/discord-roles";
+import { buildRawHolders, isHiddenWallet } from "@/lib/bux/helius-holders";
+import { getWalletIdentityMaps } from "@/lib/bux/discord";
 import {
   getFirstLinkedWalletAddress,
   userHasLinkedWallet,
@@ -9,9 +10,8 @@ import { POOL_CACHE_TTL_MS, PRIZE_EMPIRE_AMOUNT } from "@/lib/prize-draw/config"
 
 export type PrizeDrawEntry = {
   userId: string;
-  discordId: string;
+  discordId: string | null;
   discordUsername: string;
-  discordImage: string | null;
   payoutWallet: string;
 };
 
@@ -38,74 +38,67 @@ export type PrizeDrawWinnerRow = {
 let cachedPool: PrizeDrawEntry[] | null = null;
 let cachedPoolAt = 0;
 
-async function listHubUsersWithDiscord(): Promise<
-  { userId: string; discordId: string; discordUsername: string }[]
-> {
-  const pool = getPool();
-  const { rows } = await pool.query<{
-    user_id: string;
-    discord_id: string;
-    discord_username: string | null;
-  }>(
-    `SELECT DISTINCT u.id::text AS user_id, u.discord_id, u.discord_username
-     FROM users u
-     INNER JOIN user_wallets uw ON uw.user_id = u.id
-     WHERE u.discord_id IS NOT NULL`,
-  );
-
-  return rows.map((row) => ({
-    userId: row.user_id,
-    discordId: row.discord_id,
-    discordUsername: row.discord_username ?? row.discord_id,
-  }));
-}
-
-async function isUserEligibleForPool(userId: string): Promise<PrizeDrawEntry | null> {
-  const [{ roles }, payoutWallet, discord] = await Promise.all([
-    getDiscordRolesForUser(userId),
-    getFirstLinkedWalletAddress(userId),
-    getLinkedDiscord(userId),
-  ]);
-
-  // Eligible = in the DB with a linked wallet + holds a BUXDAO holder role.
-  if (roles.length === 0 || !payoutWallet || !discord?.discordId) {
-    return null;
-  }
-
-  return {
-    userId,
-    discordId: discord.discordId,
-    discordUsername: discord.username ?? discord.discordId,
-    discordImage: discord.image ?? null,
-    payoutWallet,
-  };
-}
-
-/** Unique verified holders — one entry per Hub user. Cached for status page. */
+/**
+ * Eligible = same rule as the /bux Top Holders table: a verified holder whose
+ * Discord name shows (linked username) and who holds ≥1 BUXDAO NFT. Built from
+ * the DB identity map + on-chain holdings (no flaky per-user Discord API calls),
+ * so the count is stable. One entry per user; payout goes to the first linked wallet.
+ */
 export async function buildEligiblePool(forceRefresh = false): Promise<PrizeDrawEntry[]> {
-  if (
-    !forceRefresh &&
-    cachedPool &&
-    Date.now() - cachedPoolAt < POOL_CACHE_TTL_MS
-  ) {
+  if (!forceRefresh && cachedPool && Date.now() - cachedPoolAt < POOL_CACHE_TTL_MS) {
     return cachedPool;
   }
 
-  const candidates = await listHubUsersWithDiscord();
-  const entries: PrizeDrawEntry[] = [];
+  const [rawHolders, { walletToUserId, userDiscord }] = await Promise.all([
+    buildRawHolders(),
+    getWalletIdentityMaps(),
+  ]);
 
-  const batchSize = 8;
-  for (let i = 0; i < candidates.length; i += batchSize) {
-    const batch = candidates.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(async (candidate) => isUserEligibleForPool(candidate.userId)),
-    );
-    for (const entry of results) {
-      if (entry) {
-        entries.push(entry);
-      }
+  const nftsByUser = new Map<number, number>();
+  for (const holder of rawHolders) {
+    if (holder.totalNfts <= 0 || isHiddenWallet(holder.wallet)) {
+      continue;
     }
+    const userId = walletToUserId.get(holder.wallet.toLowerCase());
+    if (userId == null) {
+      continue;
+    }
+    nftsByUser.set(userId, (nftsByUser.get(userId) ?? 0) + holder.totalNfts);
   }
+
+  const eligibleUserIds: { userId: number; discordId: string | null; discordUsername: string }[] = [];
+  for (const [userId, totalNfts] of nftsByUser) {
+    if (totalNfts <= 0) {
+      continue;
+    }
+    const discord = userDiscord.get(userId);
+    // "Name shows instead of wallet" — must have a linked Discord username.
+    if (!discord?.discordUsername) {
+      continue;
+    }
+    eligibleUserIds.push({
+      userId,
+      discordId: discord.discordId,
+      discordUsername: discord.discordUsername,
+    });
+  }
+
+  const entries = (
+    await Promise.all(
+      eligibleUserIds.map(async (candidate) => {
+        const payoutWallet = await getFirstLinkedWalletAddress(String(candidate.userId));
+        if (!payoutWallet) {
+          return null;
+        }
+        return {
+          userId: String(candidate.userId),
+          discordId: candidate.discordId,
+          discordUsername: candidate.discordUsername,
+          payoutWallet,
+        } satisfies PrizeDrawEntry;
+      }),
+    )
+  ).filter((entry): entry is PrizeDrawEntry => entry !== null);
 
   cachedPool = entries;
   cachedPoolAt = Date.now();
@@ -113,22 +106,21 @@ export async function buildEligiblePool(forceRefresh = false): Promise<PrizeDraw
 }
 
 export async function getPrizeDrawUserChecklist(userId: string): Promise<PrizeDrawUserChecklist> {
-  const [discord, walletConnected, payoutWallet, rolesResult] = await Promise.all([
+  const [discord, walletConnected, payoutWallet, pool] = await Promise.all([
     getLinkedDiscord(userId),
     userHasLinkedWallet(userId),
     getFirstLinkedWalletAddress(userId),
-    getDiscordRolesForUser(userId),
+    buildEligiblePool(),
   ]);
 
   const discordConnected = Boolean(discord?.discordId);
-  const holderVerified = rolesResult.roles.length > 0;
-  const eligible =
-    discordConnected && walletConnected && holderVerified && Boolean(payoutWallet);
+  const inPool = pool.some((entry) => entry.userId === userId);
+  const eligible = discordConnected && walletConnected && inPool && Boolean(payoutWallet);
 
   return {
     discordConnected,
     walletConnected,
-    holderVerified,
+    holderVerified: inPool,
     payoutWallet,
     eligible,
   };
