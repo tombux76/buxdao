@@ -91,7 +91,7 @@ export const navItems: NavItem[] = [
   { href: "/games", label: "Games", description: "Casino & card games" },
   { href: "/merch", label: "Merch", description: "Printful store" },
   { href: "/hub", label: "Holder Hub", description: "Profile & cashout" },
-  { href: "/empire-draw", label: "Prize draw", description: "Weekly EMPIRE prize" },
+  { href: "/empire-draw", label: "EMPIRE draw", description: "Weekly EMPIRE prize" },
   { href: "/bux", label: "$BUX", description: "Token & leaderboard" },
 ];
 
