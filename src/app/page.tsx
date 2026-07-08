@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
@@ -6,7 +7,10 @@ import { HeroTitle } from "@/components/home/HeroTitle";
 import { LiveProductStrip } from "@/components/ui/LiveProductStrip";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
-import { hero, liveProducts, site, whiteLabel } from "@/content/site";
+import { hero, liveProducts, pageMeta, site, whiteLabel } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({ ...pageMeta.home, path: "/" });
 
 export default function HomePage() {
   return (

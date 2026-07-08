@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Coins,
+  Gift,
   Gamepad2,
   Gem,
   Home,
@@ -25,6 +26,7 @@ const icons: Record<string, ReactNode> = {
   "/games": <Gamepad2 className="h-5 w-5" />,
   "/merch": <Shirt className="h-5 w-5" />,
   "/hub": <Users className="h-5 w-5" />,
+  "/empire-draw": <Gift className="h-5 w-5" />,
   "/bux": <Coins className="h-5 w-5" />,
 };
 

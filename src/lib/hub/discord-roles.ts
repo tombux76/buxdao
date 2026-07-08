@@ -72,6 +72,17 @@ async function fetchMemberRoleIds(discordUserId: string): Promise<{ roleIds: str
   };
 }
 
+/** Raw Discord role IDs for a Hub user (not filtered through holder catalog). */
+export async function getMemberRoleIdsForUser(userId: string): Promise<string[]> {
+  const discord = await getLinkedDiscord(userId);
+  if (!discord?.discordId) {
+    return [];
+  }
+
+  const memberResult = await fetchMemberRoleIds(discord.discordId);
+  return memberResult.roleIds;
+}
+
 async function getRoleCatalog(): Promise<RoleCatalogRow[]> {
   const result = await getPool().query<RoleCatalogRow>(
     `SELECT discord_role_id, display_name, color, emoji_url, sort_order

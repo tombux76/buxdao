@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import { CollectionCard } from "@/components/ui/CollectionCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { getCollectionsWithStats } from "@/lib/collections";
+import { pageMeta } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({
+  ...pageMeta.collections,
+  path: "/collections",
+});
 
 export const revalidate = 120;
 

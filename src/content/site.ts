@@ -33,6 +33,51 @@ export const tokenConfig = {
   ],
 } as const;
 
+/** Per-page titles + descriptions for social/link previews (see src/lib/seo.ts). */
+export const pageMeta = {
+  home: {
+    title: "Home",
+    description:
+      "BUXDAO is a web3 studio and NFT ecosystem — focused on passive earning, gaming, and white-label Solana builds.",
+  },
+  collections: {
+    title: "Collections",
+    description:
+      "Explore the five BUXDAO NFT collections — Fcked Catz, Money Monsters, A.I. BitBots, Money Monsters 3D, and Celebrity Catz.",
+  },
+  staking: {
+    title: "Staking",
+    description: "Stake your BUXDAO NFTs on GraveStake to earn $BUX every day.",
+  },
+  games: {
+    title: "Games",
+    description: "Play BUX Casino and card games — wager and win $BUX across the BUXDAO ecosystem.",
+  },
+  merch: {
+    title: "Merch",
+    description: "Shop official BUXDAO merch — printed and shipped worldwide via Printful.",
+  },
+  hub: {
+    title: "Holder Hub",
+    description:
+      "Connect Discord, link wallets, view your holdings, claim rewards, and cash out $BUX to SOL in the BUXDAO Holder Hub.",
+  },
+  bux: {
+    title: "$BUX",
+    description:
+      "$BUX is backed by the BUXDAO liquidity wallet. Track live token value, supply, revenue sources, and the holder leaderboard.",
+  },
+  empireDraw: {
+    title: "Empire prize draw",
+    description:
+      "Win 50,000 EMPIRE every week. BUXDAO shares its Omerta – Empire City founders bond yield with verified holders in a weekly prize draw.",
+  },
+  rewards: {
+    title: "Daily rewards",
+    description: "Earn daily $BUX rewards for holding BUXDAO NFTs.",
+  },
+} as const;
+
 export type NavItem = {
   href: string;
   label: string;
@@ -46,6 +91,7 @@ export const navItems: NavItem[] = [
   { href: "/games", label: "Games", description: "Casino & card games" },
   { href: "/merch", label: "Merch", description: "Printful store" },
   { href: "/hub", label: "Holder Hub", description: "Profile & cashout" },
+  { href: "/empire-draw", label: "Prize draw", description: "Weekly EMPIRE prize" },
   { href: "/bux", label: "$BUX", description: "Token & leaderboard" },
 ];
 
@@ -345,6 +391,36 @@ export const hubContent = {
   ],
   note: "Log in with Discord to unlock your profile, holdings, and cashout.",
 };
+
+export const prizeDrawContent = {
+  title: "EMPIRE prize draw",
+  subtitle:
+    "Weekly community giveaway funded by Omerta Empire City founders bond yield — one random verified BUXDAO holder wins 50,000 EMPIRE.",
+  intro:
+    "The EMPIRE prize draw is a weekly giveaway for the BUXDAO community. Each week we send 50,000 $EMPIRE to one randomly selected holder. BUXDAO holds an Omerta – Empire City founders bond, and the bond is staked to earn roughly 10,000 $EMPIRE per day. Under Omerta's rules that yield must be distributed back to the community, so we pool it and give it away here. Every verified BUXDAO holder is automatically entered — there's nothing to buy and no ticket to claim. To be eligible, simply log in with Discord, link a Solana wallet, and hold at least one NFT from any of the five BUXDAO collections (which also gives you your holder role in Discord). Each person gets a single entry regardless of how many NFTs they hold, winners are paid straight to their first linked wallet, and past winners stay in the pool every week.",
+  prizeLabel: "Weekly prize",
+  poolLabel: "Eligible holders",
+  lastWinnerLabel: "Last winner",
+  checklistTitle: "Am I eligible?",
+  winnersTitle: "Past winners",
+  empireIntro:
+    "BUXDAO holds an Omerta Empire City founders bond. Staking yields ~10,000 EMPIRE per day; Omerta requires that yield be shared with the community.",
+  empireBullets: [
+    "One entry per verified Hub user — NFT count does not increase your odds.",
+    "Payout goes to your first linked wallet (earliest linked_at).",
+    "Repeat winners stay in the pool every week.",
+    "Draws are run manually by admins (e.g. during community events).",
+  ],
+  steps: [
+    { step: 1, title: "Connect Discord", body: "Log into the Holder Hub with your Discord account." },
+    { step: 2, title: "Connect wallet", body: "Link at least one Solana wallet on your Hub profile." },
+    {
+      step: 3,
+      title: "Verify holder",
+      body: "Hold at least one NFT from a BUXDAO collection and verify in Discord for holder roles.",
+    },
+  ],
+} as const;
 
 /** Copy for Discord engagement rewards — keep in sync with `discord-engagement-config.ts`. */
 export const discordEngagement = {

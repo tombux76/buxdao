@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
 import { MerchStore } from "@/components/merch/merch-store";
-import { merchContent } from "@/content/site";
+import { merchContent, pageMeta } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({ ...pageMeta.merch, path: "/merch" });
 
 export default function MerchPage() {
   return (

@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { RewardsDashboard } from "@/components/rewards/RewardsDashboard";
+import { pageMeta } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({ ...pageMeta.rewards, path: "/rewards" });
 
 export default function RewardsPage() {
   return (

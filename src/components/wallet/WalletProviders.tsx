@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
+import { WalletError, WalletConnectionError } from "@solana/wallet-adapter-base";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
@@ -16,6 +17,19 @@ function getBrowserRpcEndpoint(): string {
   return "http://127.0.0.1:3000/api/solana/rpc";
 }
 
+function isUserRejectedWalletError(error: WalletError): boolean {
+  if (error instanceof WalletConnectionError) {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("user rejected") ||
+    message.includes("user declined") ||
+    message.includes("rejected the request")
+  );
+}
+
 export function WalletProviders({ children }: WalletProvidersProps) {
   const rpcEndpoint = useMemo(() => getBrowserRpcEndpoint(), []);
 
@@ -27,9 +41,16 @@ export function WalletProviders({ children }: WalletProvidersProps) {
     [],
   );
 
+  const onError = useCallback((error: WalletError) => {
+    if (isUserRejectedWalletError(error)) {
+      return;
+    }
+    console.error("[wallet]", error);
+  }, []);
+
   return (
     <ConnectionProvider endpoint={rpcEndpoint} config={connectionConfig}>
-      <WalletProvider wallets={[]} autoConnect>
+      <WalletProvider wallets={[]} autoConnect onError={onError}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

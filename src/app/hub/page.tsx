@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
@@ -6,7 +7,10 @@ import { HubProfileCard } from "@/components/hub/HubProfileCard";
 import { HubClaimSection } from "@/components/hub/HubClaimSection";
 import { HubSetupSteps } from "@/components/hub/HubSetupSteps";
 import { HubDashboard } from "@/components/hub/HubDashboard";
-import { hubContent, site } from "@/content/site";
+import { hubContent, pageMeta, site } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({ ...pageMeta.hub, path: "/hub" });
 
 export default function HubPage() {
   return (

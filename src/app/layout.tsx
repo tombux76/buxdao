@@ -30,7 +30,10 @@ const metadataBaseUrl =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
 export const metadata: Metadata = {
-  title: `${site.name} — ${site.tagline}`,
+  title: {
+    default: `${site.name} — ${site.tagline}`,
+    template: `%s · ${site.name}`,
+  },
   description: site.description,
   metadataBase: new URL(metadataBaseUrl),
   icons: {
@@ -39,6 +42,19 @@ export const metadata: Metadata = {
       { url: "/favicon.png", type: "image/png", sizes: "120x120" },
     ],
     apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    type: "website",
+    siteName: site.name,
+    title: `${site.name} — ${site.tagline}`,
+    description: site.description,
+    images: [{ url: "/og/default.png", alt: site.name }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${site.name} — ${site.tagline}`,
+    description: site.description,
+    images: ["/og/default.png"],
   },
 };
 

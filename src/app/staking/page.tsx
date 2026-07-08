@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { collections, stakingContent } from "@/content/site";
+import { collections, pageMeta, stakingContent } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({ ...pageMeta.staking, path: "/staking" });
 
 export default function StakingPage() {
   return (

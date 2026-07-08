@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { GameCard } from "@/components/ui/GameCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { games } from "@/content/site";
+import { games, pageMeta } from "@/content/site";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({ ...pageMeta.games, path: "/games" });
 
 export default function GamesPage() {
   const casino = games.filter((g) => g.category === "casino");
