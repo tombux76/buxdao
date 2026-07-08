@@ -255,8 +255,8 @@ export const liveProducts: LiveProduct[] = [
   {
     id: "poker",
     name: "BUX Poker",
-    status: "soon",
-    href: "https://www.bux-poker.pro",
+    status: "live",
+    href: "https://bux-poker.xyz",
     external: true,
     thumbnail: "/products/poker.png",
   },
@@ -342,11 +342,11 @@ export const games: Game[] = [
   {
     id: "poker",
     name: "BUX Poker",
-    status: "soon",
+    status: "live",
     description:
       "Cross community poker platform\nTournament and league options\nDiscord integration",
     tokens: [],
-    href: "https://www.bux-poker.pro",
+    href: "https://bux-poker.xyz",
     external: true,
     category: "cards",
     thumbnail: "/products/poker.png",
