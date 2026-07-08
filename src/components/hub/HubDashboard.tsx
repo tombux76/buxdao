@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { DiscordRolesDisplay } from "@/components/hub/DiscordRolesDisplay";
 import { HubCashoutSection } from "@/components/hub/HubCashoutSection";
 import { useHubRoles } from "@/hooks/useHubRoles";
@@ -15,6 +14,7 @@ type HubHoldingsResponse = {
   cashoutSol: number;
   cashoutUsd: number;
   collections: Record<string, HubNft[]>;
+  walletCount: number;
 };
 
 const COLLAPSED_ROW_COUNT = 4;
@@ -84,7 +84,6 @@ function NftGrid({ nfts }: { nfts: HubNft[] }) {
 
 export function HubDashboard() {
   const { data: session, status: authStatus } = useSession();
-  const { publicKey, connected } = useWallet();
   const { wallets } = useLinkedWallets();
   const { roles, loading: rolesLoading, error: rolesError } = useHubRoles();
   const [activeTab, setActiveTab] = useState(collectionConfigs[0].id);
@@ -92,25 +91,21 @@ export function HubDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const linkedAddresses = useMemo(() => new Set(wallets.map((w) => w.address)), [wallets]);
   const discordReady = authStatus === "authenticated" && !!session?.user;
-  const walletConnected = connected && !!publicKey;
-  const walletLinked =
-    walletConnected && publicKey ? linkedAddresses.has(publicKey.toBase58()) : false;
-  const ready = discordReady && walletLinked;
+  const hasLinkedWallet = wallets.length > 0;
+  const ready = discordReady && hasLinkedWallet;
 
   useEffect(() => {
-    if (!ready || !publicKey) {
+    if (!ready) {
       setData(null);
       setError(null);
       return;
     }
 
-    const wallet = publicKey.toBase58();
     setLoading(true);
     setError(null);
 
-    fetch(`/api/hub/nfts?wallet=${encodeURIComponent(wallet)}`)
+    fetch(`/api/hub/holdings`)
       .then(async (res) => {
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -121,7 +116,8 @@ export function HubDashboard() {
       .then(setData)
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [ready, publicKey]);
+    // Re-fetch when the set of linked wallets changes.
+  }, [ready, wallets.length]);
 
   const activeCollection = collectionConfigs.find((c) => c.id === activeTab) ?? collectionConfigs[0];
   const activeNfts = data?.collections[activeTab] ?? [];
@@ -137,17 +133,11 @@ export function HubDashboard() {
         </p>
       );
     }
-    if (!walletConnected) {
+    if (!hasLinkedWallet) {
       return (
         <p className="py-8 text-center text-sm text-muted">
-          Connect your wallet to load your NFTs and $BUX balance.
-        </p>
-      );
-    }
-    if (!walletLinked) {
-      return (
-        <p className="py-8 text-center text-sm text-muted">
-          Sign the message to link your wallet — use the &quot;Sign to link wallet&quot; button above.
+          Link a wallet to view your NFTs and $BUX balance. Once linked, your holdings show here
+          automatically — no need to reconnect.
         </p>
       );
     }
@@ -205,7 +195,7 @@ export function HubDashboard() {
                 ? `${activeNfts.length} NFT${activeNfts.length === 1 ? "" : "s"}${
                     totalNfts > 0 ? ` · ${totalNfts} total across collections` : ""
                   }`
-                : "Your holdings appear here once Discord and a linked wallet are connected."}
+                : "Your holdings appear here once Discord is connected and a wallet is linked."}
             </p>
           </div>
         </div>
