@@ -121,7 +121,7 @@ export function HubCashoutRules() {
             <div>
               <p className="text-sm font-medium">Send $BUX</p>
               <p className="mt-0.5 text-xs text-muted">
-                Sign an SPL transfer from your linked wallet to the liquidity pool.
+                Sign an SPL transfer from your linked wallet to the BUX treasury.
               </p>
             </div>
           </div>

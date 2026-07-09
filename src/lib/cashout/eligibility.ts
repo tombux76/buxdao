@@ -12,7 +12,7 @@ import {
   WHALE_ROLE_IDS,
   buxRawToNumber,
   buxToRaw,
-  getLiquidityWallet,
+  getCashoutTreasuryWallet,
   isLiquidityConfigured,
   MIN_CASHOUT_BUX,
 } from "@/lib/cashout/config";
@@ -30,7 +30,7 @@ export type CashoutEligibility = {
   maxSolNet: number;
   whaleThresholdSol: number;
   minBux: number;
-  liquidityWallet: string;
+  buxTreasuryWallet: string;
   mint: string;
   buxBalance: number;
   tokenValue: number;
@@ -204,7 +204,7 @@ export async function getCashoutEligibility(params: {
     maxSolNet: MAX_CASHOUT_SOL_NET,
     whaleThresholdSol: WHALE_REQUIRED_ABOVE_SOL_NET,
     minBux: MIN_CASHOUT_BUX,
-    liquidityWallet: getLiquidityWallet(),
+    buxTreasuryWallet: getCashoutTreasuryWallet(),
     mint: tokenConfig.mint,
     buxBalance,
     tokenValue,

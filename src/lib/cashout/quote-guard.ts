@@ -36,7 +36,7 @@ export async function assertQuoteStillValid(userId: string, row: PendingQuoteRow
 
   const amountBux = buxRawToNumber(BigInt(row.bux_amount_raw));
   const fairQuote = quoteCashoutSol({
-    amountBux,
+    buxAmount: amountBux,
     tokenValue,
     feeBps: row.fee_bps,
   });
@@ -75,7 +75,7 @@ export async function assertProcessingPayoutStillFair(
 
   const amountBux = buxRawToNumber(BigInt(buxAmountRaw));
   const fairQuote = quoteCashoutSol({
-    amountBux,
+    buxAmount: amountBux,
     tokenValue,
     feeBps: currentFeeBps,
   });

@@ -40,7 +40,7 @@ type CashoutEligibility = {
   maxSolNet: number;
   whaleThresholdSol: number;
   minBux: number;
-  liquidityWallet: string;
+  buxTreasuryWallet: string;
   mint: string;
   buxBalance: number;
   tokenValue: number;
@@ -54,7 +54,8 @@ type CashoutEligibility = {
 };
 
 type PrepareCashoutResult = {
-  liquidityWallet: string;
+  buxTreasuryWallet: string;
+  solPayoutWallet: string;
   mint: string;
   payoutWallet: string;
   amountRaw: string;
@@ -286,18 +287,18 @@ export function HubCashoutSection() {
     try {
       const mint = new PublicKey(prepareData.mint || tokenConfig.mint);
       const owner = new PublicKey(walletAddress);
-      const liquidity = new PublicKey(prepareData.liquidityWallet);
+      const treasury = new PublicKey(prepareData.buxTreasuryWallet);
       const amountRaw = BigInt(prepareData.amountRaw);
 
       const fromAta = await getAssociatedTokenAddress(mint, owner);
-      const toAta = await getAssociatedTokenAddress(mint, liquidity);
+      const toAta = await getAssociatedTokenAddress(mint, treasury);
 
       const transaction = new Transaction();
 
       const destInfo = await connection.getAccountInfo(toAta);
       if (!destInfo) {
         transaction.add(
-          createAssociatedTokenAccountInstruction(owner, toAta, liquidity, mint),
+          createAssociatedTokenAccountInstruction(owner, toAta, treasury, mint),
         );
       }
 
@@ -561,7 +562,7 @@ export function HubCashoutSection() {
               done={step === "paying_sol"}
               step={1}
               icon={Coins}
-              title="Send $BUX to liquidity wallet"
+              title="Send $BUX to BUX treasury"
               detail="Approve the SPL transfer in your wallet."
             />
             <FlowStep

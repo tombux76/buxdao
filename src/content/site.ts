@@ -23,8 +23,10 @@ export const site = {
 export const tokenConfig = {
   name: "$BUX",
   mint: "AaKrMsZkuAdJL6TKZbj7X1VaH5qWioL7oDHagQZa1w59",
-  /** SOL liquidity wallet — royalties, project funds, cashout pool */
+  /** SOL liquidity wallet — royalties, project funds, cashout SOL pool */
   communityWallet: "DvDj1YAg4aM2xxXhLtXE9kheuUDhLRuaR6TWcUVEBN66",
+  /** BUX treasury — cashed-out $BUX from Holder Hub */
+  buxTreasuryWallet: "FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75",
   exemptWallets: [
     /** BUX treasury */
     "FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75",
@@ -494,7 +496,7 @@ export const cashoutContent = {
   howItWorks: {
     title: "How it works",
     steps: [
-      "You send $BUX to the liquidity wallet (sign an SPL transfer in your wallet).",
+      "You send $BUX to the BUX treasury (sign an SPL transfer in your wallet).",
       "Net SOL is paid automatically to your linked payout wallet.",
     ],
   },

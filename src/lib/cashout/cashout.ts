@@ -4,6 +4,7 @@ import {
   buxRawToNumber,
   buxToRaw,
   getLiquidityWallet,
+  getCashoutTreasuryWallet,
   isLiquidityConfigured,
 } from "@/lib/cashout/config";
 import { acquireCashoutLock, assertPendingFresh, isPendingExpired, releaseCashoutLock } from "@/lib/cashout/lock";
@@ -17,7 +18,7 @@ import {
   userHasWhaleRole,
   validateCashoutAmount,
 } from "@/lib/cashout/eligibility";
-import { verifyBuxTransferToLiquidity } from "@/lib/cashout/verify-transfer";
+import { verifyBuxTransferToTreasury } from "@/lib/cashout/verify-transfer";
 import {
   cashoutDisplayName,
   postCashoutAnnouncement,
@@ -29,7 +30,10 @@ import { fetchHubWalletHoldings } from "@/lib/hub/wallet-nfts";
 import { tokenConfig } from "@/content/site";
 
 export type PrepareCashoutResult = {
-  liquidityWallet: string;
+  /** BUX treasury — where the user sends cashed-out $BUX */
+  buxTreasuryWallet: string;
+  /** SOL liquidity wallet — pays out SOL (not the $BUX destination) */
+  solPayoutWallet: string;
   mint: string;
   payoutWallet: string;
   amountRaw: string;
@@ -193,7 +197,7 @@ async function resumeProcessingCashout(params: {
   const feeSol = Number(BigInt(claimed.fee_lamports ?? "0")) / 1e9;
 
   try {
-    await verifyBuxTransferToLiquidity({
+    await verifyBuxTransferToTreasury({
       signature: params.buxTxSignature,
       fromWallet: params.payoutWallet,
       amountRaw: BigInt(claimed.bux_amount),
@@ -285,7 +289,8 @@ function rowToPrepareResult(row: PendingRow, resumed: boolean): PrepareCashoutRe
   const solNetLamports = BigInt(row.sol_net_lamports);
 
   return {
-    liquidityWallet: getLiquidityWallet(),
+    buxTreasuryWallet: getCashoutTreasuryWallet(),
+    solPayoutWallet: getLiquidityWallet(),
     mint: tokenConfig.mint,
     payoutWallet: row.payout_wallet,
     amountRaw: row.bux_amount_raw,
@@ -390,7 +395,8 @@ export async function prepareCashout(params: {
   }
 
   return {
-    liquidityWallet: getLiquidityWallet(),
+    buxTreasuryWallet: getCashoutTreasuryWallet(),
+    solPayoutWallet: getLiquidityWallet(),
     mint: tokenConfig.mint,
     payoutWallet: params.payoutWallet,
     amountRaw: amountRaw.toString(),
@@ -458,7 +464,7 @@ export async function confirmCashout(params: {
 
   const amountRaw = BigInt(previewRow.bux_amount_raw);
 
-  await verifyBuxTransferToLiquidity({
+  await verifyBuxTransferToTreasury({
     signature: params.buxTxSignature,
     fromWallet: params.payoutWallet,
     amountRaw,

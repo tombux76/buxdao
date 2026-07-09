@@ -1,7 +1,7 @@
 import { PublicKey, type ParsedTransactionWithMeta } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { tokenConfig } from "@/content/site";
-import { getLiquidityWallet } from "@/lib/cashout/config";
+import { getCashoutTreasuryWallet } from "@/lib/cashout/config";
 import { withServerConnection } from "@/lib/solana/server-rpc";
 
 type ParsedSplInstruction = {
@@ -35,11 +35,11 @@ function accountAddressAtIndex(tx: ParsedTransactionWithMeta, accountIndex: numb
 function instructionMatchesTransfer(params: {
   parsed: ParsedSplInstruction;
   fromWallet: string;
-  liquidityAta: string;
+  treasuryAta: string;
   mint: string;
   amountRaw: bigint;
 }): boolean {
-  const { parsed, fromWallet, liquidityAta, mint, amountRaw } = params;
+  const { parsed, fromWallet, treasuryAta, mint, amountRaw } = params;
   if (!parsed.type || !parsed.info) {
     return false;
   }
@@ -59,21 +59,21 @@ function instructionMatchesTransfer(params: {
     return false;
   }
 
-  return authority === fromWallet && destination === liquidityAta && ixMint === mint;
+  return authority === fromWallet && destination === treasuryAta && ixMint === mint;
 }
 
 function verifyBalanceDeltas(params: {
   tx: ParsedTransactionWithMeta;
   mint: string;
   amountRaw: bigint;
-  liquidityAta: string;
+  treasuryAta: string;
   fromWallet: string;
-  liquidityWallet: string;
+  treasuryWallet: string;
 }): boolean {
   const pre = params.tx.meta?.preTokenBalances ?? [];
   const post = params.tx.meta?.postTokenBalances ?? [];
 
-  let liquidityCredit = false;
+  let treasuryCredit = false;
   let sourceDebit = false;
 
   for (const postBal of post) {
@@ -95,29 +95,29 @@ function verifyBalanceDeltas(params: {
     const delta = postAmount - preAmount;
 
     if (
-      (accountAddress === params.liquidityAta || owner === params.liquidityWallet) &&
+      (accountAddress === params.treasuryAta || owner === params.treasuryWallet) &&
       delta === params.amountRaw
     ) {
-      liquidityCredit = true;
+      treasuryCredit = true;
     }
     if (owner === params.fromWallet && delta === -params.amountRaw) {
       sourceDebit = true;
     }
   }
 
-  return liquidityCredit && sourceDebit;
+  return treasuryCredit && sourceDebit;
 }
 
-export async function verifyBuxTransferToLiquidity(params: {
+export async function verifyBuxTransferToTreasury(params: {
   signature: string;
   fromWallet: string;
   amountRaw: bigint;
 }): Promise<void> {
-  const liquidityWallet = getLiquidityWallet();
+  const treasuryWallet = getCashoutTreasuryWallet();
   const mint = tokenConfig.mint;
   const mintPk = new PublicKey(mint);
-  const liquidityAta = (
-    await getAssociatedTokenAddress(mintPk, new PublicKey(liquidityWallet))
+  const treasuryAta = (
+    await getAssociatedTokenAddress(mintPk, new PublicKey(treasuryWallet))
   ).toBase58();
 
   await withServerConnection(async (connection) => {
@@ -143,7 +143,7 @@ export async function verifyBuxTransferToLiquidity(params: {
     const checkParams = {
       parsed: {} as ParsedSplInstruction,
       fromWallet: params.fromWallet,
-      liquidityAta,
+      treasuryAta,
       mint,
       amountRaw: params.amountRaw,
     };
@@ -168,16 +168,19 @@ export async function verifyBuxTransferToLiquidity(params: {
         tx,
         mint,
         amountRaw: params.amountRaw,
-        liquidityAta,
+        treasuryAta,
         fromWallet: params.fromWallet,
-        liquidityWallet,
+        treasuryWallet,
       })
     ) {
       return;
     }
 
     throw new Error(
-      "Could not verify $BUX transfer to the liquidity wallet. Send the exact amount from your linked wallet.",
+      "Could not verify $BUX transfer to the BUX treasury. Send the exact amount from your linked wallet.",
     );
   });
 }
+
+/** @deprecated Use verifyBuxTransferToTreasury */
+export const verifyBuxTransferToLiquidity = verifyBuxTransferToTreasury;

@@ -26,6 +26,11 @@ export function getLiquidityWallet(): string {
   return tokenConfig.communityWallet;
 }
 
+/** Where cashed-out $BUX is sent on-chain. */
+export function getCashoutTreasuryWallet(): string {
+  return tokenConfig.buxTreasuryWallet;
+}
+
 export function getLiquidityPrivateKey(): string {
   return process.env.LIQUIDITY_WALLET_PRIVATE_KEY?.trim() ?? "";
 }
