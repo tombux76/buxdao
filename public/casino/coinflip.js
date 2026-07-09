@@ -55,7 +55,10 @@ let isFlipping = false;
 let isCollecting = false;
 
 function getRpcUrl() {
-  return window.__BUX_CASINO_RPC__ || '/api/solana/rpc';
+  if (window.CasinoFees && window.CasinoFees.getCasinoRpcUrl) {
+    return window.CasinoFees.getCasinoRpcUrl();
+  }
+  return window.location.origin + '/api/solana/rpc';
 }
 
 function initConnection() {

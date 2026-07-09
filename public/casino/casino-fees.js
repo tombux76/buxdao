@@ -33,6 +33,20 @@
     return getTotalPurchaseFeeLamports() / 1e9;
   }
 
+  /** web3.js Connection requires an absolute http(s) URL. */
+  function getCasinoRpcUrl() {
+    const configured = global.__BUX_CASINO_RPC__;
+    if (configured && (configured.startsWith("http://") || configured.startsWith("https://"))) {
+      return configured;
+    }
+    const path =
+      configured && configured.startsWith("/") ? configured : "/api/solana/rpc";
+    if (typeof global.location !== "undefined" && global.location.origin) {
+      return global.location.origin + path;
+    }
+    return path;
+  }
+
   function addPurchaseSolFeeTransfers(transaction, SystemProgram, PublicKey, userPublicKey) {
     const project = getProjectWallet();
     const treasury = getTreasuryWallet();
@@ -67,6 +81,7 @@
     getFeeToProjectLamports,
     getFeeToTreasuryGasLamports,
     getPurchaseFeeSol,
+    getCasinoRpcUrl,
     addPurchaseSolFeeTransfers,
   };
 })(window);

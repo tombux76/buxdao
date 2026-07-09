@@ -59,9 +59,13 @@ export function getCasinoRpcUrl(): string {
   );
 }
 
-/** Browser-safe RPC — same-origin proxy (no API keys, no CORS). */
-export function getPublicCasinoRpcUrl(): string {
-  return "/api/solana/rpc";
+/** Browser-safe RPC — absolute same-origin proxy URL for web3.js Connection. */
+export function getPublicCasinoRpcUrl(origin?: string): string {
+  const path = "/api/solana/rpc";
+  if (origin) {
+    return `${origin.replace(/\/$/, "")}${path}`;
+  }
+  return path;
 }
 
 export function isValidSolanaWallet(address: string): boolean {

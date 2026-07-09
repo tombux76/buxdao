@@ -1,11 +1,12 @@
+import { NextRequest } from "next/server";
 import { tokenConfig } from "@/content/site";
 import { getPublicCasinoRpcUrl } from "@/lib/casino/bux-balance";
 import { getCasinoFeeConfig } from "@/lib/casino/fee-config";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const rpc = getPublicCasinoRpcUrl();
+export async function GET(request: NextRequest) {
+  const rpc = getPublicCasinoRpcUrl(request.nextUrl.origin);
   const mint = process.env.BUX_TOKEN_MINT?.trim() || tokenConfig.mint;
   const decimals = Number.parseInt(process.env.BUX_TOKEN_DECIMALS ?? "9", 10);
   const fees = getCasinoFeeConfig();
