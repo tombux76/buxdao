@@ -721,7 +721,11 @@ async function purchaseSpins() {
             }
         }
         
-        await connection.confirmTransaction(signature, 'confirmed');
+        try {
+            await connection.confirmTransaction(signature, 'confirmed');
+        } catch (confirmError) {
+            console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+        }
         
         // Save purchase to database (server verifies on-chain tx)
         try {
@@ -756,7 +760,12 @@ async function purchaseSpins() {
             console.log('Purchase saved to database successfully');
         } catch (saveError) {
             console.error('Error saving purchase to database:', saveError);
-            showSlotsMessage({ title: 'Purchase recorded on chain', message: saveError.message || 'Could not sync purchase with server. Contact support if spins do not appear.', isError: true });
+            showSlotsMessage({
+                title: 'Purchase recorded on chain',
+                message: (saveError.message || 'Could not sync purchase with server.') + ' Refresh the page in a minute or contact support with your transaction link.',
+                txSignature: signature,
+                isError: true,
+            });
             return;
         }
         

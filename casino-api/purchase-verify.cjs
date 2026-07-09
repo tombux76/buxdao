@@ -3,16 +3,75 @@ const { Connection, PublicKey } = require("@solana/web3.js");
 const { getAssociatedTokenAddress } = require("@solana/spl-token");
 const { getSql } = require("./slots-helpers.cjs");
 
-const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
-const RPC_URL =
-  process.env.SLOTS_RPC_URL ||
-  (process.env.HELIUS_API_KEY
-    ? HELIUS_RPC + "/?api-key=" + encodeURIComponent(process.env.HELIUS_API_KEY)
-    : HELIUS_RPC + "/");
-
 const MAX_TX_AGE_SEC = 60 * 60 * 24; // 24h
+const PARSE_POLL_MS = 2000;
+const PARSE_MAX_WAIT_MS = 60_000;
 
 let tableReady = false;
+
+function getRpcCandidates() {
+  const urls = [];
+  const add = (value) => {
+    const trimmed = value?.trim();
+    if (trimmed && !urls.includes(trimmed)) {
+      urls.push(trimmed);
+    }
+  };
+
+  add(process.env.SOLANA_RPC_URL);
+  add(process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
+  add(process.env.SLOTS_RPC_URL);
+
+  if (process.env.HELIUS_API_KEY) {
+    add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY)}`);
+  }
+  if (process.env.HELIUS_API_KEY_2) {
+    add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY_2)}`);
+  }
+
+  const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
+  for (const entry of extras) {
+    add(entry);
+  }
+
+  add("https://api.mainnet-beta.solana.com");
+  return urls;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getParsedTransactionWithRetry(signature) {
+  const commitments = ["confirmed", "finalized"];
+  const deadline = Date.now() + PARSE_MAX_WAIT_MS;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    for (const url of getRpcCandidates()) {
+      try {
+        const connection = new Connection(url, "confirmed");
+        for (const commitment of commitments) {
+          const parsed = await connection.getParsedTransaction(signature, {
+            maxSupportedTransactionVersion: 0,
+            commitment,
+          });
+          if (parsed?.meta?.err) {
+            throw new Error("Purchase transaction failed on chain");
+          }
+          if (parsed?.meta) {
+            return parsed;
+          }
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    await sleep(PARSE_POLL_MS);
+  }
+
+  throw lastError || new Error("Purchase transaction not found on chain");
+}
 
 async function ensureSignatureTable(sql) {
   if (tableReady || !sql) return;
@@ -125,14 +184,7 @@ async function verifyPurchaseSignature({
   const decimals = getTokenDecimals();
   const minAmountRaw = BigInt(Math.floor(Number(expectedTokenAmount) * Math.pow(10, decimals)));
 
-  const connection = new Connection(RPC_URL, "confirmed");
-  const parsed = await connection.getParsedTransaction(signature, {
-    maxSupportedTransactionVersion: 0,
-    commitment: "confirmed",
-  });
-
-  if (!parsed) throw new Error("Purchase transaction not found on chain");
-  if (parsed.meta?.err) throw new Error("Purchase transaction failed on chain");
+  const parsed = await getParsedTransactionWithRetry(signature);
 
   const blockTime = parsed.blockTime;
   if (blockTime && Date.now() / 1000 - blockTime > MAX_TX_AGE_SEC) {
