@@ -162,6 +162,62 @@
     document.body.style.overflow = "";
   }
 
+  async function confirmTransactionBestEffort(connection, signature) {
+    if (!connection || !signature) return;
+    try {
+      await connection.confirmTransaction(signature, "confirmed");
+    } catch (err) {
+      console.warn("Client confirmation timed out; server will verify on-chain:", err);
+    }
+  }
+
+  async function confirmCollectWithServer(params) {
+    const wallet = params.wallet;
+    const signature = params.signature;
+    const amount = params.amount;
+    const gameType = params.gameType || "slots";
+    const token = params.token || "bux";
+    const maxAttempts = params.maxAttempts || 20;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const res = await fetch("/api/confirm-collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userWallet: wallet,
+          signature: signature,
+          amount: amount,
+          gameType: gameType,
+          token: token,
+        }),
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {}
+
+      if (res.status === 200) {
+        return data;
+      }
+      if (
+        res.status === 202 ||
+        (res.status === 400 && data.error === "Transaction not found")
+      ) {
+        await sleep(Math.min(1500 + attempt * 400, 6000));
+        continue;
+      }
+      lastError = new Error(data.message || data.error || "Confirm collect failed");
+      if (attempt < maxAttempts - 1 && res.status >= 500) {
+        await sleep(2000);
+        continue;
+      }
+      throw lastError;
+    }
+
+    throw lastError || new Error("Could not confirm collect with server. Try again in a minute.");
+  }
+
   function addPurchaseSolFeeTransfers(transaction, SystemProgram, PublicKey, userPublicKey) {
     const project = getProjectWallet();
     const treasury = getTreasuryWallet();
@@ -205,5 +261,7 @@
     hidePurchaseProcessing,
     showCasinoProcessing: showPurchaseProcessing,
     hideCasinoProcessing: hidePurchaseProcessing,
+    confirmTransactionBestEffort,
+    confirmCollectWithServer,
   };
 })(window);

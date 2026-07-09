@@ -899,9 +899,23 @@
                 var tx = Transaction.from(txBytes);
                 return connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 })
                     .then(function (sig) {
-                        return connection.confirmTransaction(sig, 'confirmed').then(function () { return sig; });
+                        var confirmClient = window.CasinoFees && window.CasinoFees.confirmTransactionBestEffort
+                            ? window.CasinoFees.confirmTransactionBestEffort(connection, sig)
+                            : connection.confirmTransaction(sig, 'confirmed').catch(function (confirmError) {
+                                console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+                            });
+                        return confirmClient.then(function () { return sig; });
                     })
                     .then(function (sig) {
+                        if (window.CasinoFees && window.CasinoFees.confirmCollectWithServer) {
+                            return window.CasinoFees.confirmCollectWithServer({
+                                wallet: wallet,
+                                signature: sig,
+                                amount: data.actualAmount || totalToCollectAmount,
+                                gameType: 'roulette',
+                                token: isBuxToken() ? 'bux' : 'bux',
+                            }).then(function () { return sig; });
+                        }
                         return fetch('/api/confirm-collect', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },

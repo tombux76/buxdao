@@ -644,22 +644,42 @@ async function withdrawWinnings() {
     const transactionBytes = Uint8Array.from(atob(transactionBase64), c => c.charCodeAt(0));
     const tx = Transaction.from(transactionBytes);
     const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
-    await connection.confirmTransaction(sig, 'confirmed');
-
-    let confirmed = false;
-    for (let i = 0; i < 10; i++) {
-      const confirmRes = await fetch('/api/confirm-collect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userWallet: wallet, signature: sig, amount: actualAmount, gameType: 'coinflip', token: typeof window.__COINFLIP_TOKEN__ !== 'undefined' ? window.__COINFLIP_TOKEN__ : 'bux' })
-      });
-      const confirmData = await confirmRes.json();
-      if (confirmRes.status === 200 && !confirmData.alreadyCleared) {
-        confirmed = true;
-        break;
+    if (window.CasinoFees?.confirmTransactionBestEffort) {
+      await window.CasinoFees.confirmTransactionBestEffort(connection, sig);
+    } else {
+      try {
+        await connection.confirmTransaction(sig, 'confirmed');
+      } catch (confirmError) {
+        console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
       }
-      if (confirmRes.status === 202) await new Promise(r => setTimeout(r, 1500));
-      else break;
+    }
+
+    const tokenUsed = typeof window.__COINFLIP_TOKEN__ !== 'undefined' ? window.__COINFLIP_TOKEN__ : 'bux';
+    if (window.CasinoFees?.confirmCollectWithServer) {
+      await window.CasinoFees.confirmCollectWithServer({
+        wallet: wallet,
+        signature: sig,
+        amount: actualAmount,
+        gameType: 'coinflip',
+        token: tokenUsed,
+      });
+    } else {
+      let confirmed = false;
+      for (let i = 0; i < 10; i++) {
+        const confirmRes = await fetch('/api/confirm-collect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userWallet: wallet, signature: sig, amount: actualAmount, gameType: 'coinflip', token: tokenUsed })
+        });
+        const confirmData = await confirmRes.json();
+        if (confirmRes.status === 200) {
+          confirmed = true;
+          break;
+        }
+        if (confirmRes.status === 202) await new Promise(r => setTimeout(r, 1500));
+        else break;
+      }
+      if (!confirmed) throw new Error('Could not confirm collect with server');
     }
     totalWon = 0;
     await updateBalance();

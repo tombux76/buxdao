@@ -1284,185 +1284,59 @@ async function withdrawWinnings() {
             throw lastError;
         }
 
-        // Wait for confirmation with extended timeout (90 seconds)
-        let transactionConfirmed = false;
-        const maxWaitTime = 90000; // 90 seconds
-        const startTime = Date.now();
-        
-        try {
-            // Try the standard confirmTransaction first
+        if (window.CasinoFees?.confirmTransactionBestEffort) {
+            await window.CasinoFees.confirmTransactionBestEffort(connection, signature);
+        } else {
             try {
                 await connection.confirmTransaction(signature, 'confirmed');
-                transactionConfirmed = true;
-            } catch (standardError) {
-                // If standard confirmation fails, use polling approach
-                console.warn('Standard confirmation failed, using polling approach...');
-                
-                // Poll for transaction status
-                while (Date.now() - startTime < maxWaitTime) {
-                    try {
-                        const status = await connection.getSignatureStatus(signature);
-                        
-                        if (status && status.value) {
-                            if (status.value.confirmationStatus === 'confirmed' || status.value.confirmationStatus === 'finalized') {
-                                console.log('Transaction confirmed via polling');
-                                transactionConfirmed = true;
-                                break;
-                            } else if (status.value.err) {
-                                // Transaction failed
-                                throw new Error(`Transaction failed: ${JSON.stringify(status.value.err)}`);
-                            }
-                        }
-                        
-                        // Still pending, wait a bit and check again
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Check every 2 seconds
-                    } catch (pollError) {
-                        // If it's an error about the transaction failing, throw it
-                        if (pollError.message && pollError.message.includes('Transaction failed')) {
-                            throw pollError;
-                        }
-                        // Otherwise, continue polling
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                    }
-                }
-                
-                // If we've exhausted the timeout, check one more time
-                if (!transactionConfirmed) {
-                    const finalStatus = await connection.getSignatureStatus(signature);
-                    if (finalStatus && finalStatus.value && (finalStatus.value.confirmationStatus === 'confirmed' || finalStatus.value.confirmationStatus === 'finalized')) {
-                        console.log('Transaction confirmed on final check');
-                        transactionConfirmed = true;
-                    } else if (finalStatus && finalStatus.value && finalStatus.value.err) {
-                        throw new Error(`Transaction failed: ${JSON.stringify(finalStatus.value.err)}`);
-                    } else {
-                        // Still pending or unknown - DO NOT proceed optimistically
-                        console.error('Transaction status still unknown after timeout');
-                        throw new Error('Transaction confirmation timed out. Please check the transaction signature manually to verify if it succeeded.');
-                    }
-                }
-            }
-        } catch (confirmError) {
-            const errorMsg = confirmError.message || confirmError.toString() || '';
-            
-            // If timeout, check if transaction actually succeeded
-            if (errorMsg.includes('TransactionExpiredTimeoutError') || errorMsg.includes('timeout')) {
-                console.warn('Confirmation timeout, checking if transaction succeeded...');
-                
-                // Check if transaction actually succeeded by querying the signature
-                try {
-                    const status = await connection.getSignatureStatus(signature);
-                    if (status && status.value && (status.value.confirmationStatus === 'confirmed' || status.value.confirmationStatus === 'finalized')) {
-                        console.log('Transaction actually succeeded despite timeout');
-                        transactionConfirmed = true;
-                    } else if (status && status.value && status.value.err) {
-                        // Transaction failed
-                        throw new Error(`Transaction failed: ${JSON.stringify(status.value.err)}`);
-                    } else {
-                        // Still pending or unknown - DO NOT proceed optimistically
-                        throw new Error(`Transaction status unknown after timeout. Signature: ${signature}. Please check manually on Solscan.`);
-                    }
-                } catch (statusError) {
-                    // If we can't check status, DO NOT assume success
-                    throw new Error(`Could not verify transaction status. Signature: ${signature}. Please check manually on Solscan to see if it succeeded.`);
-                }
-            } else {
-                // Other confirmation error - rethrow
-                throw confirmError;
+            } catch (confirmError) {
+                console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
             }
         }
-        
-        // Only proceed with database update if transaction is confirmed
-        if (!transactionConfirmed) {
-            throw new Error('Transaction confirmation failed. Please try again.');
-        }
-        
-        // CRITICAL: Verify the transaction actually succeeded by checking transaction details
-        // Don't just trust the confirmation - verify tokens were actually transferred
-        try {
-            const { Transaction, PublicKey } = window.solanaWeb3 || solanaWeb3;
-            const txDetails = await connection.getTransaction(signature, {
-                commitment: 'confirmed',
-                maxSupportedTransactionVersion: 0
+
+        const tokenUsed = typeof window.__SLOTS_TOKEN__ !== 'undefined' ? window.__SLOTS_TOKEN__ : 'bux';
+        if (window.CasinoFees?.confirmCollectWithServer) {
+            await window.CasinoFees.confirmCollectWithServer({
+                wallet: wallet,
+                signature: signature,
+                amount: actualAmount || amount,
+                gameType: 'slots',
+                token: tokenUsed,
             });
-            
-            if (!txDetails) {
-                throw new Error('Could not fetch transaction details. Transaction may have failed.');
-            }
-            
-            if (txDetails.meta && txDetails.meta.err) {
-                throw new Error(`Transaction failed: ${JSON.stringify(txDetails.meta.err)}`);
-            }
-            
-            // Verify transaction succeeded by checking meta
-            if (!txDetails.meta || txDetails.meta.err !== null) {
-                throw new Error('Transaction meta indicates failure');
-            }
-            
-            console.log('✓ Transaction verified: tokens were successfully transferred');
-        } catch (verifyError) {
-            console.error('Transaction verification error:', verifyError);
-            // Don't proceed if we can't verify - this prevents false positives
-            throw new Error(`Transaction verification failed: ${verifyError.message}. Signature: ${signature}. Please check the transaction manually on Solscan.`);
-        }
-        
-        // Call backend to confirm collect and clear unclaimed_rewards in DB
-        // Retry logic for RPC propagation delays
-        let confirmSuccess = false;
-        let confirmRetries = 3;
-        let confirmWaitTime = 2000; // Start with 2 seconds
-        
-        while (confirmRetries > 0 && !confirmSuccess) {
-            try {
+        } else {
+            let confirmSuccess = false;
+            let confirmRetries = 5;
+            let confirmWaitTime = 2000;
+            while (confirmRetries > 0 && !confirmSuccess) {
                 const confirmResponse = await fetch('/api/confirm-collect', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         userWallet: wallet,
                         signature: signature,
                         amount: actualAmount || amount,
                         gameType: 'slots',
-                        token: typeof window.__SLOTS_TOKEN__ !== 'undefined' ? window.__SLOTS_TOKEN__ : 'bux'
-                    })
+                        token: tokenUsed,
+                    }),
                 });
-
                 if (confirmResponse.ok) {
-                    console.log('Successfully confirmed collect in database');
                     confirmSuccess = true;
-                } else {
-                    const errorData = await confirmResponse.json();
-                    
-                    // If transaction not found, retry after waiting
-                    if (errorData.error === 'Transaction not found' && confirmRetries > 1) {
-                        console.warn(`Transaction not found in database confirmation, retrying in ${confirmWaitTime}ms... (${4 - confirmRetries}/3)`);
-                        await new Promise(resolve => setTimeout(resolve, confirmWaitTime));
-                        confirmWaitTime *= 1.5; // Exponential backoff
-                        confirmRetries--;
-                        continue;
-                    }
-                    
-                    console.error('Failed to confirm collect in database:', errorData);
-                    // Don't throw - transaction already succeeded, just log the error
-                    // The user got their tokens, we'll just need to manually fix the DB if needed
                     break;
                 }
-            } catch (confirmError) {
-                if (confirmRetries > 1) {
-                    console.warn(`Error confirming collect, retrying in ${confirmWaitTime}ms... (${4 - confirmRetries}/3):`, confirmError);
+                const errorData = await confirmResponse.json().catch(() => ({}));
+                if (errorData.error === 'Transaction not found' && confirmRetries > 1) {
                     await new Promise(resolve => setTimeout(resolve, confirmWaitTime));
                     confirmWaitTime *= 1.5;
                     confirmRetries--;
                     continue;
                 }
-                console.error('Error confirming collect in database:', confirmError);
-                // Don't throw - transaction already succeeded
-                break;
+                if (confirmResponse.status === 202 && confirmRetries > 1) {
+                    await new Promise(resolve => setTimeout(resolve, confirmWaitTime));
+                    confirmRetries--;
+                    continue;
+                }
+                throw new Error(errorData.message || errorData.error || 'Could not confirm collect with server');
             }
-        }
-        
-        if (!confirmSuccess) {
-            console.warn('Could not confirm collect in database after retries. Transaction succeeded, but database may need manual update.');
         }
 
         // Reset total won (now that database is updated)
