@@ -508,7 +508,10 @@ async function purchaseFlips() {
       await updateBalance();
       updateDisplay();
       updateButtonStates();
-      showMessage({ title: 'Purchase complete', message: `Purchased ${numFlips} flip(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : ''}.`, txSignature: signature });
+      const successCost = window.CasinoFees?.formatBuxWithUsd
+        ? await window.CasinoFees.formatBuxWithUsd(totalCost, { label: getTokenLabel() })
+        : `${totalCost} ${getTokenLabel()}`;
+      showMessage({ title: 'Purchase complete', message: `Purchased ${numFlips} flip(s) for ${successCost}${getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : ''}.`, txSignature: signature });
     } finally {
       if (purchaseProcessing && window.CasinoFees?.hidePurchaseProcessing) {
         window.CasinoFees.hidePurchaseProcessing();
@@ -607,7 +610,12 @@ async function withdrawWinnings() {
   isCollecting = true;
   const withdrawBtn = document.getElementById('withdraw-button');
   if (withdrawBtn) withdrawBtn.disabled = true;
+  let collectProcessing = false;
   try {
+    if (window.CasinoFees?.showCasinoProcessing) {
+      window.CasinoFees.showCasinoProcessing('Preparing your collect…', 'Processing collect');
+      collectProcessing = true;
+    }
     const response = await fetch('/api/collect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -626,6 +634,12 @@ async function withdrawWinnings() {
       throw new Error(errData.error || errData.message || 'Collect failed');
     }
     const { transaction: transactionBase64, actualAmount } = await response.json();
+    if (window.CasinoFees?.showCasinoProcessing) {
+      window.CasinoFees.showCasinoProcessing(
+        'Confirming your collect on-chain. This may take a minute.',
+        'Processing collect'
+      );
+    }
     const { Transaction } = window.solanaWeb3 || solanaWeb3;
     const transactionBytes = Uint8Array.from(atob(transactionBase64), c => c.charCodeAt(0));
     const tx = Transaction.from(transactionBytes);
@@ -652,7 +666,10 @@ async function withdrawWinnings() {
     await loadPlayerData();
     updateDisplay();
     updateButtonStates();
-    showMessage({ title: 'Collect complete', message: `Withdrew ${actualAmount} ${getTokenLabel()}.`, txSignature: sig });
+    const collectedLabel = window.CasinoFees?.formatBuxWithUsd
+      ? await window.CasinoFees.formatBuxWithUsd(actualAmount, { label: getTokenLabel() })
+      : `${actualAmount} ${getTokenLabel()}`;
+    showMessage({ title: 'Collect complete', message: `Withdrew ${collectedLabel}.`, txSignature: sig });
   } catch (err) {
     const msg = err.message || err.toString();
     if (msg.includes('User rejected') || msg.includes('rejected')) return;
@@ -661,6 +678,9 @@ async function withdrawWinnings() {
     updateDisplay();
     updateButtonStates();
   } finally {
+    if (collectProcessing && window.CasinoFees?.hideCasinoProcessing) {
+      window.CasinoFees.hideCasinoProcessing();
+    }
     isCollecting = false;
     if (withdrawBtn) withdrawBtn.disabled = !wallet || totalWon <= 0 || isCollecting;
   }

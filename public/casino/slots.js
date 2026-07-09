@@ -793,7 +793,10 @@ async function purchaseSpins() {
         updateDisplay();
         updateButtonStates();
         
-        const successMsg = `Successfully purchased ${numSpins} spin(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ` + ${getPurchaseFeeSol()} SOL fee` : ''}.`;
+        const successCost = window.CasinoFees?.formatBuxWithUsd
+            ? await window.CasinoFees.formatBuxWithUsd(totalCost, { label: getTokenLabel() })
+            : `${totalCost} ${getTokenLabel()}`;
+        const successMsg = `Successfully purchased ${numSpins} spin(s) for ${successCost}${getPurchaseFeeSol() > 0 ? ` + ${getPurchaseFeeSol()} SOL fee` : ''}.`;
         showSlotsMessage({ title: 'Purchase complete', message: successMsg, txSignature: signature });
         } finally {
             if (purchaseProcessing && window.CasinoFees?.hidePurchaseProcessing) {
@@ -1093,8 +1096,17 @@ async function withdrawWinnings() {
         withdrawBtn.disabled = true;
     }
     
+    let collectProcessing = false;
     try {
         const amount = totalWon;
+
+        if (window.CasinoFees?.showCasinoProcessing) {
+            window.CasinoFees.showCasinoProcessing(
+                'Preparing your collect…',
+                'Processing collect'
+            );
+            collectProcessing = true;
+        }
         
         // Call backend API to get presigned transaction
         const response = await fetch('/api/collect', {
@@ -1127,6 +1139,13 @@ async function withdrawWinnings() {
         }
 
         const { transaction: transactionBase64, actualAmount } = await response.json();
+
+        if (window.CasinoFees?.showCasinoProcessing) {
+            window.CasinoFees.showCasinoProcessing(
+                'Confirming your collect on-chain. This may take a minute.',
+                'Processing collect'
+            );
+        }
 
         // Deserialize the presigned transaction
         const { Transaction } = window.solanaWeb3 || solanaWeb3;
@@ -1454,9 +1473,13 @@ async function withdrawWinnings() {
         updateDisplay();
         updateButtonStates();
 
+        const collectedAmount = actualAmount || amount;
+        const collectedLabel = window.CasinoFees?.formatBuxWithUsd
+            ? await window.CasinoFees.formatBuxWithUsd(collectedAmount, { label: getTokenLabel() })
+            : `${collectedAmount.toLocaleString()} ${getTokenLabel()}`;
         showSlotsMessage({
             title: 'Collect complete',
-            message: `Successfully collected ${(actualAmount || amount).toLocaleString()} ${getTokenLabel()}! Your balance should update shortly.`,
+            message: `Successfully collected ${collectedLabel}! Your balance should update shortly.`,
             txSignature: signature
         });
     } catch (error) {
@@ -1482,6 +1505,9 @@ async function withdrawWinnings() {
         
         showSlotsMessage({ title: 'Collect failed', message: 'Failed to collect winnings: ' + errorMsg, isError: true });
     } finally {
+        if (collectProcessing && window.CasinoFees?.hideCasinoProcessing) {
+            window.CasinoFees.hideCasinoProcessing();
+        }
         // Always reset collecting flag and re-enable button
         isCollecting = false;
         updateButtonStates();

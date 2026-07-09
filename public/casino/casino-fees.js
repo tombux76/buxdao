@@ -82,6 +82,20 @@
     return buxAmount + " (" + formatUsd(usd) + ")";
   }
 
+  async function formatBuxWithUsd(buxAmount, options) {
+    const opts = options || {};
+    const label = opts.label || "$BUX";
+    const num = Number(buxAmount);
+    const buxStr = Number.isFinite(num)
+      ? num.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      : String(buxAmount);
+    const tokenValueUsd = await fetchTokenValueUsd();
+    if (!tokenValueUsd || !Number.isFinite(num)) {
+      return buxStr + " " + label;
+    }
+    return buxStr + " " + label + " (" + formatUsd(num * tokenValueUsd) + ")";
+  }
+
   async function updateBuxCostSelect(selectEl) {
     if (!selectEl) return;
     const tokenValueUsd = await fetchTokenValueUsd();
@@ -186,7 +200,10 @@
     addPurchaseSolFeeTransfers,
     fetchTokenValueUsd,
     updateBuxCostSelect,
+    formatBuxWithUsd,
     showPurchaseProcessing,
     hidePurchaseProcessing,
+    showCasinoProcessing: showPurchaseProcessing,
+    hideCasinoProcessing: hidePurchaseProcessing,
   };
 })(window);

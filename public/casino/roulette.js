@@ -821,7 +821,16 @@
             updateBalance();
             updatePopups();
             updateRouletteButtonStates();
-            showMessage({ title: 'Purchase complete', message: 'Successfully bought ' + num + ' chips for ' + total + ' ' + getTokenLabel() + (getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : '') + '.', txSignature: result.sig });
+            var costPromise = window.CasinoFees && window.CasinoFees.formatBuxWithUsd
+                ? window.CasinoFees.formatBuxWithUsd(total, { label: getTokenLabel() })
+                : Promise.resolve(total + ' ' + getTokenLabel());
+            return costPromise.then(function (costLabel) {
+                showMessage({
+                    title: 'Purchase complete',
+                    message: 'Successfully bought ' + num + ' chips for ' + costLabel + (getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : '') + '.',
+                    txSignature: result.sig
+                });
+            });
         }).catch(function (err) {
             if (err && (err.message === 'INSUFFICIENT_SOL' || err.message === 'INSUFFICIENT_BUX' || err.message === 'NO_ATA_HELPER')) return;
             if (String(err.message || '').match(/reject|authorized|cancelled/i)) return;
@@ -840,8 +849,13 @@
         if (!window.splToken) { showMessage({ title: 'Loading', message: 'Token library still loading. Try again in a moment.', isError: true }); return; }
         var label = getTokenLabel();
         var totalToCollectAmount = 0;
+        var collectProcessing = false;
         isCollecting = true;
         updateRouletteButtonStates();
+        if (window.CasinoFees && window.CasinoFees.showCasinoProcessing) {
+            window.CasinoFees.showCasinoProcessing('Preparing your collect…', 'Processing collect');
+            collectProcessing = true;
+        }
         fetch('/api/load-player?walletAddress=' + encodeURIComponent(wallet) + '&gameType=roulette&tokenUsed=' + (isBuxToken() ? 'bux' : 'bux'))
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (player) {
@@ -874,6 +888,12 @@
                 return res.json();
             })
             .then(function (data) {
+                if (window.CasinoFees && window.CasinoFees.showCasinoProcessing) {
+                    window.CasinoFees.showCasinoProcessing(
+                        'Confirming your collect on-chain. This may take a minute.',
+                        'Processing collect'
+                    );
+                }
                 var txBytes = Uint8Array.from(atob(data.transaction), function (c) { return c.charCodeAt(0); });
                 var Transaction = (window.solanaWeb3 || solanaWeb3).Transaction;
                 var tx = Transaction.from(txBytes);
@@ -907,7 +927,16 @@
                 updateBalance();
                 loadPlayerData();
                 updateRouletteButtonStates();
-                showMessage({ title: 'Collect complete', message: 'Successfully collected ' + totalToCollectAmount.toFixed(2) + ' ' + label + '!', txSignature: sig });
+                var collectedPromise = window.CasinoFees && window.CasinoFees.formatBuxWithUsd
+                    ? window.CasinoFees.formatBuxWithUsd(totalToCollectAmount, { label: label })
+                    : Promise.resolve(totalToCollectAmount.toFixed(2) + ' ' + label);
+                return collectedPromise.then(function (collectedLabel) {
+                    showMessage({
+                        title: 'Collect complete',
+                        message: 'Successfully collected ' + collectedLabel + '!',
+                        txSignature: sig
+                    });
+                });
             })
             .catch(function (err) {
                 if (err && err.message === 'NOTHING_TO_COLLECT') return;
@@ -915,6 +944,9 @@
                 showMessage({ title: 'Collect failed', message: 'Failed to collect: ' + (err.message || err), isError: true });
             })
             .finally(function () {
+                if (collectProcessing && window.CasinoFees && window.CasinoFees.hideCasinoProcessing) {
+                    window.CasinoFees.hideCasinoProcessing();
+                }
                 isCollecting = false;
                 updateRouletteButtonStates();
             });
