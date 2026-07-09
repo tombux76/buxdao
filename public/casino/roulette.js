@@ -18,6 +18,8 @@
     var KNUKL_DECIMALS = 6;
     var ALLOWED_COST_PER_CHIP = [10, 50, 100, 500];
     var ALLOWED_NUM_CHIPS = [10, 50, 100, 200, 500, 1000, 5000];
+    /** Table bet chip sizes — min 1 so any chip balance can be fully staked. */
+    var CHIP_DENOMINATIONS = [1, 5, 10, 25, 50, 100, 200];
     var SOLSCAN_TX_BASE = 'https://solscan.io/tx/';
 
     var wallet = null;
@@ -127,6 +129,67 @@
         var el = document.getElementById('roulette-chips');
         if (el) el.textContent = chipBalance;
         updateToCollectUI();
+        ensureChipSelection();
+    }
+
+    function getLargestAffordableDenom() {
+        for (var i = CHIP_DENOMINATIONS.length - 1; i >= 0; i--) {
+            if (CHIP_DENOMINATIONS[i] <= chipBalance) return CHIP_DENOMINATIONS[i];
+        }
+        return 0;
+    }
+
+    function selectChipByValue(val) {
+        var chips = document.querySelectorAll('.roulette-chip');
+        selectedChipValue = val;
+        chips.forEach(function (b) {
+            var match = parseInt(b.getAttribute('data-value'), 10) === val;
+            b.classList.toggle('selected', match);
+            b.setAttribute('aria-pressed', match ? 'true' : 'false');
+        });
+        updatePopups();
+    }
+
+    function updateChipSelectorAvailability() {
+        var chips = document.querySelectorAll('.roulette-chip');
+        chips.forEach(function (btn) {
+            var val = parseInt(btn.getAttribute('data-value'), 10);
+            var affordable = !isNaN(val) && val <= chipBalance;
+            btn.disabled = !affordable;
+            btn.classList.toggle('roulette-chip-disabled', !affordable);
+            if (!affordable && btn.classList.contains('selected')) {
+                btn.classList.remove('selected');
+                btn.setAttribute('aria-pressed', 'false');
+            }
+        });
+    }
+
+    function ensureChipSelection() {
+        updateChipSelectorAvailability();
+        if (chipBalance <= 0) {
+            selectedChipValue = 0;
+            userClickedChipYet = false;
+            return;
+        }
+        if (!selectedChipValue || selectedChipValue > chipBalance) {
+            selectChipByValue(chipBalance >= 1 ? 1 : getLargestAffordableDenom());
+            userClickedChipYet = true;
+        }
+    }
+
+    function buildChipSelector() {
+        var container = document.querySelector('.roulette-chip-selector');
+        if (!container) return;
+        container.innerHTML = '';
+        CHIP_DENOMINATIONS.forEach(function (val) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'roulette-chip roulette-chip-' + val;
+            btn.setAttribute('data-value', String(val));
+            btn.setAttribute('aria-pressed', 'false');
+            btn.textContent = String(val);
+            container.appendChild(btn);
+        });
     }
 
     function updateStakedUI() {
@@ -155,7 +218,7 @@
             var amount = bets[key];
             if (amount && amount > 0) {
                 var stack = document.createElement('div');
-                var chipClass = chipTypes[key] ? 'roulette-chip-stack roulette-chip-' + chipTypes[key] : 'roulette-chip-stack roulette-chip-10';
+                var chipClass = chipTypes[key] ? 'roulette-chip-stack roulette-chip-' + chipTypes[key] : 'roulette-chip-stack roulette-chip-1';
                 stack.className = chipClass;
                 stack.textContent = amount;
                 var cellRect = cell.getBoundingClientRect();
@@ -287,7 +350,7 @@
         for (var key in lastBets) {
             if (lastBets.hasOwnProperty(key)) {
                 bets[key] = lastBets[key];
-                chipTypes[key] = lastChipTypes[key] || 10;
+                chipTypes[key] = lastChipTypes[key] || 1;
                 chipBalance -= lastBets[key];
             }
         }
@@ -327,8 +390,9 @@
         var chips = document.querySelectorAll('.roulette-chip');
         chips.forEach(function (btn) {
             btn.addEventListener('click', function () {
+                if (btn.disabled) return;
                 var val = parseInt(btn.getAttribute('data-value'), 10);
-                if (isNaN(val)) return;
+                if (isNaN(val) || val > chipBalance) return;
                 selectedChipValue = val;
                 userClickedChipYet = true;
                 updatePopups();
@@ -994,7 +1058,9 @@
         updateReplaceButton();
         renderChipStacks();
         updatePopups();
+        buildChipSelector();
         bindChipSelector();
+        ensureChipSelection();
         bindTableClicks();
         bindSpinButton();
         bindUndoButton();

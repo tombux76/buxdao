@@ -103,11 +103,15 @@
 .roulette-outside-bet.roulette-bet-light:focus, .roulette-outside-bet.roulette-bet-light:active { background: #0a3d1a !important; }
 
 .roulette-chip-selector-wrap { position: relative; flex-shrink: 0; padding: 6px 0; margin-bottom: 8px; }
-.roulette-chip-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; flex-shrink: 0; padding: 0; justify-items: center; margin: 0 auto; }
-.roulette-chip { width: 34px; height: 34px; border-radius: 50%; border: none; font-size: 11px; font-weight: 800; color: #fff; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; background-size: 150% 150%, 100% 100%; background-position: center, center; background-repeat: no-repeat, no-repeat; background-origin: border-box; background-clip: padding-box; background-image: url('images/poker-chip.svg'), var(--chip-bg); }
-.roulette-chip:hover { transform: scale(1.08); }
+.roulette-chip-selector { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex-shrink: 0; padding: 0; justify-items: center; margin: 0 auto; max-width: 156px; }
+.roulette-chip { width: 34px; height: 34px; border-radius: 50%; border: none; font-size: 11px; font-weight: 800; color: #fff; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; background-size: 150% 150%, 100% 100%; background-position: center, center; background-repeat: no-repeat, no-repeat; background-origin: border-box; background-clip: padding-box; background-image: url('images/poker-chip.svg'), var(--chip-bg); }
+.roulette-chip:hover:not(:disabled) { transform: scale(1.08); }
 .roulette-chip.selected { box-shadow: 0 0 0 3px #fcd34d, 0 2px 4px rgba(0,0,0,0.3); }
+.roulette-chip:disabled, .roulette-chip.roulette-chip-disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.roulette-chip-1 { --chip-bg: linear-gradient(145deg, #e5e7eb, #9ca3af); color: #1f2937; }
+.roulette-chip-5 { --chip-bg: linear-gradient(145deg, #ef4444, #dc2626); }
 .roulette-chip-10 { --chip-bg: linear-gradient(145deg, #3b82f6, #2563eb); background-image: url('images/poker-chip.svg'), var(--chip-bg); }
+.roulette-chip-25 { --chip-bg: linear-gradient(145deg, #22c55e, #16a34a); }
 .roulette-chip-50 { --chip-bg: linear-gradient(145deg, #14b8a6, #0d9488); background-image: url('images/poker-chip.svg'), var(--chip-bg); }
 .roulette-chip-100 { --chip-bg: linear-gradient(145deg, #f59e0b, #d97706); background-image: url('images/poker-chip.svg'), var(--chip-bg); }
 .roulette-chip-200 { --chip-bg: linear-gradient(145deg, #8b5cf6, #7c3aed); background-image: url('images/poker-chip.svg'), var(--chip-bg); }
@@ -124,7 +128,10 @@
 
 .roulette-num, .roulette-zero-cell, .roulette-outside-bet { position: relative; }
 .roulette-chip-stack { position: absolute; min-width: 28px; height: 28px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); pointer-events: none; z-index: 2; text-shadow: 0 1px 2px rgba(0,0,0,0.5); --chip-bg: linear-gradient(145deg, #3b82f6, #2563eb); background-size: 150% 150%, 100% 100%; background-position: center, center; background-repeat: no-repeat, no-repeat; background-image: url('images/poker-chip.svg'), var(--chip-bg); }
+.roulette-chip-stack.roulette-chip-1 { --chip-bg: linear-gradient(145deg, #e5e7eb, #9ca3af); color: #1f2937; }
+.roulette-chip-stack.roulette-chip-5 { --chip-bg: linear-gradient(145deg, #ef4444, #dc2626); }
 .roulette-chip-stack.roulette-chip-10 { --chip-bg: linear-gradient(145deg, #3b82f6, #2563eb); }
+.roulette-chip-stack.roulette-chip-25 { --chip-bg: linear-gradient(145deg, #22c55e, #16a34a); }
 .roulette-chip-stack.roulette-chip-50 { --chip-bg: linear-gradient(145deg, #14b8a6, #0d9488); }
 .roulette-chip-stack.roulette-chip-100 { --chip-bg: linear-gradient(145deg, #f59e0b, #d97706); }
 .roulette-chip-stack.roulette-chip-200 { --chip-bg: linear-gradient(145deg, #8b5cf6, #7c3aed); }
@@ -156,7 +163,7 @@
     .roulette-left-col .roulette-stat { flex-direction: row; align-items: center; gap: 8px; flex: 1; justify-content: center; }
     .roulette-left-col .roulette-stat-label { font-size: 13px; }
     .roulette-left-col .roulette-stat-value { font-size: 20px; }
-    .roulette-left-col .roulette-chip-selector { flex-direction: row; justify-content: center; gap: 16px; width: 100%; }
+    .roulette-left-col .roulette-chip-selector { display: flex; flex-wrap: wrap; flex-direction: row; justify-content: center; gap: 12px; width: 100%; max-width: none; }
     .roulette-left-col .roulette-chip { width: 56px; height: 56px; aspect-ratio: 1; }
     .roulette-left-col .roulette-reel-wrap { transform: scale(1.8); transform-origin: center center; }
     .roulette-reel-and-last10 { gap: 80px; }
@@ -197,9 +204,10 @@
     .roulette-left-col .roulette-chip-selector {
         display: flex;
         flex-direction: row;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         justify-content: center;
         gap: 4px;
+        max-width: 124px;
     }
     .roulette-left-col .roulette-chip {
         width: 28px;
