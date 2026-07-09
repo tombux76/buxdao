@@ -83,7 +83,7 @@
     width: 100%;
     box-sizing: border-box;
     position: relative;
-    background-image: linear-gradient(rgba(10, 10, 15, 0.72), rgba(10, 10, 15, 0.72)), url('/images/casino-bg2.jpg');
+    background-image: var(--casino-page-bg);
     background-size: cover;
     background-position: center top;
 }

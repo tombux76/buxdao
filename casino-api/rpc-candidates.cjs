@@ -2,6 +2,26 @@
 const { Connection } = require("@solana/web3.js");
 const { getAccount } = require("@solana/spl-token");
 
+const RPC_TIMEOUT_MS = 8_000;
+
+function createRpcConnection(url) {
+  const fetchFn = async (input, init) => {
+    const response = await fetch(input, {
+      ...init,
+      signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response;
+  };
+  return new Connection(url, {
+    commitment: "confirmed",
+    fetch: fetchFn,
+    disableRetryOnRateLimit: true,
+  });
+}
+
 function getRpcCandidates() {
   const urls = [];
   const add = (value) => {
@@ -90,7 +110,7 @@ async function withRpcFallback(operation, options = {}) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     for (const url of urls) {
       try {
-        const connection = new Connection(url, "confirmed");
+        const connection = createRpcConnection(url);
         return await operation(connection, url);
       } catch (err) {
         lastError = err;
@@ -125,7 +145,7 @@ async function getParsedTransactionWithFallback(signature, options = {}) {
   while (Date.now() < deadline) {
     for (const url of getRpcCandidates()) {
       try {
-        const connection = new Connection(url, "confirmed");
+        const connection = createRpcConnection(url);
         for (const commitment of commitments) {
           const parsed = await connection.getParsedTransaction(signature, {
             maxSupportedTransactionVersion: 0,
@@ -154,7 +174,7 @@ async function getSignatureStatusWithFallback(signature, options = {}) {
   for (let attempt = 0; attempt < retries; attempt++) {
     for (const url of getRpcCandidates()) {
       try {
-        const connection = new Connection(url, "confirmed");
+        const connection = createRpcConnection(url);
         const status = await connection.getSignatureStatus(signature);
         if (status?.value) {
           return status;
@@ -180,6 +200,7 @@ async function getSignatureStatusWithFallback(signature, options = {}) {
 
 module.exports = {
   getRpcCandidates,
+  createRpcConnection,
   sleep,
   isRateLimitError,
   isRetryableRpcError,

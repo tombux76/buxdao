@@ -11,6 +11,11 @@ function rpcHost(url: string): string {
   }
 }
 
+/** Browsers and wallets sometimes probe with GET — avoid 405 noise in logs. */
+export async function GET() {
+  return NextResponse.json({ ok: true, method: "POST" });
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const candidates = getServerRpcUrlCandidates();

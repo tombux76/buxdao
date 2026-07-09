@@ -9,7 +9,7 @@
 
 .roulette-page {
     height: 100vh; height: 100svh; max-height: 100vh; max-height: 100svh; overflow: hidden; overflow-x: hidden;
-    background-image: linear-gradient(rgba(10, 10, 15, 0.72), rgba(10, 10, 15, 0.72)), url('/images/casino-bg2.jpg');
+    background-image: var(--casino-page-bg);
     background-size: cover; background-position: center top; display: flex; flex-direction: column;
     padding-top: 72px; padding-bottom: env(safe-area-inset-bottom, 0); box-sizing: border-box;
     width: 100%; min-width: 0;

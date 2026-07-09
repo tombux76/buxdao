@@ -1,8 +1,8 @@
 // Verify on-chain BUX purchase txs before crediting spins/flips/chips.
-const { Connection, PublicKey } = require("@solana/web3.js");
+const { PublicKey } = require("@solana/web3.js");
 const { getAssociatedTokenAddress } = require("@solana/spl-token");
 const { getSql } = require("./slots-helpers.cjs");
-const { getRpcCandidates, sleep } = require("./rpc-candidates.cjs");
+const { getRpcCandidates, sleep, createRpcConnection } = require("./rpc-candidates.cjs");
 
 const MAX_TX_AGE_SEC = 60 * 60 * 24; // 24h
 const PARSE_POLL_MS = 2000;
@@ -18,7 +18,7 @@ async function getParsedTransactionWithRetry(signature) {
   while (Date.now() < deadline) {
     for (const url of getRpcCandidates()) {
       try {
-        const connection = new Connection(url, "confirmed");
+        const connection = createRpcConnection(url);
         for (const commitment of commitments) {
           const parsed = await connection.getParsedTransaction(signature, {
             maxSupportedTransactionVersion: 0,
