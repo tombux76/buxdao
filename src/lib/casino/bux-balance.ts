@@ -52,16 +52,16 @@ export function getCasinoRpcUrl(): string {
   if (heliusUrls.length > 0) {
     return heliusUrls[0]!;
   }
-  return getPublicCasinoRpcUrl();
-}
-
-/** Client-safe RPC URL — no private API keys. */
-export function getPublicCasinoRpcUrl(): string {
   return (
-    process.env.NEXT_PUBLIC_SOLANA_RPC_URL?.trim() ||
     process.env.SOLANA_RPC_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL?.trim() ||
     "https://api.mainnet-beta.solana.com"
   );
+}
+
+/** Browser-safe RPC — same-origin proxy (no API keys, no CORS). */
+export function getPublicCasinoRpcUrl(): string {
+  return "/api/solana/rpc";
 }
 
 export function isValidSolanaWallet(address: string): boolean {

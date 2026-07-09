@@ -332,7 +332,7 @@ function initializeReels() {
 
 // Wallet Connection
 function getRpcUrl() {
-    return window.__BUX_CASINO_RPC__ || 'https://api.mainnet-beta.solana.com';
+    return window.__BUX_CASINO_RPC__ || '/api/solana/rpc';
 }
 
 function initConnection() {
