@@ -1,15 +1,20 @@
 // Create signed collect transaction (treasury -> user) — adapted from xapes, slots only
-const { Connection, PublicKey, Transaction, Keypair } = require("@solana/web3.js");
+const { PublicKey, Transaction, Keypair } = require("@solana/web3.js");
 const {
   getAssociatedTokenAddress,
   createTransferInstruction,
-  getAccount,
   createAssociatedTokenAccountInstruction,
 } = require("@solana/spl-token");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { isCasinoPaused, DB_DECIMALS } = require("./game-logic.cjs");
 const { acquireCollectLock, releaseCollectLock } = require("./collect-lock.cjs");
+const {
+  getTokenAccountWithFallback,
+  getLatestBlockhashWithFallback,
+  isRateLimitError,
+  isAccountNotFoundError,
+} = require("./rpc-candidates.cjs");
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET;
 
@@ -20,11 +25,6 @@ function getTokenMintAndDecimals(token) {
     decimals: parseInt(isBux ? process.env.BUX_TOKEN_DECIMALS || "9" : process.env.KNUKL_TOKEN_DECIMALS || "8", 10),
   };
 }
-const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
-const RPC_URL =
-  process.env.SLOTS_RPC_URL ||
-  (process.env.HELIUS_API_KEY ? HELIUS_RPC + "/?api-key=" + encodeURIComponent(process.env.HELIUS_API_KEY) : HELIUS_RPC + "/");
-
 const MAX_WIN_AMOUNT = 10000000;
 const rateLimitMap = new Map();
 
@@ -144,7 +144,6 @@ async function handler(req, res) {
       return json(res, 500, { error: "Treasury key mismatch" });
     }
 
-    const connection = new Connection(RPC_URL, "confirmed");
     const tokenMint = new PublicKey(TOKEN_MINT);
     const decimals = TOKEN_DECIMALS;
     const userPublicKey = new PublicKey(userWallet);
@@ -162,12 +161,20 @@ async function handler(req, res) {
 
     let userAccountExists = false;
     try {
-      await getAccount(connection, userTokenAccount);
+      await getTokenAccountWithFallback(userTokenAccount);
       userAccountExists = true;
-    } catch (_) {}
+    } catch (userAccountError) {
+      if (!isAccountNotFoundError(userAccountError) && !isRateLimitError(userAccountError)) {
+        await releaseCollectLock(userWallet, gameTypeNorm, token);
+        return json(res, 500, {
+          error: "Failed to verify user token account",
+          message: userAccountError.message || String(userAccountError),
+        });
+      }
+    }
 
     try {
-      const treasuryAccountInfo = await getAccount(connection, treasuryTokenAccount);
+      const treasuryAccountInfo = await getTokenAccountWithFallback(treasuryTokenAccount);
       const treasuryBalance = Number(treasuryAccountInfo.amount);
       if (treasuryBalance < Number(transferAmount)) {
         await releaseCollectLock(userWallet, gameTypeNorm, token);
@@ -179,12 +186,19 @@ async function handler(req, res) {
       }
     } catch (accountError) {
       const msg = accountError.message || "";
-      if (msg.includes("could not find account") || msg.includes("not found")) {
+      if (isAccountNotFoundError(accountError)) {
         await releaseCollectLock(userWallet, gameTypeNorm, token);
         return json(res, 503, {
           error: "Treasury token account not found",
           message: "Make a purchase first to create the treasury token account.",
           treasuryAccount: treasuryTokenAccount.toString(),
+        });
+      }
+      if (isRateLimitError(accountError)) {
+        await releaseCollectLock(userWallet, gameTypeNorm, token);
+        return json(res, 503, {
+          error: "RPC temporarily unavailable",
+          message: "Solana RPC is rate-limited. Please try collecting again in a few seconds.",
         });
       }
       await releaseCollectLock(userWallet, gameTypeNorm, token);
@@ -211,7 +225,19 @@ async function handler(req, res) {
       )
     );
 
-    const { blockhash } = await connection.getLatestBlockhash();
+    let blockhash;
+    try {
+      ({ blockhash } = await getLatestBlockhashWithFallback());
+    } catch (blockhashError) {
+      await releaseCollectLock(userWallet, gameTypeNorm, token);
+      if (isRateLimitError(blockhashError)) {
+        return json(res, 503, {
+          error: "RPC temporarily unavailable",
+          message: "Solana RPC is rate-limited. Please try collecting again in a few seconds.",
+        });
+      }
+      throw blockhashError;
+    }
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = treasuryPublicKey;
     transaction.sign(treasuryKeypair);

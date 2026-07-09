@@ -1,15 +1,9 @@
 // Confirm collect: clear unclaimed_rewards after tx confirmed — adapted from xapes, slots only
-const { Connection, PublicKey } = require("@solana/web3.js");
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { verifyCollectPayout } = require("./collect-verify.cjs");
 const { releaseCollectLock } = require("./collect-lock.cjs");
-
-const TOKEN_DECIMALS = 6;
-const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
-const RPC_URL =
-  process.env.SLOTS_RPC_URL ||
-  (process.env.HELIUS_API_KEY ? HELIUS_RPC + "/?api-key=" + encodeURIComponent(process.env.HELIUS_API_KEY) : HELIUS_RPC + "/");
+const { getSignatureStatusWithFallback } = require("./rpc-candidates.cjs");
 
 async function handler(req, res) {
   setCors(res, req.headers.origin);
@@ -39,20 +33,7 @@ async function handler(req, res) {
       return json(res, 400, { error: "Invalid transaction signature format" });
     }
 
-    const connection = new Connection(RPC_URL, "confirmed");
-    let status = null;
-    let retries = 5;
-    let waitTime = 1000;
-
-    while (retries > 0) {
-      status = await connection.getSignatureStatus(signature);
-      if (status && status.value) break;
-      retries--;
-      if (retries > 0) {
-        await new Promise((r) => setTimeout(r, waitTime));
-        waitTime *= 1.5;
-      }
-    }
+    const status = await getSignatureStatusWithFallback(signature);
 
     if (!status || !status.value) {
       return json(res, 400, {

@@ -2,45 +2,13 @@
 const { Connection, PublicKey } = require("@solana/web3.js");
 const { getAssociatedTokenAddress } = require("@solana/spl-token");
 const { getSql } = require("./slots-helpers.cjs");
+const { getRpcCandidates, sleep } = require("./rpc-candidates.cjs");
 
 const MAX_TX_AGE_SEC = 60 * 60 * 24; // 24h
 const PARSE_POLL_MS = 2000;
 const PARSE_MAX_WAIT_MS = 60_000;
 
 let tableReady = false;
-
-function getRpcCandidates() {
-  const urls = [];
-  const add = (value) => {
-    const trimmed = value?.trim();
-    if (trimmed && !urls.includes(trimmed)) {
-      urls.push(trimmed);
-    }
-  };
-
-  add(process.env.SOLANA_RPC_URL);
-  add(process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
-  add(process.env.SLOTS_RPC_URL);
-
-  if (process.env.HELIUS_API_KEY) {
-    add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY)}`);
-  }
-  if (process.env.HELIUS_API_KEY_2) {
-    add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY_2)}`);
-  }
-
-  const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
-  for (const entry of extras) {
-    add(entry);
-  }
-
-  add("https://api.mainnet-beta.solana.com");
-  return urls;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function getParsedTransactionWithRetry(signature) {
   const commitments = ["confirmed", "finalized"];

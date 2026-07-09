@@ -1,13 +1,7 @@
 // Verify treasury -> user collect payout on chain before clearing unclaimed.
-const { Connection, PublicKey } = require("@solana/web3.js");
+const { PublicKey } = require("@solana/web3.js");
 const { getAssociatedTokenAddress } = require("@solana/spl-token");
-
-const HELIUS_RPC = process.env.HELIUS_RPC || "https://mainnet.helius-rpc.com";
-const RPC_URL =
-  process.env.SLOTS_RPC_URL ||
-  (process.env.HELIUS_API_KEY
-    ? HELIUS_RPC + "/?api-key=" + encodeURIComponent(process.env.HELIUS_API_KEY)
-    : HELIUS_RPC + "/");
+const { getParsedTransactionWithFallback } = require("./rpc-candidates.cjs");
 
 function getTokenDecimals() {
   return parseInt(process.env.BUX_TOKEN_DECIMALS || "9", 10);
@@ -23,13 +17,8 @@ async function verifyCollectPayout({ signature, userWallet, expectedAmount }) {
   const decimals = getTokenDecimals();
   const minAmountRaw = BigInt(Math.floor(Number(expectedAmount) * Math.pow(10, decimals) * 0.999));
 
-  const connection = new Connection(RPC_URL, "confirmed");
-  const parsed = await connection.getParsedTransaction(signature, {
-    maxSupportedTransactionVersion: 0,
-    commitment: "confirmed",
-  });
+  const parsed = await getParsedTransactionWithFallback(signature);
 
-  if (!parsed) throw new Error("Collect transaction not found on chain");
   if (parsed.meta?.err) throw new Error("Collect transaction failed on chain");
 
   const pre = parsed.meta?.preTokenBalances || [];
