@@ -473,10 +473,12 @@ async function purchaseFlips() {
         );
       }
       const signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
-      try {
-        await connection.confirmTransaction(signature, 'confirmed');
-      } catch (confirmError) {
-        console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+      if (window.CasinoFees?.confirmTransactionBestEffort) {
+        window.CasinoFees.confirmTransactionBestEffort(connection, signature);
+      } else {
+        connection.confirmTransaction(signature, 'confirmed').catch(function (confirmError) {
+          console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+        });
       }
 
       flipsRemaining += numFlips;
@@ -659,13 +661,11 @@ async function withdrawWinnings() {
     const tx = Transaction.from(transactionBytes);
     const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
     if (window.CasinoFees?.confirmTransactionBestEffort) {
-      await window.CasinoFees.confirmTransactionBestEffort(connection, sig);
+      window.CasinoFees.confirmTransactionBestEffort(connection, sig);
     } else {
-      try {
-        await connection.confirmTransaction(sig, 'confirmed');
-      } catch (confirmError) {
+      connection.confirmTransaction(sig, 'confirmed').catch(function (confirmError) {
         console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
-      }
+      });
     }
 
     const tokenUsed = typeof window.__COINFLIP_TOKEN__ !== 'undefined' ? window.__COINFLIP_TOKEN__ : 'bux';

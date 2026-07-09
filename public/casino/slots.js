@@ -741,10 +741,13 @@ async function purchaseSpins() {
         }
         
         try {
-            await connection.confirmTransaction(signature, 'confirmed');
-        } catch (confirmError) {
-            console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
-        }
+            if (window.CasinoFees?.confirmTransactionBestEffort) {
+                window.CasinoFees.confirmTransactionBestEffort(connection, signature);
+            } else {
+                connection.confirmTransaction(signature, 'confirmed').catch(function (confirmError) {
+                    console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+                });
+            }
         
         // Save purchase to database (server verifies on-chain tx)
         try {
@@ -1300,13 +1303,11 @@ async function withdrawWinnings() {
         }
 
         if (window.CasinoFees?.confirmTransactionBestEffort) {
-            await window.CasinoFees.confirmTransactionBestEffort(connection, signature);
+            window.CasinoFees.confirmTransactionBestEffort(connection, signature);
         } else {
-            try {
-                await connection.confirmTransaction(signature, 'confirmed');
-            } catch (confirmError) {
+            connection.confirmTransaction(signature, 'confirmed').catch(function (confirmError) {
                 console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
-            }
+            });
         }
 
         const tokenUsed = typeof window.__SLOTS_TOKEN__ !== 'undefined' ? window.__SLOTS_TOKEN__ : 'bux';

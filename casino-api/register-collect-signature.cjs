@@ -32,9 +32,9 @@ async function handler(req, res) {
       token,
       signature,
       amount,
-    });
+    }, { skipFinalize: true });
 
-    return json(res, result.finalized ? 200 : 202, result);
+    return json(res, 202, result);
   } catch (err) {
     console.error("Register collect signature error:", err);
     return json(res, 500, { error: "Failed to register collect signature", message: err.message });

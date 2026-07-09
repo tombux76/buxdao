@@ -94,14 +94,18 @@ async function tryFinalizeCollectSignature(sql, { userWallet, gameType, token, s
   return { finalized: true, cleared, signature, amount };
 }
 
-async function registerSubmittedCollect(sql, { userWallet, gameType, token, signature, amount }) {
+async function registerSubmittedCollect(sql, params, options) {
+  const opts = options || {};
   await ensureCollectTables(sql);
   await sql`
     INSERT INTO casino_submitted_collects (signature, wallet_address, game_type, token_used, amount)
-    VALUES (${signature}, ${userWallet}, ${gameType}, ${token}, ${amount})
+    VALUES (${params.signature}, ${params.userWallet}, ${params.gameType}, ${params.token}, ${params.amount})
     ON CONFLICT (signature) DO NOTHING
   `;
-  return tryFinalizeCollectSignature(sql, { userWallet, gameType, token, signature, amount });
+  if (opts.skipFinalize) {
+    return { finalized: false, registered: true };
+  }
+  return tryFinalizeCollectSignature(sql, params);
 }
 
 async function reconcileSubmittedCollects(sql, userWallet, gameType, token) {

@@ -162,31 +162,34 @@
     document.body.style.overflow = "";
   }
 
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
   async function confirmTransactionBestEffort(connection, signature) {
     if (!connection || !signature) return;
-    try {
-      await connection.confirmTransaction(signature, "confirmed");
-    } catch (err) {
-      console.warn("Client confirmation timed out; server will verify on-chain:", err);
-    }
+    // Don't block the UI — server-side verify handles the truth.
+    connection.confirmTransaction(signature, "confirmed").catch(function (err) {
+      console.warn("Background confirmation finished with error:", err);
+    });
   }
 
   async function registerCollectSignature(params) {
-    try {
-      await fetch("/api/register-collect-signature", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userWallet: params.wallet,
-          signature: params.signature,
-          amount: params.amount,
-          gameType: params.gameType,
-          token: params.token || "bux",
-        }),
-      });
-    } catch (err) {
+    fetch("/api/register-collect-signature", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userWallet: params.wallet,
+        signature: params.signature,
+        amount: params.amount,
+        gameType: params.gameType,
+        token: params.token || "bux",
+      }),
+    }).catch(function (err) {
       console.warn("registerCollectSignature failed:", err);
-    }
+    });
   }
 
   async function confirmCollectWithServer(params) {
@@ -195,10 +198,10 @@
     const amount = params.amount;
     const gameType = params.gameType || "slots";
     const token = params.token || "bux";
-    const maxAttempts = params.maxAttempts || 20;
+    const maxAttempts = params.maxAttempts || 8;
     let lastError = null;
 
-    await registerCollectSignature({
+    registerCollectSignature({
       wallet: wallet,
       signature: signature,
       amount: amount,
@@ -230,12 +233,12 @@
         res.status === 202 ||
         (res.status === 400 && data.error === "Transaction not found")
       ) {
-        await sleep(Math.min(1500 + attempt * 400, 6000));
+        await sleep(Math.min(1000 + attempt * 300, 3000));
         continue;
       }
       lastError = new Error(data.message || data.error || "Confirm collect failed");
       if (attempt < maxAttempts - 1 && res.status >= 500) {
-        await sleep(2000);
+        await sleep(1500);
         continue;
       }
       throw lastError;
