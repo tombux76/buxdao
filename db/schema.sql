@@ -167,6 +167,16 @@ CREATE TABLE cashout_used_signatures (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE cashout_api_events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action VARCHAR(16) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_cashout_api_events_user_action
+  ON cashout_api_events (user_id, action, created_at DESC);
+
 -- ---------------------------------------------------------------------------
 -- Casino games (wallet-keyed; join user_wallets for Discord display names)
 -- ---------------------------------------------------------------------------

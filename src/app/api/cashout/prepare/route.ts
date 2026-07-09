@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prepareCashout } from "@/lib/cashout/cashout";
+import { assertCashoutRateLimit } from "@/lib/cashout/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await assertCashoutRateLimit(session.user.id, "prepare");
     const result = await prepareCashout({
       userId: session.user.id,
       payoutWallet,
@@ -34,7 +36,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to prepare cashout";
-    const status = message.includes("in progress") ? 409 : 400;
+    const status = message.includes("Too many cashout requests")
+      ? 429
+      : message.includes("in progress")
+        ? 409
+        : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

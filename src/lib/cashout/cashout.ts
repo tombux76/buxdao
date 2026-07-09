@@ -5,8 +5,10 @@ import {
   buxToRaw,
   getLiquidityWallet,
   isLiquidityConfigured,
-  WHALE_REQUIRED_ABOVE_SOL_NET,
 } from "@/lib/cashout/config";
+import { acquireCashoutLock, assertPendingFresh, isPendingExpired, releaseCashoutLock } from "@/lib/cashout/lock";
+import { withLiquidityPayoutLock } from "@/lib/cashout/liquidity-lock";
+import { assertProcessingPayoutStillFair, assertQuoteStillValid } from "@/lib/cashout/quote-guard";
 import {
   getCashoutFeeBps,
   quoteCashoutSol,
@@ -15,7 +17,6 @@ import {
   userHasWhaleRole,
   validateCashoutAmount,
 } from "@/lib/cashout/eligibility";
-import { acquireCashoutLock, assertPendingFresh, isPendingExpired, releaseCashoutLock } from "@/lib/cashout/lock";
 import { verifyBuxTransferToLiquidity } from "@/lib/cashout/verify-transfer";
 import {
   cashoutDisplayName,
@@ -77,21 +78,12 @@ async function assertConfirmEligibility(userId: string, row: PendingRow): Promis
   assertPendingFresh(new Date(row.created_at));
   await assertCashoutCooldownAllowed(userId);
 
-  const [hasHolderNft, hasWhaleRole] = await Promise.all([
-    userHasHolderNft(userId),
-    userHasWhaleRole(userId),
-  ]);
-
+  const hasHolderNft = await userHasHolderNft(userId);
   if (!hasHolderNft) {
     throw new Error("Hold at least one BUXDAO collection NFT in a linked wallet to cash out");
   }
 
-  const solNet = Number(BigInt(row.sol_net_lamports)) / 1e9;
-  if (solNet > WHALE_REQUIRED_ABOVE_SOL_NET + 1e-9 && !hasWhaleRole) {
-    throw new Error(
-      `Cashouts above ${WHALE_REQUIRED_ABOVE_SOL_NET} SOL require a whale role in at least one collection.`,
-    );
-  }
+  await assertQuoteStillValid(userId, row);
 }
 
 async function loadCompletedByBuxTx(
@@ -207,10 +199,14 @@ async function resumeProcessingCashout(params: {
       amountRaw: BigInt(claimed.bux_amount),
     });
 
-    const solTxSignature = await sendLiquiditySolTransfer({
-      recipientWallet: params.payoutWallet,
-      lamports: solNetLamports,
-    });
+    await assertProcessingPayoutStillFair(params.userId, claimed.bux_amount, claimed.sol_amount);
+
+    const solTxSignature = await withLiquidityPayoutLock(() =>
+      sendLiquiditySolTransfer({
+        recipientWallet: params.payoutWallet,
+        lamports: solNetLamports,
+      }),
+    );
 
     const finalized = await pool.query<{ tx_signature: string }>(
       `UPDATE cashout_transactions
@@ -337,7 +333,12 @@ export async function prepareCashout(params: {
     if (isPendingExpired(new Date(existingRow.created_at))) {
       await pool.query(`DELETE FROM cashout_pending_claims WHERE user_id = $1`, [params.userId]);
     } else {
-      return rowToPrepareResult(existingRow, true);
+      try {
+        await assertQuoteStillValid(params.userId, existingRow);
+        return rowToPrepareResult(existingRow, true);
+      } catch {
+        await pool.query(`DELETE FROM cashout_pending_claims WHERE user_id = $1`, [params.userId]);
+      }
     }
   }
 

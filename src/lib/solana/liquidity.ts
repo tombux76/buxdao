@@ -59,19 +59,19 @@ export async function sendLiquiditySolTransfer(params: {
       }),
     );
 
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = keypair.publicKey;
     transaction.sign(keypair);
 
     const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: false,
-      preflightCommitment: "confirmed",
+      preflightCommitment: "finalized",
     });
 
     const confirmation = await connection.confirmTransaction(
       { signature, blockhash, lastValidBlockHeight },
-      "confirmed",
+      "finalized",
     );
 
     if (confirmation.value.err) {

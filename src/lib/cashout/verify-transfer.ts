@@ -67,7 +67,8 @@ function verifyBalanceDeltas(params: {
   mint: string;
   amountRaw: bigint;
   liquidityAta: string;
-  fromAta: string;
+  fromWallet: string;
+  liquidityWallet: string;
 }): boolean {
   const pre = params.tx.meta?.preTokenBalances ?? [];
   const post = params.tx.meta?.postTokenBalances ?? [];
@@ -85,6 +86,7 @@ function verifyBalanceDeltas(params: {
       continue;
     }
 
+    const owner = postBal.owner ?? "";
     const preBal = pre.find(
       (entry) => entry.accountIndex === postBal.accountIndex && entry.mint === params.mint,
     );
@@ -92,10 +94,13 @@ function verifyBalanceDeltas(params: {
     const postAmount = BigInt(postBal.uiTokenAmount?.amount ?? "0");
     const delta = postAmount - preAmount;
 
-    if (accountAddress === params.liquidityAta && delta === params.amountRaw) {
+    if (
+      (accountAddress === params.liquidityAta || owner === params.liquidityWallet) &&
+      delta === params.amountRaw
+    ) {
       liquidityCredit = true;
     }
-    if (accountAddress === params.fromAta && delta === -params.amountRaw) {
+    if (owner === params.fromWallet && delta === -params.amountRaw) {
       sourceDebit = true;
     }
   }
@@ -114,14 +119,11 @@ export async function verifyBuxTransferToLiquidity(params: {
   const liquidityAta = (
     await getAssociatedTokenAddress(mintPk, new PublicKey(liquidityWallet))
   ).toBase58();
-  const fromAta = (
-    await getAssociatedTokenAddress(mintPk, new PublicKey(params.fromWallet))
-  ).toBase58();
 
   await withServerConnection(async (connection) => {
     const tx = await connection.getParsedTransaction(params.signature, {
       maxSupportedTransactionVersion: 0,
-      commitment: "confirmed",
+      commitment: "finalized",
     });
 
     if (!tx?.meta || tx.meta.err) {
@@ -167,7 +169,8 @@ export async function verifyBuxTransferToLiquidity(params: {
         mint,
         amountRaw: params.amountRaw,
         liquidityAta,
-        fromAta,
+        fromWallet: params.fromWallet,
+        liquidityWallet,
       })
     ) {
       return;
