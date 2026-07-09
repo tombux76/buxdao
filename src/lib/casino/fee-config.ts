@@ -1,3 +1,5 @@
+import { tokenConfig } from "@/content/site";
+
 export type CasinoFeeConfig = {
   projectWallet: string;
   treasuryWallet: string;
@@ -8,8 +10,11 @@ export type CasinoFeeConfig = {
 
 export function getCasinoFeeConfig(): CasinoFeeConfig {
   const projectWallet =
-    process.env.PROJECT_WALLET?.trim() || process.env.NEXT_PUBLIC_PROJECT_WALLET?.trim() || "";
-  const treasuryWallet = process.env.TREASURY_WALLET?.trim() || "";
+    process.env.PROJECT_WALLET?.trim() ||
+    process.env.NEXT_PUBLIC_PROJECT_WALLET?.trim() ||
+    tokenConfig.communityWallet;
+  const treasuryWallet =
+    process.env.TREASURY_WALLET?.trim() || tokenConfig.buxTreasuryWallet;
 
   const purchaseFeeLamports = Number.parseInt(
     process.env.CASINO_PURCHASE_FEE_LAMPORTS ?? "2000000",

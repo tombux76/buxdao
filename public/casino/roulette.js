@@ -13,7 +13,7 @@
 
     var BUX_TOKEN_MINT = 'AaKrMsZkuAdJL6TKZbj7X1VaH5qWioL7oDHagQZa1w59';
     var KNUKL_TOKEN_MINT = '6sYhJZDwqHpv1shyVeZ91tx8QYSiHJh2bio97Qdhq1br';
-    var TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL';
+    var TREASURY_WALLET = 'FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75'; // BUX casino pool fallback
     var BUX_DECIMALS = 9;
     var KNUKL_DECIMALS = 6;
     var ALLOWED_COST_PER_CHIP = [10, 50, 100, 500];
@@ -67,6 +67,10 @@
     function setCostPerChipLabel() {
         var el = document.getElementById('roulette-cost-per-chip-label');
         if (el) el.textContent = 'Cost per chip (' + getTokenLabel() + ')';
+        var costSelect = document.getElementById('roulette-cost-per-chip');
+        if (costSelect && window.CasinoFees && window.CasinoFees.updateBuxCostSelect) {
+            window.CasinoFees.updateBuxCostSelect(costSelect);
+        }
     }
 
     function showMessage(options) {
@@ -767,14 +771,29 @@
                 return connection.getLatestBlockhash().then(function (r) {
                     tx.recentBlockhash = r.blockhash;
                     tx.feePayer = userPublicKey;
+                    if (window.CasinoFees && window.CasinoFees.showPurchaseProcessing) {
+                        window.CasinoFees.showPurchaseProcessing(
+                            'Confirm the purchase in your wallet.',
+                            'Waiting for wallet'
+                        );
+                    }
                     return window.solana.signTransaction(tx);
                 });
             });
         }).then(function (signed) {
             if (!signed) return;
+            if (window.CasinoFees && window.CasinoFees.showPurchaseProcessing) {
+                window.CasinoFees.showPurchaseProcessing(
+                    'Confirming your purchase on-chain. This may take a minute.',
+                    'Processing purchase'
+                );
+            }
             return connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
         }).then(function (sig) {
-            return connection.confirmTransaction(sig, 'confirmed').then(function () { return sig; });
+            return connection.confirmTransaction(sig, 'confirmed').then(function () { return sig; }).catch(function (confirmError) {
+                console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+                return sig;
+            });
         }).then(function (sig) {
             costPerChip = cost;
             updateChipUI();
@@ -807,6 +826,10 @@
             if (err && (err.message === 'INSUFFICIENT_SOL' || err.message === 'INSUFFICIENT_BUX' || err.message === 'NO_ATA_HELPER')) return;
             if (String(err.message || '').match(/reject|authorized|cancelled/i)) return;
             showMessage({ title: 'Purchase failed', message: 'Failed to purchase: ' + (err.message || err), isError: true });
+        }).finally(function () {
+            if (window.CasinoFees && window.CasinoFees.hidePurchaseProcessing) {
+                window.CasinoFees.hidePurchaseProcessing();
+            }
         });
     }
 

@@ -1,3 +1,5 @@
+import { tokenConfig } from "@/content/site";
+
 export const BUX_DECIMALS = Number.parseInt(process.env.BUX_TOKEN_DECIMALS ?? "9", 10);
 
 export const HOLDER_REWARDS_CLAIM_FEE_LAMPORTS = Number.parseInt(
@@ -19,14 +21,14 @@ export function getHolderRewardsCronSecret(): string {
 }
 
 export function getTreasuryWallet(): string {
-  return process.env.TREASURY_WALLET?.trim() || "";
+  return process.env.TREASURY_WALLET?.trim() || tokenConfig.buxTreasuryWallet;
 }
 
 export function getProjectWallet(): string {
   return (
     process.env.PROJECT_WALLET?.trim() ||
     process.env.NEXT_PUBLIC_PROJECT_WALLET?.trim() ||
-    ""
+    tokenConfig.communityWallet
   );
 }
 

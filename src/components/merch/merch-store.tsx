@@ -16,9 +16,10 @@ import type {
   PrintfulProduct,
   ShippingFormState,
 } from "@/lib/merch/types";
+import { tokenConfig } from "@/content/site";
 
 const PROJECT_WALLET = new PublicKey(
-  process.env.NEXT_PUBLIC_PROJECT_WALLET || "FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75",
+  process.env.NEXT_PUBLIC_PROJECT_WALLET || tokenConfig.communityWallet,
 );
 
 const emptyShippingForm: ShippingFormState = {

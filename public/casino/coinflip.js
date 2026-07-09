@@ -1,7 +1,7 @@
 // Coin flip game – same flow as slots: buy flips, choose heads/tails, flip (win 1.9x)
 const BUX_TOKEN_MINT = 'AaKrMsZkuAdJL6TKZbj7X1VaH5qWioL7oDHagQZa1w59';
 const KNUKL_TOKEN_MINT = '6sYhJZDwqHpv1shyVeZ91tx8QYSiHJh2bio97Qdhq1br';
-const TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL';
+const TREASURY_WALLET = 'FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75'; // BUX casino pool fallback
 const BUX_DECIMALS = 9;
 const KNUKL_DECIMALS = 6;
 const WIN_MULTIPLIER = 1.9;
@@ -110,6 +110,10 @@ function setCurrencyLabels() {
   if (grandWonEl) grandWonEl.textContent = `0 ${label}`;
   const costLabel = document.querySelector('label[for="cost-per-flip"]');
   if (costLabel) costLabel.textContent = `Cost Per Flip (${label}):`;
+  const costSelect = document.getElementById('cost-per-flip');
+  if (costSelect && window.CasinoFees?.updateBuxCostSelect) {
+    window.CasinoFees.updateBuxCostSelect(costSelect);
+  }
 }
 
 function waitForSplToken() {
@@ -452,40 +456,64 @@ async function purchaseFlips() {
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = userPublicKey;
-    const signed = await window.solana.signTransaction(transaction);
-    const signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
-    await connection.confirmTransaction(signature, 'confirmed');
-
-    flipsRemaining += numFlips;
+    let purchaseProcessing = false;
     try {
-      const saveRes = await fetch('/api/save-game', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          walletAddress: wallet,
-          flipCost: costPerFlip,
-          flipsPurchased: numFlips,
-          purchaseSignature: signature,
-          gameType: 'coinflip',
-          tokenUsed: isBuxToken() ? 'bux' : 'bux'
-        })
-      });
-      if (!saveRes.ok) {
-        const err = await saveRes.json().catch(() => ({}));
-        throw new Error(err.error || 'Purchase could not be recorded');
+      if (window.CasinoFees?.showPurchaseProcessing) {
+        window.CasinoFees.showPurchaseProcessing(
+          'Confirm the purchase in your wallet.',
+          'Waiting for wallet'
+        );
+        purchaseProcessing = true;
       }
-      const saveData = await saveRes.json();
-      if (typeof saveData.flipsRemaining === 'number') {
-        flipsRemaining = saveData.flipsRemaining;
+      const signed = await window.solana.signTransaction(transaction);
+      if (window.CasinoFees?.showPurchaseProcessing) {
+        window.CasinoFees.showPurchaseProcessing(
+          'Confirming your purchase on-chain. This may take a minute.',
+          'Processing purchase'
+        );
       }
-    } catch (saveErr) {
-      showMessage({ title: 'Purchase sync failed', message: saveErr.message || 'Contact support if flips do not appear.', isError: true });
-      return;
+      const signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
+      try {
+        await connection.confirmTransaction(signature, 'confirmed');
+      } catch (confirmError) {
+        console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+      }
+
+      flipsRemaining += numFlips;
+      try {
+        const saveRes = await fetch('/api/save-game', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            walletAddress: wallet,
+            flipCost: costPerFlip,
+            flipsPurchased: numFlips,
+            purchaseSignature: signature,
+            gameType: 'coinflip',
+            tokenUsed: isBuxToken() ? 'bux' : 'bux'
+          })
+        });
+        if (!saveRes.ok) {
+          const err = await saveRes.json().catch(() => ({}));
+          throw new Error(err.error || 'Purchase could not be recorded');
+        }
+        const saveData = await saveRes.json();
+        if (typeof saveData.flipsRemaining === 'number') {
+          flipsRemaining = saveData.flipsRemaining;
+        }
+      } catch (saveErr) {
+        showMessage({ title: 'Purchase sync failed', message: saveErr.message || 'Contact support if flips do not appear.', isError: true });
+        return;
+      }
+      await updateBalance();
+      updateDisplay();
+      updateButtonStates();
+      showMessage({ title: 'Purchase complete', message: `Purchased ${numFlips} flip(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : ''}.`, txSignature: signature });
+    } finally {
+      if (purchaseProcessing && window.CasinoFees?.hidePurchaseProcessing) {
+        window.CasinoFees.hidePurchaseProcessing();
+      }
     }
-    await updateBalance();
-    updateDisplay();
-    updateButtonStates();
-    showMessage({ title: 'Purchase complete', message: `Purchased ${numFlips} flip(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ' + ' + getPurchaseFeeSol() + ' SOL fee' : ''}.`, txSignature: signature });
   } catch (err) {
     const msg = err.message || err.toString();
     if (msg.includes('User rejected') || msg.includes('rejected')) return;

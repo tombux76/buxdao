@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Music2, Wallet } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { games } from "@/content/site";
 import { GAME_CONFIG, type GameId } from "@/lib/games";
 
 type GameEmbedProps = {
@@ -13,6 +15,9 @@ type GameEmbedProps = {
 
 export function GameEmbed({ gameId }: GameEmbedProps) {
   const config = GAME_CONFIG[gameId];
+  const gameMeta = games.find((g) => g.id === gameId);
+  const displayName = gameMeta?.name ?? config?.title ?? "Game";
+  const thumbnail = gameMeta?.thumbnail;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { publicKey, connected, disconnect } = useWallet();
   const { setVisible } = useWalletModal();
@@ -72,9 +77,24 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
           <ArrowLeft className="h-4 w-4" />
           Back to games
         </Link>
-        <div className="flex-1 text-center">
-          <span className="text-sm font-semibold">{config.title}</span>
-          <span className="ml-2 text-xs text-accent-gold">$BUX</span>
+        <div className="flex flex-1 items-center justify-center gap-2.5">
+          {thumbnail ? (
+            <div
+              className={`relative h-9 w-9 shrink-0 overflow-hidden ${
+                gameId === "slots" ? "scale-110" : ""
+              }`}
+            >
+              <Image
+                src={thumbnail}
+                alt=""
+                fill
+                unoptimized
+                sizes="36px"
+                className="object-contain"
+              />
+            </div>
+          ) : null}
+          <span className="text-sm font-semibold">{displayName}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -124,7 +144,7 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
       {iframeSrc ? (
         <iframe
           ref={iframeRef}
-          title={config.title}
+          title={displayName}
           src={iframeSrc}
           className="min-h-0 flex-1 border-0"
           allow="fullscreen"
@@ -132,7 +152,7 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
       ) : (
         <div className="flex flex-1 items-center justify-center p-8">
           <div className="glass-panel rounded-2xl p-8 text-center">
-            <h2 className="text-xl font-semibold">{config.title}</h2>
+            <h2 className="text-xl font-semibold">{displayName}</h2>
             <p className="mt-2 text-muted">Coming soon.</p>
           </div>
         </div>

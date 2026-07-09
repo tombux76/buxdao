@@ -40,7 +40,7 @@ const SLOT_MACHINE_PROGRAM_ID = 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS'; 
 // Token mints: BUX (1000s) and KNUKL — must match the token selected via ?token=bux
 const BUX_TOKEN_MINT = 'AaKrMsZkuAdJL6TKZbj7X1VaH5qWioL7oDHagQZa1w59';
 const KNUKL_TOKEN_MINT = '6sYhJZDwqHpv1shyVeZ91tx8QYSiHJh2bio97Qdhq1br';
-const TREASURY_WALLET = '9M7Jqyqasd2SYxXPsLCW32wUsZ8NE9iY5LL2mw2PbHpL'; // Fallback BUX pool if env not injected
+const TREASURY_WALLET = 'FYfLzXckAf2JZoMYBz2W4fpF9vejqpA6UFV17d1A7C75'; // BUX casino pool fallback
 const BUX_DECIMALS = 9;
 const KNUKL_DECIMALS = 6;
 
@@ -92,6 +92,9 @@ function setCurrencyLabels() {
     if (costLabel) costLabel.textContent = `Cost Per Spin (${label}):`;
     const costSelect = document.getElementById('cost-per-spin');
     if (costSelect) costSelect.title = `Cost per spin (${label})`;
+    if (costSelect && window.CasinoFees?.updateBuxCostSelect) {
+        window.CasinoFees.updateBuxCostSelect(costSelect);
+    }
     updatePrizeModalSymbols();
     const el = (id) => document.getElementById(id);
     if (el('xma-balance')) el('xma-balance').textContent = `0.00 ${label}`;
@@ -696,9 +699,25 @@ async function purchaseSpins() {
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = userPublicKey;
         
-        // Sign and send transaction
-        // Use signTransaction (Phantom's standard method)
-        const signed = await window.solana.signTransaction(transaction);
+        let purchaseProcessing = false;
+        try {
+            if (window.CasinoFees?.showPurchaseProcessing) {
+                window.CasinoFees.showPurchaseProcessing(
+                    'Confirm the purchase in your wallet.',
+                    'Waiting for wallet'
+                );
+                purchaseProcessing = true;
+            }
+
+            // Sign and send transaction
+            const signed = await window.solana.signTransaction(transaction);
+
+            if (window.CasinoFees?.showPurchaseProcessing) {
+                window.CasinoFees.showPurchaseProcessing(
+                    'Confirming your purchase on-chain. This may take a minute.',
+                    'Processing purchase'
+                );
+            }
         
         // Send the signed transaction
         retries = 3;
@@ -776,6 +795,11 @@ async function purchaseSpins() {
         
         const successMsg = `Successfully purchased ${numSpins} spin(s) for ${totalCost} ${getTokenLabel()}${getPurchaseFeeSol() > 0 ? ` + ${getPurchaseFeeSol()} SOL fee` : ''}.`;
         showSlotsMessage({ title: 'Purchase complete', message: successMsg, txSignature: signature });
+        } finally {
+            if (purchaseProcessing && window.CasinoFees?.hidePurchaseProcessing) {
+                window.CasinoFees.hidePurchaseProcessing();
+            }
+        }
     } catch (error) {
         console.error('Purchase error:', error);
         const errorMsg = error.message || error.toString() || '';
