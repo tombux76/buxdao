@@ -1,6 +1,26 @@
 import { getPool } from "@/lib/db";
 import { PENDING_CASHOUT_TTL_MINUTES } from "@/lib/cashout/config";
 
+const MS_PER_MINUTE = 60 * 1000;
+
+export function isPendingExpired(createdAt: Date): boolean {
+  return Date.now() - createdAt.getTime() > PENDING_CASHOUT_TTL_MINUTES * MS_PER_MINUTE;
+}
+
+export function assertPendingFresh(createdAt: Date): void {
+  if (isPendingExpired(createdAt)) {
+    throw new Error("Cashout quote expired — start again from the Hub");
+  }
+}
+
+export async function deleteExpiredPendingClaims(): Promise<void> {
+  const pool = getPool();
+  await pool.query(
+    `DELETE FROM cashout_pending_claims
+     WHERE created_at < NOW() - INTERVAL '${PENDING_CASHOUT_TTL_MINUTES} minutes'`,
+  );
+}
+
 export async function acquireCashoutLock(params: {
   userId: string;
   payoutWallet: string;
@@ -13,11 +33,7 @@ export async function acquireCashoutLock(params: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const pool = getPool();
 
-  await pool.query(
-    `DELETE FROM cashout_pending_claims
-     WHERE created_at < NOW() - INTERVAL '${PENDING_CASHOUT_TTL_MINUTES} minutes'
-       AND bux_tx_signature IS NULL`,
-  );
+  await deleteExpiredPendingClaims();
 
   const existing = await pool.query<{ payout_wallet: string }>(
     `SELECT payout_wallet FROM cashout_pending_claims WHERE user_id = $1`,

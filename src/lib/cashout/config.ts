@@ -19,6 +19,9 @@ export const CASHOUT_COOLDOWN_DAYS = 14;
 export const PENDING_CASHOUT_TTL_MINUTES = 15;
 export const BUX_DECIMALS = 9;
 
+/** Discord channel for public cashout notifications. */
+export const CASHOUT_ANNOUNCEMENTS_CHANNEL_ID = "1524580715667390484";
+
 export function getLiquidityWallet(): string {
   return tokenConfig.communityWallet;
 }

@@ -7,10 +7,9 @@ export const PRIZE_EMPIRE_AMOUNT = 50_000;
 
 export const POOL_CACHE_TTL_MS = 10 * 60 * 1000;
 
+/** BUXDAO main announcements channel — EMPIRE draw winner posts go here. */
+export const PRIZE_DRAW_ANNOUNCEMENTS_CHANNEL_ID = "948254981327290408";
+
 export function getAnnouncementsChannelId(): string {
-  return (
-    process.env.DISCORD_PRIZE_DRAW_CHANNEL_ID?.trim() ||
-    process.env.DISCORD_ANNOUNCEMENTS_CHANNEL_ID?.trim() ||
-    "948254981327290408"
-  );
+  return PRIZE_DRAW_ANNOUNCEMENTS_CHANNEL_ID;
 }

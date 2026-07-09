@@ -1,4 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, type ParsedTransactionWithMeta } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { tokenConfig } from "@/content/site";
 import { getLiquidityWallet } from "@/lib/cashout/config";
@@ -19,6 +19,17 @@ function parseAmountRaw(info: Record<string, unknown>): bigint | null {
     return BigInt(amount);
   }
   return null;
+}
+
+function accountAddressAtIndex(tx: ParsedTransactionWithMeta, accountIndex: number): string | null {
+  const key = tx.transaction.message.accountKeys[accountIndex];
+  if (!key) {
+    return null;
+  }
+  if (typeof key === "object" && key !== null && "pubkey" in key) {
+    return (key as { pubkey: PublicKey }).pubkey.toBase58();
+  }
+  return String(key);
 }
 
 function instructionMatchesTransfer(params: {
@@ -51,6 +62,47 @@ function instructionMatchesTransfer(params: {
   return authority === fromWallet && destination === liquidityAta && ixMint === mint;
 }
 
+function verifyBalanceDeltas(params: {
+  tx: ParsedTransactionWithMeta;
+  mint: string;
+  amountRaw: bigint;
+  liquidityAta: string;
+  fromAta: string;
+}): boolean {
+  const pre = params.tx.meta?.preTokenBalances ?? [];
+  const post = params.tx.meta?.postTokenBalances ?? [];
+
+  let liquidityCredit = false;
+  let sourceDebit = false;
+
+  for (const postBal of post) {
+    if (postBal.mint !== params.mint) {
+      continue;
+    }
+
+    const accountAddress = accountAddressAtIndex(params.tx, postBal.accountIndex);
+    if (!accountAddress) {
+      continue;
+    }
+
+    const preBal = pre.find(
+      (entry) => entry.accountIndex === postBal.accountIndex && entry.mint === params.mint,
+    );
+    const preAmount = BigInt(preBal?.uiTokenAmount?.amount ?? "0");
+    const postAmount = BigInt(postBal.uiTokenAmount?.amount ?? "0");
+    const delta = postAmount - preAmount;
+
+    if (accountAddress === params.liquidityAta && delta === params.amountRaw) {
+      liquidityCredit = true;
+    }
+    if (accountAddress === params.fromAta && delta === -params.amountRaw) {
+      sourceDebit = true;
+    }
+  }
+
+  return liquidityCredit && sourceDebit;
+}
+
 export async function verifyBuxTransferToLiquidity(params: {
   signature: string;
   fromWallet: string;
@@ -61,6 +113,9 @@ export async function verifyBuxTransferToLiquidity(params: {
   const mintPk = new PublicKey(mint);
   const liquidityAta = (
     await getAssociatedTokenAddress(mintPk, new PublicKey(liquidityWallet))
+  ).toBase58();
+  const fromAta = (
+    await getAssociatedTokenAddress(mintPk, new PublicKey(params.fromWallet))
   ).toBase58();
 
   await withServerConnection(async (connection) => {
@@ -106,21 +161,16 @@ export async function verifyBuxTransferToLiquidity(params: {
       }
     }
 
-    // Fallback: token balance delta on liquidity ATA
-    const pre = tx.meta.preTokenBalances ?? [];
-    const post = tx.meta.postTokenBalances ?? [];
-    for (const postBal of post) {
-      if (postBal.mint !== mint) {
-        continue;
-      }
-      const preBal = pre.find(
-        (entry) => entry.accountIndex === postBal.accountIndex && entry.mint === mint,
-      );
-      const preAmount = BigInt(preBal?.uiTokenAmount?.amount ?? "0");
-      const postAmount = BigInt(postBal.uiTokenAmount?.amount ?? "0");
-      if (postAmount - preAmount === params.amountRaw) {
-        return;
-      }
+    if (
+      verifyBalanceDeltas({
+        tx,
+        mint,
+        amountRaw: params.amountRaw,
+        liquidityAta,
+        fromAta,
+      })
+    ) {
+      return;
     }
 
     throw new Error(
