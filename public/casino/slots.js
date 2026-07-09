@@ -740,15 +740,14 @@ async function purchaseSpins() {
             }
         }
         
-        try {
-            if (window.CasinoFees?.confirmTransactionBestEffort) {
-                window.CasinoFees.confirmTransactionBestEffort(connection, signature);
-            } else {
-                connection.confirmTransaction(signature, 'confirmed').catch(function (confirmError) {
-                    console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
-                });
-            }
-        
+        if (window.CasinoFees?.confirmTransactionBestEffort) {
+            window.CasinoFees.confirmTransactionBestEffort(connection, signature);
+        } else {
+            connection.confirmTransaction(signature, 'confirmed').catch(function (confirmError) {
+                console.warn('Client confirmation timed out; server will verify on-chain:', confirmError);
+            });
+        }
+
         // Save purchase to database (server verifies on-chain tx)
         try {
             const saveResponse = await fetch('/api/save-game', {
