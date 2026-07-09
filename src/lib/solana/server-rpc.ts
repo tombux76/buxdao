@@ -1,4 +1,9 @@
-import { Connection, LAMPORTS_PER_SOL, type Commitment, type ParsedTransactionWithMeta } from "@solana/web3.js";
+import {
+  Connection,
+  LAMPORTS_PER_SOL,
+  type Finality,
+  type ParsedTransactionWithMeta,
+} from "@solana/web3.js";
 import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const RPC_TIMEOUT_MS = 8_000;
@@ -109,7 +114,7 @@ export async function getParsedTransactionWhenReady(
 ): Promise<ParsedTransactionWithMeta> {
   const maxWaitMs = options?.maxWaitMs ?? 60_000;
   const pollMs = options?.pollMs ?? 2_000;
-  const commitments: Commitment[] = ["confirmed", "finalized"];
+  const commitments: Finality[] = ["confirmed", "finalized"];
   const candidates = getServerRpcUrlCandidates();
   const deadline = Date.now() + maxWaitMs;
   let lastError: Error | null = null;
