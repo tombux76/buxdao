@@ -35,13 +35,44 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function rpcErrorText(err) {
+  const parts = [
+    err?.message,
+    err?.cause?.message,
+    err?.cause?.code,
+    String(err),
+  ];
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
 function isRateLimitError(err) {
-  const msg = (err?.message || String(err)).toLowerCase();
+  const msg = rpcErrorText(err);
   return (
     msg.includes("429") ||
     msg.includes("too many requests") ||
     msg.includes("rate limit") ||
-    msg.includes("403")
+    msg.includes("403") ||
+    msg.includes("max usage reached")
+  );
+}
+
+/** Network / TLS / upstream failures — try the next RPC instead of aborting. */
+function isRetryableRpcError(err) {
+  if (isRateLimitError(err)) return true;
+  const msg = rpcErrorText(err);
+  return (
+    msg.includes("fetch failed") ||
+    msg.includes("ssl") ||
+    msg.includes("tls") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("enotfound") ||
+    msg.includes("socket hang up") ||
+    msg.includes("network") ||
+    msg.includes("502") ||
+    msg.includes("503") ||
+    msg.includes("504") ||
+    msg.includes("bad gateway")
   );
 }
 
@@ -118,6 +149,7 @@ async function getSignatureStatusWithFallback(signature, options = {}) {
   const retries = options.retries ?? 5;
   const initialWaitMs = options.initialWaitMs ?? 1000;
   let waitTime = initialWaitMs;
+  let lastError = null;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     for (const url of getRpcCandidates()) {
@@ -128,7 +160,8 @@ async function getSignatureStatusWithFallback(signature, options = {}) {
           return status;
         }
       } catch (err) {
-        if (!isRateLimitError(err)) {
+        lastError = err;
+        if (!isRetryableRpcError(err)) {
           throw err;
         }
       }
@@ -139,6 +172,9 @@ async function getSignatureStatusWithFallback(signature, options = {}) {
     }
   }
 
+  if (lastError && !isRetryableRpcError(lastError)) {
+    throw lastError;
+  }
   return null;
 }
 
@@ -146,6 +182,7 @@ module.exports = {
   getRpcCandidates,
   sleep,
   isRateLimitError,
+  isRetryableRpcError,
   isAccountNotFoundError,
   withRpcFallback,
   getTokenAccountWithFallback,

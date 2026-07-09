@@ -3,7 +3,7 @@ const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { verifyCollectPayout } = require("./collect-verify.cjs");
 const { releaseCollectLock } = require("./collect-lock.cjs");
-const { getSignatureStatusWithFallback } = require("./rpc-candidates.cjs");
+const { getSignatureStatusWithFallback, isRetryableRpcError } = require("./rpc-candidates.cjs");
 const { markCollectSignatureUsed } = require("./collect-reconcile.cjs");
 
 async function handler(req, res) {
@@ -92,6 +92,12 @@ async function handler(req, res) {
   } catch (err) {
     console.error("Confirm collect error:", err);
     const msg = err.message || String(err);
+    if (isRetryableRpcError(err)) {
+      return json(res, 503, {
+        error: "RPC temporarily unavailable",
+        message: "Solana RPC is busy. Your collect may still complete — try again in a minute.",
+      });
+    }
     return json(res, 500, {
       error: "Failed to confirm collect",
       message: msg.includes("treasury") ? "Could not confirm treasury payout. Please try again or contact support." : msg,

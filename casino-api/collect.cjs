@@ -13,7 +13,7 @@ const { reconcileSubmittedCollects } = require("./collect-reconcile.cjs");
 const {
   getTokenAccountWithFallback,
   getLatestBlockhashWithFallback,
-  isRateLimitError,
+  isRetryableRpcError,
   isAccountNotFoundError,
 } = require("./rpc-candidates.cjs");
 
@@ -186,7 +186,7 @@ async function handler(req, res) {
       await getTokenAccountWithFallback(userTokenAccount);
       userAccountExists = true;
     } catch (userAccountError) {
-      if (!isAccountNotFoundError(userAccountError) && !isRateLimitError(userAccountError)) {
+      if (!isAccountNotFoundError(userAccountError) && !isRetryableRpcError(userAccountError)) {
         await releaseCollectLock(userWallet, gameTypeNorm, token);
         return json(res, 500, {
           error: "Failed to verify user token account",
@@ -216,11 +216,11 @@ async function handler(req, res) {
           treasuryAccount: treasuryTokenAccount.toString(),
         });
       }
-      if (isRateLimitError(accountError)) {
+      if (isRetryableRpcError(accountError)) {
         await releaseCollectLock(userWallet, gameTypeNorm, token);
         return json(res, 503, {
           error: "RPC temporarily unavailable",
-          message: "Solana RPC is rate-limited. Please try collecting again in a few seconds.",
+          message: "Solana RPC is busy. Please try collecting again in a few seconds.",
         });
       }
       await releaseCollectLock(userWallet, gameTypeNorm, token);
@@ -252,10 +252,10 @@ async function handler(req, res) {
       ({ blockhash } = await getLatestBlockhashWithFallback());
     } catch (blockhashError) {
       await releaseCollectLock(userWallet, gameTypeNorm, token);
-      if (isRateLimitError(blockhashError)) {
+      if (isRetryableRpcError(blockhashError)) {
         return json(res, 503, {
           error: "RPC temporarily unavailable",
-          message: "Solana RPC is rate-limited. Please try collecting again in a few seconds.",
+          message: "Solana RPC is busy. Please try collecting again in a few seconds.",
         });
       }
       throw blockhashError;

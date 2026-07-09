@@ -237,7 +237,10 @@
         continue;
       }
       lastError = new Error(data.message || data.error || "Confirm collect failed");
-      if (attempt < maxAttempts - 1 && res.status >= 500) {
+      if (
+        attempt < maxAttempts - 1 &&
+        (res.status >= 500 || res.status === 503)
+      ) {
         await sleep(1500);
         continue;
       }
