@@ -2,7 +2,7 @@ import { PublicKey, type ParsedTransactionWithMeta } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { tokenConfig } from "@/content/site";
 import { getCashoutTreasuryWallet } from "@/lib/cashout/config";
-import { withServerConnection } from "@/lib/solana/server-rpc";
+import { getParsedTransactionWhenReady } from "@/lib/solana/server-rpc";
 
 type ParsedSplInstruction = {
   type?: string;
@@ -120,66 +120,61 @@ export async function verifyBuxTransferToTreasury(params: {
     await getAssociatedTokenAddress(mintPk, new PublicKey(treasuryWallet))
   ).toBase58();
 
-  await withServerConnection(async (connection) => {
-    const tx = await connection.getParsedTransaction(params.signature, {
-      maxSupportedTransactionVersion: 0,
-      commitment: "finalized",
-    });
+  const tx = await getParsedTransactionWhenReady(params.signature);
 
-    if (!tx?.meta || tx.meta.err) {
-      throw new Error("$BUX transfer not found or failed on-chain");
+  if (!tx.meta) {
+    throw new Error("$BUX transfer not found or failed on-chain");
+  }
+
+  const feePayer = tx.transaction.message.accountKeys[0];
+  const feePayerAddress =
+    typeof feePayer === "object" && feePayer !== null && "pubkey" in feePayer
+      ? (feePayer as { pubkey: PublicKey }).pubkey.toBase58()
+      : String(feePayer);
+
+  if (feePayerAddress !== params.fromWallet) {
+    throw new Error("$BUX transfer must be signed by your linked payout wallet");
+  }
+
+  const checkParams = {
+    parsed: {} as ParsedSplInstruction,
+    fromWallet: params.fromWallet,
+    treasuryAta,
+    mint,
+    amountRaw: params.amountRaw,
+  };
+
+  const allInstructions = [
+    ...tx.transaction.message.instructions,
+    ...(tx.meta.innerInstructions ?? []).flatMap((block) => block.instructions),
+  ];
+
+  for (const ix of allInstructions) {
+    if (!("parsed" in ix) || !ix.parsed) {
+      continue;
     }
-
-    const feePayer = tx.transaction.message.accountKeys[0];
-    const feePayerAddress =
-      typeof feePayer === "object" && feePayer !== null && "pubkey" in feePayer
-        ? (feePayer as { pubkey: PublicKey }).pubkey.toBase58()
-        : String(feePayer);
-
-    if (feePayerAddress !== params.fromWallet) {
-      throw new Error("$BUX transfer must be signed by your linked payout wallet");
-    }
-
-    const checkParams = {
-      parsed: {} as ParsedSplInstruction,
-      fromWallet: params.fromWallet,
-      treasuryAta,
-      mint,
-      amountRaw: params.amountRaw,
-    };
-
-    const allInstructions = [
-      ...tx.transaction.message.instructions,
-      ...(tx.meta.innerInstructions ?? []).flatMap((block) => block.instructions),
-    ];
-
-    for (const ix of allInstructions) {
-      if (!("parsed" in ix) || !ix.parsed) {
-        continue;
-      }
-      checkParams.parsed = ix.parsed as ParsedSplInstruction;
-      if (instructionMatchesTransfer(checkParams)) {
-        return;
-      }
-    }
-
-    if (
-      verifyBalanceDeltas({
-        tx,
-        mint,
-        amountRaw: params.amountRaw,
-        treasuryAta,
-        fromWallet: params.fromWallet,
-        treasuryWallet,
-      })
-    ) {
+    checkParams.parsed = ix.parsed as ParsedSplInstruction;
+    if (instructionMatchesTransfer(checkParams)) {
       return;
     }
+  }
 
-    throw new Error(
-      "Could not verify $BUX transfer to the BUX treasury. Send the exact amount from your linked wallet.",
-    );
-  });
+  if (
+    verifyBalanceDeltas({
+      tx,
+      mint,
+      amountRaw: params.amountRaw,
+      treasuryAta,
+      fromWallet: params.fromWallet,
+      treasuryWallet,
+    })
+  ) {
+    return;
+  }
+
+  throw new Error(
+    "Could not verify $BUX transfer to the BUX treasury. Send the exact amount from your linked wallet.",
+  );
 }
 
 /** @deprecated Use verifyBuxTransferToTreasury */

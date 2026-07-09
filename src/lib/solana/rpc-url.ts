@@ -12,6 +12,7 @@ export function getServerRpcUrlCandidates(): string[] {
   const urls: string[] = [];
 
   addUnique(urls, process.env.SOLANA_RPC_URL);
+  addUnique(urls, process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
 
   for (const heliusUrl of getHeliusRpcUrlCandidates()) {
     addUnique(urls, heliusUrl);

@@ -1,4 +1,4 @@
-import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL, type Commitment, type ParsedTransactionWithMeta } from "@solana/web3.js";
 import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const RPC_TIMEOUT_MS = 8_000;
@@ -96,4 +96,52 @@ export async function getWalletBalanceSol(wallet: string): Promise<number> {
   }
 
   throw lastError ?? new Error("RPC unavailable");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Poll RPC endpoints until a parsed transaction is visible (confirmed, then finalized). */
+export async function getParsedTransactionWhenReady(
+  signature: string,
+  options?: { maxWaitMs?: number; pollMs?: number },
+): Promise<ParsedTransactionWithMeta> {
+  const maxWaitMs = options?.maxWaitMs ?? 60_000;
+  const pollMs = options?.pollMs ?? 2_000;
+  const commitments: Commitment[] = ["confirmed", "finalized"];
+  const candidates = getServerRpcUrlCandidates();
+  const deadline = Date.now() + maxWaitMs;
+  let lastError: Error | null = null;
+
+  while (Date.now() < deadline) {
+    for (const url of candidates) {
+      try {
+        const connection = createConnection(url);
+        for (const commitment of commitments) {
+          const tx = await connection.getParsedTransaction(signature, {
+            maxSupportedTransactionVersion: 0,
+            commitment,
+          });
+
+          if (tx?.meta?.err) {
+            throw new Error("Transaction failed on-chain");
+          }
+          if (tx?.meta) {
+            return tx;
+          }
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (lastError.message === "Transaction failed on-chain") {
+          throw lastError;
+        }
+        console.error("[server-rpc] getParsedTransaction", rpcHost(url), lastError.message);
+      }
+    }
+
+    await sleep(pollMs);
+  }
+
+  throw lastError ?? new Error("Transaction not found on-chain yet — try again shortly");
 }

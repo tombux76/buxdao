@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:schema": "psql \"$POSTGRES_URL\" -f db/schema.sql",
+    "db:schema": "node scripts/db-migrate.mjs db/schema.sql",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed-roles": "node scripts/db-migrate.mjs db/seed-discord-role-catalog.sql",
     "holder-rewards-accrue": "npx tsx scripts/holder-rewards-accrue.ts",
