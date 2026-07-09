@@ -361,7 +361,7 @@ async function loadPlayerData() {
     const response = await fetch(`/api/load-player?walletAddress=${encodeURIComponent(wallet)}&gameType=coinflip&tokenUsed=${typeof window.__COINFLIP_TOKEN__ !== 'undefined' ? window.__COINFLIP_TOKEN__ : 'bux'}`, { signal: AbortSignal.timeout(25000) });
     if (!response.ok) return;
     const data = await response.json();
-    if (data.unclaimedRewards > 0) totalWon = data.unclaimedRewards;
+    totalWon = typeof data.unclaimedRewards === 'number' ? data.unclaimedRewards : 0;
     flipsRemaining = data.flipsRemaining || 0;
     if (data.costPerFlip != null && flipsRemaining > 0) {
       const costSelect = document.getElementById('cost-per-flip');

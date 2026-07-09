@@ -1727,10 +1727,10 @@ async function loadPlayerData() {
         
         console.log('Player data loaded from database:', data);
         
-        // Restore unclaimed rewards
-        if (data.unclaimedRewards > 0) {
-            totalWon = data.unclaimedRewards;
-            console.log('Restored unclaimed rewards:', data.unclaimedRewards);
+        // Always sync unclaimed rewards from server (including 0 after collect)
+        totalWon = typeof data.unclaimedRewards === 'number' ? data.unclaimedRewards : 0;
+        if (totalWon > 0) {
+            console.log('Restored unclaimed rewards:', totalWon);
         }
         
         // Restore spins remaining (always restore, even if 0, to sync with database)
