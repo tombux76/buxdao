@@ -245,6 +245,36 @@ export function HubCashoutSection() {
     }
   }
 
+  async function handleConfirmCashout(signature: string) {
+    const confirmRes = await fetch("/api/cashout/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payoutWallet: walletAddress,
+        buxTxSignature: signature,
+      }),
+    });
+
+    const confirmBody = (await confirmRes.json()) as {
+      error?: string;
+      solNet?: number;
+      solTxSignature?: string;
+    };
+
+    if (!confirmRes.ok) {
+      throw new Error(confirmBody.error ?? "Failed to complete cashout");
+    }
+
+    setSolTxSignature(confirmBody.solTxSignature ?? null);
+    setCompletedSolNet(confirmBody.solNet ?? prepareData?.solNet ?? null);
+    setStep("success");
+    setPrepareData(null);
+    const next = await refreshEligibility().catch(() => null);
+    if (next) {
+      setEligibility(next);
+    }
+  }
+
   async function handleSendBux() {
     if (!prepareData || !walletAddress || !sendTransaction) {
       return;
@@ -281,35 +311,25 @@ export function HubCashoutSection() {
       setBuxTxSignature(signature);
       setStep("paying_sol");
 
-      const confirmRes = await fetch("/api/cashout/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payoutWallet: walletAddress,
-          buxTxSignature: signature,
-        }),
-      });
-
-      const confirmBody = (await confirmRes.json()) as {
-        error?: string;
-        solNet?: number;
-        solTxSignature?: string;
-      };
-
-      if (!confirmRes.ok) {
-        throw new Error(confirmBody.error ?? "Failed to complete cashout");
-      }
-
-      setSolTxSignature(confirmBody.solTxSignature ?? null);
-      setCompletedSolNet(confirmBody.solNet ?? prepareData.solNet);
-      setStep("success");
-      setPrepareData(null);
-      const next = await refreshEligibility().catch(() => null);
-      if (next) {
-        setEligibility(next);
-      }
+      await handleConfirmCashout(signature);
     } catch (err) {
-      setStep("ready");
+      setStep(buxTxSignature ? "paying_sol" : "ready");
+      setCashoutError(err instanceof Error ? err.message : "Cashout failed");
+    }
+  }
+
+  async function handleRetryConfirm() {
+    if (!buxTxSignature || !walletAddress) {
+      return;
+    }
+
+    setStep("paying_sol");
+    setCashoutError(null);
+
+    try {
+      await handleConfirmCashout(buxTxSignature);
+    } catch (err) {
+      setStep("paying_sol");
       setCashoutError(err instanceof Error ? err.message : "Cashout failed");
     }
   }
@@ -581,12 +601,28 @@ export function HubCashoutSection() {
             </div>
           )}
 
-          {(step === "sending_bux" || step === "paying_sol") && (
+          {(step === "sending_bux" || (step === "paying_sol" && !cashoutError)) && (
             <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-bg-deep/50 px-4 py-3 text-sm text-muted">
               <Loader2 className="h-4 w-4 shrink-0 animate-spin text-accent-cyan" />
               {step === "sending_bux"
                 ? "Approve $BUX transfer in your wallet…"
                 : "Sending SOL payout from liquidity pool…"}
+            </div>
+          )}
+
+          {step === "paying_sol" && cashoutError && buxTxSignature && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Your $BUX transfer is on-chain. Retry the SOL payout — do not send $BUX again.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleRetryConfirm()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan py-3.5 text-sm font-semibold text-bg-deep"
+              >
+                <Wallet className="h-4 w-4" />
+                Retry SOL payout
+              </button>
             </div>
           )}
         </div>

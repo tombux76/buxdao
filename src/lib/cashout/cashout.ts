@@ -94,6 +94,167 @@ async function assertConfirmEligibility(userId: string, row: PendingRow): Promis
   }
 }
 
+async function loadCompletedByBuxTx(
+  pool: ReturnType<typeof getPool>,
+  buxTxSignature: string,
+  userId: string,
+): Promise<CompletedCashoutRow | null> {
+  const completed = await pool.query<CompletedCashoutRow>(
+    `SELECT bux_amount, sol_amount, fee_lamports, bux_tx_signature, tx_signature
+     FROM cashout_transactions
+     WHERE bux_tx_signature = $1 AND user_id = $2 AND status = 'completed'`,
+    [buxTxSignature, userId],
+  );
+  return completed.rows[0] ?? null;
+}
+
+type ProcessingRow = {
+  id: string;
+  wallet_address: string;
+  bux_amount: string;
+  sol_amount: string;
+  fee_lamports: string;
+  bux_tx_signature: string;
+  tx_signature: string | null;
+};
+
+async function claimProcessingPayout(params: {
+  userId: string;
+  payoutWallet: string;
+  buxTxSignature: string;
+}): Promise<ProcessingRow | null> {
+  const pool = getPool();
+  const claimed = await pool.query<ProcessingRow>(
+    `UPDATE cashout_transactions
+     SET status = 'paying'
+     WHERE bux_tx_signature = $1
+       AND user_id = $2
+       AND wallet_address = $3
+       AND tx_signature IS NULL
+       AND (
+         status = 'processing'
+         OR (status = 'paying' AND created_at < NOW() - INTERVAL '2 minutes')
+       )
+     RETURNING id, wallet_address, bux_amount, sol_amount, fee_lamports, bux_tx_signature, tx_signature`,
+    [params.buxTxSignature, params.userId, params.payoutWallet],
+  );
+  return claimed.rows[0] ?? null;
+}
+
+async function resumeProcessingCashout(params: {
+  userId: string;
+  payoutWallet: string;
+  buxTxSignature: string;
+}): Promise<{
+  amountBux: number;
+  solNet: number;
+  feeSol: number;
+  buxTxSignature: string;
+  solTxSignature: string;
+} | null> {
+  const pool = getPool();
+
+  const existing = await pool.query<ProcessingRow>(
+    `SELECT id, wallet_address, bux_amount, sol_amount, fee_lamports, bux_tx_signature, tx_signature
+     FROM cashout_transactions
+     WHERE bux_tx_signature = $1 AND user_id = $2 AND status IN ('processing', 'paying')`,
+    [params.buxTxSignature, params.userId],
+  );
+  const row = existing.rows[0];
+  if (!row) {
+    return null;
+  }
+  if (row.wallet_address !== params.payoutWallet) {
+    throw new Error("Payout wallet does not match the pending cashout");
+  }
+
+  if (row.tx_signature) {
+    await pool.query(
+      `UPDATE cashout_transactions
+       SET status = 'completed', completed_at = now()
+       WHERE id = $1`,
+      [row.id],
+    );
+    const amountBux = buxRawToNumber(BigInt(row.bux_amount));
+    const solNet = Number(BigInt(row.sol_amount)) / 1e9;
+    const feeSol = Number(BigInt(row.fee_lamports ?? "0")) / 1e9;
+    return {
+      amountBux,
+      solNet,
+      feeSol,
+      buxTxSignature: row.bux_tx_signature,
+      solTxSignature: row.tx_signature,
+    };
+  }
+
+  const claimed = await claimProcessingPayout(params);
+  if (!claimed) {
+    const completed = await loadCompletedByBuxTx(pool, params.buxTxSignature, params.userId);
+    if (completed) {
+      return mapCompletedRow(completed);
+    }
+    throw new Error("SOL payout already in progress — wait a few seconds and confirm again");
+  }
+
+  const amountBux = buxRawToNumber(BigInt(claimed.bux_amount));
+  const solNetLamports = BigInt(claimed.sol_amount);
+  const feeSol = Number(BigInt(claimed.fee_lamports ?? "0")) / 1e9;
+
+  try {
+    await verifyBuxTransferToLiquidity({
+      signature: params.buxTxSignature,
+      fromWallet: params.payoutWallet,
+      amountRaw: BigInt(claimed.bux_amount),
+    });
+
+    const solTxSignature = await sendLiquiditySolTransfer({
+      recipientWallet: params.payoutWallet,
+      lamports: solNetLamports,
+    });
+
+    const finalized = await pool.query<{ tx_signature: string }>(
+      `UPDATE cashout_transactions
+       SET tx_signature = $1, status = 'completed', completed_at = now()
+       WHERE id = $2 AND status = 'paying' AND tx_signature IS NULL
+       RETURNING tx_signature`,
+      [solTxSignature, claimed.id],
+    );
+
+    if (!finalized.rows[0]) {
+      const completed = await loadCompletedByBuxTx(pool, params.buxTxSignature, params.userId);
+      if (completed) {
+        return mapCompletedRow(completed);
+      }
+      throw new Error("Could not finalize cashout — contact support with your $BUX transaction");
+    }
+
+    await announceCashoutIfNeeded({
+      userId: params.userId,
+      payoutWallet: params.payoutWallet,
+      amountBux,
+      solNet: Number(solNetLamports) / 1e9,
+      buxTxSignature: params.buxTxSignature,
+      solTxSignature,
+    });
+
+    return {
+      amountBux,
+      solNet: Number(solNetLamports) / 1e9,
+      feeSol,
+      buxTxSignature: params.buxTxSignature,
+      solTxSignature,
+    };
+  } catch (error) {
+    await pool.query(
+      `UPDATE cashout_transactions
+       SET status = 'processing'
+       WHERE id = $1 AND status = 'paying' AND tx_signature IS NULL`,
+      [claimed.id],
+    );
+    throw error;
+  }
+}
+
 async function announceCashoutIfNeeded(params: {
   userId: string;
   payoutWallet: string;
@@ -261,90 +422,14 @@ export async function confirmCashout(params: {
 
   const pool = getPool();
 
-  const completed = await pool.query<CompletedCashoutRow>(
-    `SELECT bux_amount, sol_amount, fee_lamports, bux_tx_signature, tx_signature
-     FROM cashout_transactions
-     WHERE bux_tx_signature = $1 AND status = 'completed'`,
-    [params.buxTxSignature],
-  );
-  if (completed.rows[0]) {
-    return mapCompletedRow(completed.rows[0]);
+  const completed = await loadCompletedByBuxTx(pool, params.buxTxSignature, params.userId);
+  if (completed) {
+    return mapCompletedRow(completed);
   }
 
-  const processing = await pool.query<{
-    id: string;
-    wallet_address: string;
-    bux_amount: string;
-    sol_amount: string;
-    fee_lamports: string;
-    bux_tx_signature: string;
-    tx_signature: string | null;
-  }>(
-    `SELECT id, wallet_address, bux_amount, sol_amount, fee_lamports, bux_tx_signature, tx_signature
-     FROM cashout_transactions
-     WHERE bux_tx_signature = $1 AND user_id = $2 AND status = 'processing'`,
-    [params.buxTxSignature, params.userId],
-  );
-  const processingRow = processing.rows[0];
-  if (processingRow) {
-    if (processingRow.wallet_address !== params.payoutWallet) {
-      throw new Error("Payout wallet does not match the pending cashout");
-    }
-
-    const amountBux = buxRawToNumber(BigInt(processingRow.bux_amount));
-    const solNetLamports = BigInt(processingRow.sol_amount);
-    const feeSol = Number(BigInt(processingRow.fee_lamports ?? "0")) / 1e9;
-
-    if (processingRow.tx_signature) {
-      await pool.query(
-        `UPDATE cashout_transactions
-         SET status = 'completed', completed_at = now()
-         WHERE id = $1`,
-        [processingRow.id],
-      );
-      return {
-        amountBux,
-        solNet: Number(solNetLamports) / 1e9,
-        feeSol,
-        buxTxSignature: processingRow.bux_tx_signature,
-        solTxSignature: processingRow.tx_signature,
-      };
-    }
-
-    await verifyBuxTransferToLiquidity({
-      signature: params.buxTxSignature,
-      fromWallet: params.payoutWallet,
-      amountRaw: BigInt(processingRow.bux_amount),
-    });
-
-    const solTxSignature = await sendLiquiditySolTransfer({
-      recipientWallet: params.payoutWallet,
-      lamports: solNetLamports,
-    });
-
-    await pool.query(
-      `UPDATE cashout_transactions
-       SET tx_signature = $1, status = 'completed', completed_at = now()
-       WHERE id = $2`,
-      [solTxSignature, processingRow.id],
-    );
-
-    await announceCashoutIfNeeded({
-      userId: params.userId,
-      payoutWallet: params.payoutWallet,
-      amountBux,
-      solNet: Number(solNetLamports) / 1e9,
-      buxTxSignature: params.buxTxSignature,
-      solTxSignature,
-    });
-
-    return {
-      amountBux,
-      solNet: Number(solNetLamports) / 1e9,
-      feeSol,
-      buxTxSignature: params.buxTxSignature,
-      solTxSignature,
-    };
+  const resumed = await resumeProcessingCashout(params);
+  if (resumed) {
+    return resumed;
   }
 
   const used = await pool.query(`SELECT 1 FROM cashout_used_signatures WHERE tx_signature = $1`, [
@@ -371,8 +456,6 @@ export async function confirmCashout(params: {
   await assertConfirmEligibility(params.userId, previewRow);
 
   const amountRaw = BigInt(previewRow.bux_amount_raw);
-  const solNetLamports = BigInt(previewRow.sol_net_lamports);
-  const feeLamports = BigInt(previewRow.fee_lamports);
 
   await verifyBuxTransferToLiquidity({
     signature: params.buxTxSignature,
@@ -381,7 +464,6 @@ export async function confirmCashout(params: {
   });
 
   const client = await pool.connect();
-  let row = previewRow;
 
   try {
     await client.query("BEGIN");
@@ -395,14 +477,17 @@ export async function confirmCashout(params: {
       [params.userId],
     );
 
-    row = pending.rows[0];
+    const row = pending.rows[0];
     if (!row) {
       throw new Error("No cashout in progress — start again from the Hub");
     }
     if (row.payout_wallet !== params.payoutWallet) {
       throw new Error("Payout wallet does not match the pending cashout");
     }
-    if (row.bux_amount_raw !== previewRow.bux_amount_raw || row.sol_net_lamports !== previewRow.sol_net_lamports) {
+    if (
+      row.bux_amount_raw !== previewRow.bux_amount_raw ||
+      row.sol_net_lamports !== previewRow.sol_net_lamports
+    ) {
       throw new Error("Cashout quote changed — start again from the Hub");
     }
 
@@ -436,6 +521,10 @@ export async function confirmCashout(params: {
 
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("duplicate key") || message.includes("23505")) {
+      const retry = await resumeProcessingCashout(params);
+      if (retry) {
+        return retry;
+      }
       throw new Error("This $BUX transfer is already being processed");
     }
     throw error;
@@ -443,46 +532,12 @@ export async function confirmCashout(params: {
     client.release();
   }
 
-  let solTxSignature: string;
-  try {
-    solTxSignature = await sendLiquiditySolTransfer({
-      recipientWallet: params.payoutWallet,
-      lamports: solNetLamports,
-    });
-  } catch (error) {
-    console.error("[cashout] SOL payout failed after claim — retry confirm to resume:", error);
-    throw error instanceof Error
-      ? error
-      : new Error("SOL payout failed — confirm again to retry");
+  const paid = await resumeProcessingCashout(params);
+  if (!paid) {
+    throw new Error("Could not complete SOL payout — confirm again to retry");
   }
 
-  await pool.query(
-    `UPDATE cashout_transactions
-     SET tx_signature = $1, status = 'completed', completed_at = now()
-     WHERE bux_tx_signature = $2 AND user_id = $3 AND status = 'processing'`,
-    [solTxSignature, params.buxTxSignature, params.userId],
-  );
-
-  const amountBux = buxRawToNumber(amountRaw);
-  const solNet = Number(solNetLamports) / 1e9;
-  const feeSol = Number(feeLamports) / 1e9;
-
-  await announceCashoutIfNeeded({
-    userId: params.userId,
-    payoutWallet: params.payoutWallet,
-    amountBux,
-    solNet,
-    buxTxSignature: params.buxTxSignature,
-    solTxSignature,
-  });
-
-  return {
-    amountBux,
-    solNet,
-    feeSol,
-    buxTxSignature: params.buxTxSignature,
-    solTxSignature,
-  };
+  return paid;
 }
 
 export async function cancelCashout(userId: string): Promise<void> {
