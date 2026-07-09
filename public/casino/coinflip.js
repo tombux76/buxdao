@@ -633,6 +633,13 @@ async function withdrawWinnings() {
       try {
         errData = await response.json();
       } catch (_) {}
+      if (response.status === 409) {
+        throw new Error(
+          errData.message ||
+            errData.error ||
+            'Collect already in progress. Wait a few minutes and try again, or refresh the page.',
+        );
+      }
       throw new Error(errData.error || errData.message || 'Collect failed');
     }
     const collectData = await response.json();
