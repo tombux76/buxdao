@@ -633,7 +633,21 @@ async function withdrawWinnings() {
       } catch (_) {}
       throw new Error(errData.error || errData.message || 'Collect failed');
     }
-    const { transaction: transactionBase64, actualAmount } = await response.json();
+    const collectData = await response.json();
+    if (collectData.reconciled) {
+      totalWon = 0;
+      await loadPlayerData();
+      await updateBalance();
+      updateDisplay();
+      updateButtonStates();
+      showMessage({
+        title: 'Collect complete',
+        message: collectData.message || 'Your previous collect has been finalized.',
+        txSignature: collectData.signature,
+      });
+      return;
+    }
+    const { transaction: transactionBase64, actualAmount } = collectData;
     if (window.CasinoFees?.showCasinoProcessing) {
       window.CasinoFees.showCasinoProcessing(
         'Confirming your collect on-chain. This may take a minute.',

@@ -4,6 +4,7 @@ const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { verifyCollectPayout } = require("./collect-verify.cjs");
 const { releaseCollectLock } = require("./collect-lock.cjs");
 const { getSignatureStatusWithFallback } = require("./rpc-candidates.cjs");
+const { markCollectSignatureUsed } = require("./collect-reconcile.cjs");
 
 async function handler(req, res) {
   setCors(res, req.headers.origin);
@@ -80,9 +81,11 @@ async function handler(req, res) {
 
     if (!updateResult || updateResult.length === 0) {
       await releaseCollectLock(userWallet, gameTypeNorm, tokenNorm);
+      await markCollectSignatureUsed(sql, signature, userWallet, gameTypeNorm);
       return json(res, 200, { message: "Unclaimed rewards already cleared", alreadyCleared: true });
     }
 
+    await markCollectSignatureUsed(sql, signature, userWallet, gameTypeNorm);
     await releaseCollectLock(userWallet, gameTypeNorm, tokenNorm);
 
     return json(res, 200, { message: "Unclaimed rewards cleared successfully", amount });

@@ -30,6 +30,8 @@ function loadCasinoHandlerModule(handlerPath: string): NodeHandler | { handler: 
       return require("../../../casino-api/collect.cjs");
     case "confirm-collect.cjs":
       return require("../../../casino-api/confirm-collect.cjs");
+    case "register-collect-signature.cjs":
+      return require("../../../casino-api/register-collect-signature.cjs");
     case "game-stats.cjs":
       return require("../../../casino-api/game-stats.cjs");
     case "leaderboard.cjs":

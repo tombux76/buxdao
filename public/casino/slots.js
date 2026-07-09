@@ -1138,7 +1138,22 @@ async function withdrawWinnings() {
             throw new Error(errorMessage);
         }
 
-        const { transaction: transactionBase64, actualAmount } = await response.json();
+        const collectData = await response.json();
+        if (collectData.reconciled) {
+            totalWon = 0;
+            await loadPlayerData();
+            await updateBalance();
+            updateDisplay();
+            updateButtonStates();
+            showSlotsMessage({
+                title: 'Collect complete',
+                message: collectData.message || 'Your previous collect has been finalized.',
+                txSignature: collectData.signature,
+            });
+            return;
+        }
+
+        const { transaction: transactionBase64, actualAmount } = collectData;
 
         if (window.CasinoFees?.showCasinoProcessing) {
             window.CasinoFees.showCasinoProcessing(

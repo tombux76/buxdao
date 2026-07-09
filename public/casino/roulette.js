@@ -887,14 +887,31 @@
                 }
                 return res.json();
             })
-            .then(function (data) {
+            .then(function (collectData) {
+                if (collectData.reconciled) {
+                    chipBalance = 0;
+                    unclaimedRewards = 0;
+                    updateChipUI();
+                    updatePopups();
+                    updateStakedUI();
+                    renderChipStacks();
+                    updateBalance();
+                    loadPlayerData();
+                    updateRouletteButtonStates();
+                    showMessage({
+                        title: 'Collect complete',
+                        message: collectData.message || 'Your previous collect has been finalized.',
+                        txSignature: collectData.signature,
+                    });
+                    return Promise.reject(new Error('ALREADY_RECONCILED'));
+                }
                 if (window.CasinoFees && window.CasinoFees.showCasinoProcessing) {
                     window.CasinoFees.showCasinoProcessing(
                         'Confirming your collect on-chain. This may take a minute.',
                         'Processing collect'
                     );
                 }
-                var txBytes = Uint8Array.from(atob(data.transaction), function (c) { return c.charCodeAt(0); });
+                var txBytes = Uint8Array.from(atob(collectData.transaction), function (c) { return c.charCodeAt(0); });
                 var Transaction = (window.solanaWeb3 || solanaWeb3).Transaction;
                 var tx = Transaction.from(txBytes);
                 return connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 })
@@ -911,7 +928,7 @@
                             return window.CasinoFees.confirmCollectWithServer({
                                 wallet: wallet,
                                 signature: sig,
-                                amount: data.actualAmount || totalToCollectAmount,
+                                amount: collectData.actualAmount || totalToCollectAmount,
                                 gameType: 'roulette',
                                 token: isBuxToken() ? 'bux' : 'bux',
                             }).then(function () { return sig; });
@@ -919,7 +936,7 @@
                         return fetch('/api/confirm-collect', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userWallet: wallet, signature: sig, amount: data.actualAmount || totalToCollectAmount, gameType: 'roulette', token: isBuxToken() ? 'bux' : 'bux' })
+                            body: JSON.stringify({ userWallet: wallet, signature: sig, amount: collectData.actualAmount || totalToCollectAmount, gameType: 'roulette', token: isBuxToken() ? 'bux' : 'bux' })
                         }).then(function (cr) {
                             if (!cr.ok) {
                                 return cr.json().then(function (d) {
@@ -953,7 +970,7 @@
                 });
             })
             .catch(function (err) {
-                if (err && err.message === 'NOTHING_TO_COLLECT') return;
+                if (err && (err.message === 'NOTHING_TO_COLLECT' || err.message === 'ALREADY_RECONCILED')) return;
                 if (String(err.message || '').match(/reject|authorized|cancelled/i)) return;
                 showMessage({ title: 'Collect failed', message: 'Failed to collect: ' + (err.message || err), isError: true });
             })

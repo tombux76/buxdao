@@ -171,6 +171,24 @@
     }
   }
 
+  async function registerCollectSignature(params) {
+    try {
+      await fetch("/api/register-collect-signature", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userWallet: params.wallet,
+          signature: params.signature,
+          amount: params.amount,
+          gameType: params.gameType,
+          token: params.token || "bux",
+        }),
+      });
+    } catch (err) {
+      console.warn("registerCollectSignature failed:", err);
+    }
+  }
+
   async function confirmCollectWithServer(params) {
     const wallet = params.wallet;
     const signature = params.signature;
@@ -179,6 +197,14 @@
     const token = params.token || "bux";
     const maxAttempts = params.maxAttempts || 20;
     let lastError = null;
+
+    await registerCollectSignature({
+      wallet: wallet,
+      signature: signature,
+      amount: amount,
+      gameType: gameType,
+      token: token,
+    });
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const res = await fetch("/api/confirm-collect", {
@@ -263,5 +289,6 @@
     hideCasinoProcessing: hidePurchaseProcessing,
     confirmTransactionBestEffort,
     confirmCollectWithServer,
+    registerCollectSignature,
   };
 })(window);

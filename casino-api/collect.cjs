@@ -9,6 +9,7 @@ const { getSql, setCors, json } = require("./slots-helpers.cjs");
 const { isValidWalletAddress } = require("./wallet-utils.cjs");
 const { isCasinoPaused, DB_DECIMALS } = require("./game-logic.cjs");
 const { acquireCollectLock, releaseCollectLock } = require("./collect-lock.cjs");
+const { reconcileSubmittedCollects } = require("./collect-reconcile.cjs");
 const {
   getTokenAccountWithFallback,
   getLatestBlockhashWithFallback,
@@ -73,6 +74,16 @@ async function handler(req, res) {
 
     const sql = getSql();
     if (sql) {
+      const reconciled = await reconcileSubmittedCollects(sql, userWallet, gameTypeNorm, token);
+      if (reconciled.reconciled) {
+        return json(res, 200, {
+          reconciled: true,
+          message: "Your previous collect has been finalized. Refresh the page.",
+          signature: reconciled.signature,
+          amount: reconciled.amount,
+        });
+      }
+
       const dbDecimals = DB_DECIMALS;
       let playerData, dbUnclaimed;
       if (gameTypeNorm === "coinflip") {
@@ -102,6 +113,17 @@ async function handler(req, res) {
 
     const lock = await acquireCollectLock(userWallet, gameTypeNorm, token, amount);
     if (!lock.ok) {
+      if (sql) {
+        const reconciled = await reconcileSubmittedCollects(sql, userWallet, gameTypeNorm, token);
+        if (reconciled.reconciled) {
+          return json(res, 200, {
+            reconciled: true,
+            message: "Your previous collect has been finalized. Refresh the page.",
+            signature: reconciled.signature,
+            amount: reconciled.amount,
+          });
+        }
+      }
       return json(res, 409, { error: lock.error, pendingAmount: lock.pendingAmount });
     }
 
