@@ -1,12 +1,13 @@
 import type { NextRequest } from "next/server";
 import { runCasinoHandler } from "@/lib/casino/node-handler";
+import { runGuardedCasinoPost } from "@/lib/casino/guarded-handler";
 
 const HANDLER = "../../../casino-api/confirm-collect.cjs";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  return runCasinoHandler(request, HANDLER, { parseBody: true });
+  return runGuardedCasinoPost(request, HANDLER);
 }
 
 export async function OPTIONS(request: NextRequest) {

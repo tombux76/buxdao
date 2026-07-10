@@ -1,143 +1,151 @@
-// Slots leaderboard — Neon Postgres
+// Casino leaderboard — Neon Postgres
 const { getSql, setCors, json } = require("./slots-helpers.cjs");
 
 const TOKEN_DECIMALS = 6;
+const TOKEN_USED = "bux";
+const VALID_GAMES = ["all", "slots", "coinflip", "roulette"];
+const VALID_SORT = ["winRate", "wagered", "won", "plays"];
+const LEGACY_SORT = { spins: "plays", flips: "plays" };
+
+function toBux(raw) {
+  return Number(raw || 0) / 10 ** TOKEN_DECIMALS;
+}
+
+function formatEntry(row, index) {
+  const wallet = row.wallet_address;
+  const totalWagered = toBux(row.total_wagered);
+  const totalWon = toBux(row.total_won);
+  const totalPlays = Number(row.total_plays || 0);
+  const winRate = totalWagered > 0 ? (totalWon / totalWagered) * 100 : 0;
+  const displayName =
+    row.discord_username || `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
+
+  return {
+    rank: index + 1,
+    walletAddress: wallet,
+    displayName,
+    discordUsername: row.discord_username || null,
+    discordImage: row.discord_image || null,
+    totalPlays,
+    totalWagered,
+    totalWon,
+    winRate,
+  };
+}
+
+function normalizeSort(sortBy) {
+  const mapped = LEGACY_SORT[sortBy] || sortBy;
+  return VALID_SORT.includes(mapped) ? mapped : "plays";
+}
+
+async function querySingleGame(sql, gameType, sortBy, limit) {
+  const configs = {
+    slots: { table: "slots_players", playsCol: "total_spins" },
+    coinflip: { table: "coinflip_players", playsCol: "total_flips" },
+    roulette: { table: "roulette_players", playsCol: "total_spins" },
+  };
+  const cfg = configs[gameType];
+  const orderBy =
+    sortBy === "wagered"
+      ? "p.total_wagered DESC"
+      : sortBy === "won"
+        ? "p.total_won DESC"
+        : sortBy === "winRate"
+          ? "(p.total_won::float / NULLIF(p.total_wagered, 0)) DESC NULLS LAST"
+          : `p.${cfg.playsCol} DESC`;
+
+  const query = `
+    SELECT p.wallet_address,
+           p.${cfg.playsCol} AS total_plays,
+           p.total_wagered,
+           p.total_won,
+           u.discord_username,
+           u.discord_image
+    FROM ${cfg.table} p
+    LEFT JOIN user_wallets uw ON uw.wallet_address = p.wallet_address
+    LEFT JOIN users u ON u.id = uw.user_id
+    WHERE p.token_used = $1 AND p.${cfg.playsCol} > 0
+    ORDER BY ${orderBy}
+    LIMIT $2`;
+
+  return sql(query, [TOKEN_USED, limit]);
+}
+
+async function queryAllGames(sql, sortBy, limit) {
+  const orderBy =
+    sortBy === "wagered"
+      ? "a.total_wagered DESC"
+      : sortBy === "won"
+        ? "a.total_won DESC"
+        : sortBy === "winRate"
+          ? "(a.total_won::float / NULLIF(a.total_wagered, 0)) DESC NULLS LAST"
+          : "a.total_plays DESC";
+
+  const query = `
+    WITH combined AS (
+      SELECT wallet_address, total_spins::bigint AS total_plays, total_wagered, total_won
+      FROM slots_players
+      WHERE token_used = $1 AND total_spins > 0
+      UNION ALL
+      SELECT wallet_address, total_flips::bigint, total_wagered, total_won
+      FROM coinflip_players
+      WHERE token_used = $1 AND total_flips > 0
+      UNION ALL
+      SELECT wallet_address, total_spins::bigint, total_wagered, total_won
+      FROM roulette_players
+      WHERE token_used = $1 AND total_spins > 0
+    ),
+    agg AS (
+      SELECT wallet_address,
+             SUM(total_plays)::bigint AS total_plays,
+             SUM(total_wagered) AS total_wagered,
+             SUM(total_won) AS total_won
+      FROM combined
+      GROUP BY wallet_address
+      HAVING SUM(total_wagered) > 0
+    )
+    SELECT a.wallet_address,
+           a.total_plays,
+           a.total_wagered,
+           a.total_won,
+           u.discord_username,
+           u.discord_image
+    FROM agg a
+    LEFT JOIN user_wallets uw ON uw.wallet_address = a.wallet_address
+    LEFT JOIN users u ON u.id = uw.user_id
+    ORDER BY ${orderBy}
+    LIMIT $2`;
+
+  return sql(query, [TOKEN_USED, limit]);
+}
 
 async function handler(req, res) {
   setCors(res, req.headers.origin);
   if (req.method === "OPTIONS") return res.end();
-
   if (req.method !== "GET") return json(res, 405, { error: "Method not allowed" });
+
   const sql = getSql();
   if (!sql) return json(res, 500, { error: "Database not configured" });
 
-  const gameType = (req.query.gameType || "slots").toLowerCase();
-  if (gameType !== "slots" && gameType !== "coinflip") return json(res, 400, { error: "gameType must be slots or coinflip" });
-  const tokenUsed = "bux";
+  const gameType = (req.query.gameType || "all").toLowerCase();
+  if (!VALID_GAMES.includes(gameType)) {
+    return json(res, 400, { error: `gameType must be one of: ${VALID_GAMES.join(", ")}` });
+  }
+
+  const sortBy = normalizeSort(req.query.sortBy || "plays");
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 1000);
 
   try {
-    const sortBy = req.query.sortBy || (gameType === "coinflip" ? "flips" : "spins");
-    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 1000);
+    const rows =
+      gameType === "all"
+        ? await queryAllGames(sql, sortBy, limit)
+        : await querySingleGame(sql, gameType, sortBy, limit);
 
-    const validSort = gameType === "coinflip" ? ["flips", "won"] : ["spins", "won", "winRate"];
-    if (!validSort.includes(sortBy)) {
-      return json(res, 400, { error: `Invalid sortBy. Must be: ${validSort.join(", ")}` });
-    }
-
-    if (gameType === "coinflip") {
-      let players;
-      if (sortBy === "flips") {
-        players = await sql`
-          SELECT c.wallet_address,
-                 COALESCE(u.discord_username, c.wallet_address) AS display_name,
-                 c.total_flips,
-                 c.total_won,
-                 c.total_wagered,
-                 c.created_at
-          FROM coinflip_players c
-          LEFT JOIN user_wallets uw ON uw.wallet_address = c.wallet_address
-          LEFT JOIN users u ON u.id = uw.user_id
-          WHERE c.token_used = ${tokenUsed} AND c.total_flips > 0
-          ORDER BY c.total_flips DESC
-          LIMIT ${limit}`;
-      } else {
-        players = await sql`
-          SELECT c.wallet_address,
-                 COALESCE(u.discord_username, c.wallet_address) AS display_name,
-                 c.total_flips,
-                 c.total_won,
-                 c.total_wagered,
-                 c.created_at
-          FROM coinflip_players c
-          LEFT JOIN user_wallets uw ON uw.wallet_address = c.wallet_address
-          LEFT JOIN users u ON u.id = uw.user_id
-          WHERE c.token_used = ${tokenUsed} AND c.total_flips > 0
-          ORDER BY c.total_won DESC
-          LIMIT ${limit}`;
-      }
-      const leaderboard = (players || []).map((p) => {
-        const totalWon = Number(p.total_won || 0) / Math.pow(10, TOKEN_DECIMALS);
-        const totalWagered = Number(p.total_wagered || 0) / Math.pow(10, TOKEN_DECIMALS);
-        return {
-          walletAddress: p.wallet_address,
-          displayAddress: p.display_name || `${p.wallet_address.slice(0, 4)}...${p.wallet_address.slice(-4)}`,
-          totalFlips: p.total_flips || 0,
-          totalWon,
-          totalWagered,
-          createdAt: p.created_at,
-        };
-      });
-      return json(res, 200, {
-        leaderboard: leaderboard.slice(0, limit),
-        sortBy,
-        totalPlayers: leaderboard.length,
-      });
-    }
-
-    let players;
-    if (sortBy === "spins") {
-      players = await sql`
-        SELECT s.wallet_address,
-               COALESCE(u.discord_username, s.wallet_address) AS display_name,
-               s.total_spins,
-               s.total_won,
-               s.total_wagered,
-               s.created_at
-        FROM slots_players s
-        LEFT JOIN user_wallets uw ON uw.wallet_address = s.wallet_address
-        LEFT JOIN users u ON u.id = uw.user_id
-        WHERE s.token_used = ${tokenUsed} AND s.total_spins > 0
-        ORDER BY s.total_spins DESC
-        LIMIT ${limit}`;
-    } else if (sortBy === "won") {
-      players = await sql`
-        SELECT s.wallet_address,
-               COALESCE(u.discord_username, s.wallet_address) AS display_name,
-               s.total_spins,
-               s.total_won,
-               s.total_wagered,
-               s.created_at
-        FROM slots_players s
-        LEFT JOIN user_wallets uw ON uw.wallet_address = s.wallet_address
-        LEFT JOIN users u ON u.id = uw.user_id
-        WHERE s.token_used = ${tokenUsed} AND s.total_spins > 0
-        ORDER BY s.total_won DESC
-        LIMIT ${limit}`;
-    } else {
-      players = await sql`
-        SELECT s.wallet_address,
-               COALESCE(u.discord_username, s.wallet_address) AS display_name,
-               s.total_spins,
-               s.total_won,
-               s.total_wagered,
-               s.created_at
-        FROM slots_players s
-        LEFT JOIN user_wallets uw ON uw.wallet_address = s.wallet_address
-        LEFT JOIN users u ON u.id = uw.user_id
-        WHERE s.token_used = ${tokenUsed} AND s.total_spins > 0
-        ORDER BY s.total_spins DESC
-        LIMIT ${limit}`;
-    }
-
-    const leaderboard = (players || []).map((p) => {
-      const totalWon = Number(p.total_won || 0) / Math.pow(10, TOKEN_DECIMALS);
-      const totalWagered = Number(p.total_wagered || 0) / Math.pow(10, TOKEN_DECIMALS);
-      const winRate = totalWagered > 0 ? (totalWon / totalWagered) * 100 : 0;
-      return {
-        walletAddress: p.wallet_address,
-        displayAddress: p.display_name || `${p.wallet_address.slice(0, 4)}...${p.wallet_address.slice(-4)}`,
-        totalSpins: p.total_spins || 0,
-        totalWon,
-        totalWagered,
-        winRate,
-        createdAt: p.created_at,
-      };
-    });
-
-    if (sortBy === "winRate") leaderboard.sort((a, b) => b.winRate - a.winRate);
+    const leaderboard = (rows || []).map(formatEntry);
 
     return json(res, 200, {
-      leaderboard: leaderboard.slice(0, limit),
+      leaderboard,
+      gameType,
       sortBy,
       totalPlayers: leaderboard.length,
     });

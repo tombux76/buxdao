@@ -140,7 +140,11 @@ body.slots-page .slot-machine-wrapper .controls-panel{align-self:end!important;p
                     <div id="wallet-button-container" class="wallet-button-container">
                         <button id="connect-wallet" class="wallet-connect-btn">Connect Wallet</button>
                         <div id="wallet-info" class="wallet-info" style="display: none;">
-                            <span id="wallet-address"></span>
+                            <img id="player-avatar" class="player-avatar" alt="" style="display: none;" />
+                            <div class="wallet-player-meta">
+                                <span id="player-username" class="player-username" style="display: none;"></span>
+                                <span id="wallet-address"></span>
+                            </div>
                             <button id="disconnect-wallet" class="wallet-disconnect-btn">Disconnect</button>
                         </div>
                     </div>
@@ -385,6 +389,7 @@ body.slots-page .slot-machine-wrapper .controls-panel{align-self:end!important;p
             window.addEventListener('orientationchange', function(){ setTimeout(forceFullWidth, 100); });
         })();
     </script>
+    <script src="casino-player.js"></script>
     <script src="slots.js"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GameCard } from "@/components/ui/GameCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { CasinoGamesSection } from "@/components/games/CasinoGamesSection";
 import { games, pageMeta } from "@/content/site";
 import { buildPageMetadata } from "@/lib/seo";
 
@@ -18,14 +19,7 @@ export default function GamesPage() {
         description="BUX Casino games run on-site with $BUX. Card games open on dedicated platforms."
       />
 
-      <section>
-        <SectionHeader eyebrow="Casino" title="BUX Casino" description="Play with $BUX." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-          {casino.map((game) => (
-            <GameCard key={game.id} game={game} />
-          ))}
-        </div>
-      </section>
+      <CasinoGamesSection games={casino} />
 
       <section>
         <SectionHeader eyebrow="Card games" title="External platforms" />

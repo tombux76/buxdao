@@ -44,7 +44,7 @@ function loadCasinoHandlerModule(handlerPath: string): NodeHandler | { handler: 
 export async function runCasinoHandler(
   request: NextRequest,
   handlerPath: string,
-  options?: { parseBody?: boolean },
+  options?: { parseBody?: boolean; body?: unknown },
 ): Promise<Response> {
   let handler: NodeHandler;
   try {
@@ -68,7 +68,9 @@ export async function runCasinoHandler(
   });
 
   let body: unknown = {};
-  if (options?.parseBody && request.method !== "GET" && request.method !== "HEAD") {
+  if (options?.body !== undefined) {
+    body = options.body;
+  } else if (options?.parseBody && request.method !== "GET" && request.method !== "HEAD") {
     try {
       body = await request.json();
     } catch {

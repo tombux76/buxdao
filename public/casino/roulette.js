@@ -653,7 +653,11 @@
             return walletSetupPromise;
         }
         wallet = addr;
-        if (walletAddressEl) walletAddressEl.textContent = addr ? addr.slice(0, 4) + '...' + addr.slice(-4) : '';
+        if (walletAddressEl) {
+            if (addr) walletAddressEl.dataset.fullAddress = addr;
+            else delete walletAddressEl.dataset.fullAddress;
+        }
+        if (typeof window.updateCasinoPlayerBadge === 'function') window.updateCasinoPlayerBadge(addr);
         if (connectContainer) connectContainer.style.display = addr ? 'none' : 'block';
         if (walletInfo) walletInfo.style.display = addr ? 'flex' : 'none';
         if (!addr) {
