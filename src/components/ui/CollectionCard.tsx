@@ -6,23 +6,31 @@ type CollectionCardProps = {
   collection: CollectionWithStats;
 };
 
-function StatPair({
-  left,
-  right,
+function StatRow({
+  collection,
+  stats,
 }: {
-  left: { label: string; value: string };
-  right: { label: string; value: string };
+  collection: CollectionWithStats;
+  stats: {
+    label: string;
+    key: keyof Pick<
+      CollectionWithStats,
+      "floor" | "volume24h" | "totalVolume" | "supply" | "listed" | "percentListed"
+    >;
+  }[];
 }) {
   return (
-    <dl className="grid grid-cols-2 border-t border-border-gold/30">
-      {[left, right].map((stat, index) => (
+    <dl className="grid grid-cols-3 border-t border-border-gold/30">
+      {stats.map((stat, index) => (
         <div
-          key={stat.label}
-          className={`px-4 py-3 sm:px-5 sm:py-4 ${index === 0 ? "border-r border-border-gold/20" : ""}`}
+          key={stat.key}
+          className={`px-3 py-3 text-center sm:px-4 sm:py-4 ${
+            index < stats.length - 1 ? "border-r border-border-gold/20" : ""
+          }`}
         >
           <dt className="text-xs uppercase tracking-wide text-muted">{stat.label}</dt>
-          <dd className="mt-1 font-mono text-base font-semibold text-foreground sm:text-lg">
-            {stat.value}
+          <dd className="mt-1 font-mono text-sm font-semibold text-foreground sm:text-base lg:text-lg">
+            {collection[stat.key]}
           </dd>
         </div>
       ))}
@@ -67,13 +75,21 @@ export function CollectionCard({ collection }: CollectionCardProps) {
             </a>
           </div>
 
-          <StatPair
-            left={{ label: "Floor price", value: collection.floor }}
-            right={{ label: "24hr volume", value: collection.volume24h }}
+          <StatRow
+            collection={collection}
+            stats={[
+              { label: "Floor price", key: "floor" },
+              { label: "24hr volume", key: "volume24h" },
+              { label: "Total volume", key: "totalVolume" },
+            ]}
           />
-          <StatPair
-            left={{ label: "Supply", value: collection.supply }}
-            right={{ label: "Listed", value: collection.listed }}
+          <StatRow
+            collection={collection}
+            stats={[
+              { label: "Supply", key: "supply" },
+              { label: "Listed", key: "listed" },
+              { label: "% listed", key: "percentListed" },
+            ]}
           />
         </div>
       </div>
