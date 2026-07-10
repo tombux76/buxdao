@@ -69,7 +69,7 @@ export function GameCard({ game }: GameCardProps) {
           )}
           {game.status === "live" && game.href !== "#" && (
             <span className="inline-flex shrink-0 items-center gap-1 text-sm text-accent-cyan">
-              {game.external ? "Play" : "Preview"}
+              Play
               <ArrowUpRight className="h-4 w-4" />
             </span>
           )}
