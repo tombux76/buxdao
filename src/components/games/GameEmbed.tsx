@@ -5,11 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Music2, Wallet } from "lucide-react";
+import { ArrowLeft, Menu, Music2, Wallet } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { DiscordAuthButton } from "@/components/auth/DiscordAuthButton";
-import { CasinoStatsButton } from "@/components/games/CasinoStatsModal";
 import { games } from "@/content/site";
 import { GAME_CONFIG, type GameId } from "@/lib/games";
 
@@ -17,18 +16,33 @@ type GameEmbedProps = {
   gameId: GameId;
 };
 
-function PlayerAvatar({ image, name }: { image?: string | null; name?: string | null }) {
+function PlayerAvatar({
+  image,
+  name,
+  size = "md",
+}: {
+  image?: string | null;
+  name?: string | null;
+  size?: "sm" | "md";
+}) {
+  const dim = size === "sm" ? "h-8 w-8 text-[10px]" : "h-7 w-7 text-[10px]";
   if (image) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={image} alt="" className="h-7 w-7 shrink-0 rounded-full" />
+      <img src={image} alt="" className={`${dim.split(" ")[0]} ${dim.split(" ")[1]} shrink-0 rounded-full`} />
     );
   }
   return (
-    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-cyan/15 text-[10px] font-semibold text-accent-cyan">
+    <div
+      className={`flex ${dim} shrink-0 items-center justify-center rounded-full bg-accent-cyan/15 font-semibold text-accent-cyan`}
+    >
       {(name ?? "?").charAt(0).toUpperCase()}
     </div>
   );
+}
+
+function formatWallet(address: string) {
+  return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }
 
 export function GameEmbed({ gameId }: GameEmbedProps) {
@@ -43,6 +57,8 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
   const pathname = usePathname();
   const [iframeWallet, setIframeWallet] = useState<string | null>(null);
   const [linkedWallets, setLinkedWallets] = useState<string[] | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   const walletAddress = publicKey?.toBase58() ?? iframeWallet;
   const walletIsLinked =
@@ -103,6 +119,40 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
   const postToIframe = useCallback((message: Record<string, unknown>) => {
     iframeRef.current?.contentWindow?.postMessage(message, "*");
   }, []);
+
+  const disconnectWallet = useCallback(() => {
+    postToIframe({ type: "DISCONNECT_WALLET" });
+    setIframeWallet(null);
+    if (connected) disconnect();
+    setMobileMenuOpen(false);
+  }, [connected, disconnect, postToIframe]);
+
+  const connectWallet = useCallback(() => {
+    if (connected && publicKey) {
+      postToIframe({ type: "WALLET_ADDRESS", address: publicKey.toBase58() });
+    } else {
+      setVisible(true);
+      postToIframe({ type: "CONNECT_WALLET" });
+    }
+    setMobileMenuOpen(false);
+  }, [connected, postToIframe, publicKey, setVisible]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!mobileMenuRef.current?.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     if (publicKey) {
@@ -189,12 +239,12 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
           className="flex items-center gap-2 text-sm text-muted transition hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to games
+          <span className="hidden sm:inline">Back to games</span>
         </Link>
-        <div className="flex flex-1 items-center justify-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-2.5">
           {thumbnail ? (
             <div
-              className={`relative h-9 w-9 shrink-0 overflow-hidden ${
+              className={`relative h-8 w-8 shrink-0 overflow-hidden sm:h-9 sm:w-9 ${
                 gameId === "slots" ? "scale-110" : ""
               }`}
             >
@@ -208,10 +258,9 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
               />
             </div>
           ) : null}
-          <span className="text-sm font-semibold">{displayName}</span>
+          <span className="truncate text-sm font-semibold">{displayName}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <CasinoStatsButton walletAddress={walletAddress} />
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => postToIframe({ type: "TOGGLE_MUSIC" })}
@@ -220,57 +269,99 @@ export function GameEmbed({ gameId }: GameEmbedProps) {
           >
             <Music2 className="h-4 w-4" />
           </button>
-          {walletAddress ? (
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm">
-              {playerProfile ? (
-                <PlayerAvatar image={playerProfile.image} name={playerProfile.name} />
-              ) : (
-                <Wallet className="h-4 w-4 text-accent-cyan" />
-              )}
-              <div className="min-w-0">
-                {playerProfile?.name ? (
-                  <p className="max-w-[8rem] truncate text-xs font-medium">{playerProfile.name}</p>
+
+          {/* Mobile: pfp + menu */}
+          <div className="relative md:hidden" ref={mobileMenuRef}>
+            {walletAddress ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen((open) => !open)}
+                  className="flex items-center gap-1.5 rounded-xl border border-border bg-bg-surface p-1.5"
+                  aria-expanded={mobileMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label="Account menu"
+                >
+                  <PlayerAvatar
+                    image={playerProfile?.image}
+                    name={playerProfile?.name}
+                    size="sm"
+                  />
+                  <Menu className="h-4 w-4 text-muted" />
+                </button>
+                {mobileMenuOpen ? (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-border bg-bg-elevated p-3 shadow-xl"
+                  >
+                    {playerProfile?.name ? (
+                      <p className="truncate text-sm font-medium">{playerProfile.name}</p>
+                    ) : null}
+                    <p className="mt-1 font-mono text-xs text-muted">{formatWallet(walletAddress)}</p>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={disconnectWallet}
+                      className="mt-3 w-full rounded-lg border border-border px-3 py-2 text-left text-sm text-muted transition hover:bg-bg-surface hover:text-foreground"
+                    >
+                      Disconnect wallet
+                    </button>
+                  </div>
                 ) : null}
-                <p className="font-mono text-[10px] text-muted">
-                  {walletAddress.slice(0, 4)}…{walletAddress.slice(-4)}
-                </p>
-              </div>
+              </>
+            ) : (
               <button
                 type="button"
-                className="text-xs text-muted hover:text-foreground"
-                onClick={() => {
-                  postToIframe({ type: "DISCONNECT_WALLET" });
-                  setIframeWallet(null);
-                  if (connected) disconnect();
-                }}
+                onClick={connectWallet}
+                className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
               >
-                Disconnect
+                <Wallet className="h-4 w-4" />
+                <span className="sr-only">Connect</span>
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (connected && publicKey) {
-                  postToIframe({ type: "WALLET_ADDRESS", address: publicKey.toBase58() });
-                } else {
-                  setVisible(true);
-                  postToIframe({ type: "CONNECT_WALLET" });
-                }
-              }}
-              className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
-            >
-              <Wallet className="h-4 w-4" />
-              Connect
-            </button>
-          )}
+            )}
+          </div>
+
+          {/* Desktop: full wallet chip */}
+          <div className="hidden md:flex md:items-center md:gap-2">
+            {walletAddress ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm">
+                {playerProfile ? (
+                  <PlayerAvatar image={playerProfile.image} name={playerProfile.name} />
+                ) : (
+                  <Wallet className="h-4 w-4 text-accent-cyan" />
+                )}
+                <div className="min-w-0">
+                  {playerProfile?.name ? (
+                    <p className="max-w-[8rem] truncate text-xs font-medium">{playerProfile.name}</p>
+                  ) : null}
+                  <p className="font-mono text-[10px] text-muted">{formatWallet(walletAddress)}</p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-muted hover:text-foreground"
+                  onClick={disconnectWallet}
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={connectWallet}
+                className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
+              >
+                <Wallet className="h-4 w-4" />
+                Connect
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       {walletAddress && linkedWallets !== null && !walletIsLinked ? (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm">
           <p className="text-amber-100">
-            Link <span className="font-mono">{walletAddress.slice(0, 4)}…{walletAddress.slice(-4)}</span>{" "}
+            Link <span className="font-mono">{formatWallet(walletAddress)}</span>{" "}
             in Holder Hub before you can play or collect.
           </p>
           <Link
