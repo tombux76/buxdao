@@ -116,6 +116,7 @@ let totalWon = 0;
 let isSpinning = false;
 let isCollecting = false;
 let isAutoSpinning = false;
+let spinTimers = [];
 let backgroundMusic = null;
 let isMusicPlaying = true; // Default to on
 
@@ -315,6 +316,7 @@ function initializeReels() {
             
             // Set strip height
             strip.style.height = `${numSymbols * reelHeight}px`;
+            strip.dataset.unitHeight = String(reelHeight);
             
             // Position to show:
             // - Bottom half of symbol 17 (visible in top 50% of reel: 0 to reelHeight/2)
@@ -880,6 +882,7 @@ function toggleAutoSpin() {
     // If autospin is currently on, turn it off (can do this even while spinning)
     if (isAutoSpinning) {
         isAutoSpinning = false;
+        clearSpinTimers();
         updateSpinButtonText();
         return;
     }
@@ -895,6 +898,45 @@ function toggleAutoSpin() {
     if (!isSpinning) {
         performSpin();
     }
+}
+
+function clearSpinTimers() {
+    spinTimers.forEach((id) => clearTimeout(id));
+    spinTimers = [];
+}
+
+function readStripTranslateY(strip) {
+    const inline = strip.style.transform;
+    if (inline) {
+        const match = inline.match(/translateY\((-?\d+\.?\d*)px\)/);
+        if (match) return parseFloat(match[1]);
+    }
+    const computed = window.getComputedStyle(strip).transform;
+    if (!computed || computed === 'none') return 0;
+    try {
+        return new DOMMatrix(computed).m42;
+    } catch (_) {
+        return 0;
+    }
+}
+
+function syncReelStripMetrics(reel, strip) {
+    const reelHeight = Math.round(reel.getBoundingClientRect().height) || reel.offsetHeight;
+    if (!reelHeight) return 0;
+    strip.querySelectorAll('.reel-symbol').forEach((symbol) => {
+        symbol.style.height = `${reelHeight}px`;
+    });
+    const count = strip.querySelectorAll('.reel-symbol').length || 36;
+    strip.style.height = `${count * reelHeight}px`;
+    strip.dataset.unitHeight = String(reelHeight);
+    return reelHeight;
+}
+
+function freezeStripTransform(strip) {
+    const y = readStripTranslateY(strip);
+    strip.style.transition = 'none';
+    strip.style.transform = `translateY(${y}px)`;
+    return y;
 }
 
 function findReelPositionForSymbol(symbolIndex) {
@@ -952,6 +994,7 @@ async function performSpin() {
         serverData = await saveResponse.json();
     } catch (spinError) {
         console.error('Spin error:', spinError);
+        clearSpinTimers();
         isSpinning = false;
         isAutoSpinning = false;
         updateButtonStates();
@@ -971,24 +1014,23 @@ async function performSpin() {
     const resultPositions = results.map((sym) => findReelPositionForSymbol(sym));
     const costPerSpin = Math.min(parseFloat(document.getElementById('cost-per-spin').value) || SPIN_COST, MAX_COST_PER_SPIN);
 
+    clearSpinTimers();
+
     for (let i = 1; i <= 3; i++) {
         const reel = document.getElementById(`reel-${i}`);
         const strip = reel && reel.querySelector('.reel-strip');
-        if (reel && strip) {
-            const currentTransform = strip.style.transform;
-            const currentY = currentTransform ? parseFloat(currentTransform.match(/-?\d+\.?\d*/)?.[0] || '0') : 0;
-            strip.style.setProperty('--spin-start', `${currentY}px`);
-            strip.style.transition = 'none';
-            reel.classList.remove('stopping');
-            reel.classList.add('spinning');
-        }
+        if (!reel || !strip) continue;
+        reel.classList.remove('stopping', 'spinning');
+        const currentY = freezeStripTransform(strip);
+        strip.style.setProperty('--spin-start', `${currentY}px`);
+        reel.classList.add('spinning');
     }
 
-    setTimeout(() => stopReel(1, resultPositions[0]), 1000);
-    setTimeout(() => stopReel(2, resultPositions[1]), 1500);
-    setTimeout(() => stopReel(3, resultPositions[2]), 2000);
+    spinTimers.push(setTimeout(() => stopReel(1, resultPositions[0]), 1000));
+    spinTimers.push(setTimeout(() => stopReel(2, resultPositions[1]), 1500));
+    spinTimers.push(setTimeout(() => stopReel(3, resultPositions[2]), 2000));
 
-    setTimeout(async () => {
+    spinTimers.push(setTimeout(async () => {
         calculateWin(results, costPerSpin);
         isSpinning = false;
         loadGameStats();
@@ -1002,7 +1044,7 @@ async function performSpin() {
             isAutoSpinning = false;
             updateSpinButtonText();
         }
-    }, 2500);
+    }, 2500));
 }
 
 // Update spin button text based on state
@@ -1025,18 +1067,21 @@ function stopReel(reelNum, targetPosition) {
     if (!reel) return;
     const strip = reel.querySelector('.reel-strip');
     if (!strip) return;
-    
+
     reel.classList.remove('spinning');
     reel.classList.add('stopping');
-    
-    // Calculate position using pixels for accuracy
-    const reelHeight = reel.offsetHeight;
-    // Position so the chosen symbol (at targetPosition) is centered on the winline
-    // Each symbol occupies exactly reelHeight in the strip, so:
-    // offset = -(targetPosition * reelHeight)
+    freezeStripTransform(strip);
+
+    const reelHeight =
+        syncReelStripMetrics(reel, strip) ||
+        parseFloat(strip.dataset.unitHeight || '0') ||
+        reel.offsetHeight;
     const offset = -(targetPosition * reelHeight);
-    strip.style.transform = `translateY(${offset}px)`;
-    strip.style.transition = 'transform 0.5s ease-out';
+
+    requestAnimationFrame(() => {
+        strip.style.transition = 'transform 0.5s ease-out';
+        strip.style.transform = `translateY(${offset}px)`;
+    });
 }
 
 // Calculate Win
