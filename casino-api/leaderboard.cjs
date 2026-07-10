@@ -68,7 +68,7 @@ async function querySingleGame(sql, gameType, sortBy, limit) {
     ORDER BY ${orderBy}
     LIMIT $2`;
 
-  return sql(query, [TOKEN_USED, limit]);
+  return sql.query(query, [TOKEN_USED, limit]);
 }
 
 async function queryAllGames(sql, sortBy, limit) {
@@ -116,7 +116,7 @@ async function queryAllGames(sql, sortBy, limit) {
     ORDER BY ${orderBy}
     LIMIT $2`;
 
-  return sql(query, [TOKEN_USED, limit]);
+  return sql.query(query, [TOKEN_USED, limit]);
 }
 
 async function handler(req, res) {

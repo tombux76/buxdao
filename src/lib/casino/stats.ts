@@ -60,15 +60,14 @@ export async function getCasinoMyStats(
   const { rows: userRows } = await pool.query<{
     discord_username: string | null;
     discord_image: string | null;
-    name: string | null;
-  }>(`SELECT discord_username, discord_image, name FROM users WHERE id = $1`, [userId]);
+  }>(`SELECT discord_username, discord_image FROM users WHERE id = $1`, [userId]);
   const user = userRows[0];
 
   const empty: CasinoMyStats = {
     player: {
       discordUsername: user?.discord_username ?? null,
       discordImage: user?.discord_image ?? null,
-      displayName: user?.discord_username ?? user?.name ?? null,
+      displayName: user?.discord_username ?? null,
       wallets: [],
     },
     overall: emptyGameStat(),
@@ -134,7 +133,7 @@ export async function getCasinoMyStats(
     player: {
       discordUsername: user?.discord_username ?? null,
       discordImage: user?.discord_image ?? null,
-      displayName: user?.discord_username ?? user?.name ?? null,
+      displayName: user?.discord_username ?? null,
       wallets,
     },
     overall,
