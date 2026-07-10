@@ -39,10 +39,6 @@ function getTokenDecimals() {
   return typeof window.__BUX_DECIMALS__ === 'number' ? window.__BUX_DECIMALS__ : BUX_DECIMALS;
 }
 
-function getCoinImagePath(side) {
-  return `images/bux-${side}.png`;
-}
-
 let wallet = null;
 let connection = null;
 let tokenBalance = 0;
@@ -331,7 +327,6 @@ function updateButtonStates() {
 function setupSelectionButtons() {
   const btnHeads = document.getElementById('btn-heads');
   const btnTails = document.getElementById('btn-tails');
-  const coinImage = document.getElementById('coin-image');
 
   function setSelection(side) {
     selectedSide = side;
@@ -531,6 +526,33 @@ async function purchaseFlips() {
 }
 
 const COIN_SPIN_DURATION_MS = 1600;
+const COIN_SPIN_ROTATIONS = 5;
+let coinRotation = 0;
+
+function getCoinSpinner() {
+  return document.getElementById('coin-spinner');
+}
+
+function setCoinIdle(side) {
+  const spinner = getCoinSpinner();
+  if (!spinner) return;
+  spinner.style.transition = 'none';
+  coinRotation = side === 'tails' ? 180 : 0;
+  spinner.style.transform = `rotateY(${coinRotation}deg)`;
+}
+
+function spinCoinToResult(result) {
+  const spinner = getCoinSpinner();
+  if (!spinner) return;
+  const fullSpins = COIN_SPIN_ROTATIONS * 360;
+  const currentMod = ((coinRotation % 360) + 360) % 360;
+  const targetMod = result === 'tails' ? 180 : 0;
+  let extra = targetMod - currentMod;
+  if (extra <= 0) extra += 360;
+  coinRotation += fullSpins + extra;
+  spinner.style.transition = `transform ${COIN_SPIN_DURATION_MS}ms ease-out`;
+  spinner.style.transform = `rotateY(${coinRotation}deg)`;
+}
 
 async function doFlip() {
   if (isFlipping || flipsRemaining <= 0 || !selectedSide || !wallet) return;
@@ -572,15 +594,9 @@ async function doFlip() {
     totalWon += won;
   }
 
-  const coinImage = document.getElementById('coin-image');
-  if (coinImage) {
-    coinImage.src = getCoinImagePath(result);
-    coinImage.classList.add('coin-spinning');
-  }
+  spinCoinToResult(result);
 
   setTimeout(() => {
-    if (coinImage) coinImage.classList.remove('coin-spinning');
-
     const resultEl = document.getElementById('flip-result');
     const resultMsg = document.getElementById('flip-result-message');
     const resultAmount = document.getElementById('flip-result-amount');
@@ -799,8 +815,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const flipsEl = document.getElementById('number-of-flips');
   if (costEl) costEl.value = '100';
   if (flipsEl) flipsEl.value = '10';
-  const coinImage = document.getElementById('coin-image');
-  if (coinImage) coinImage.src = getCoinImagePath('heads');
+  setCoinIdle('heads');
   updateDisplay();
   updateButtonStates();
 });
