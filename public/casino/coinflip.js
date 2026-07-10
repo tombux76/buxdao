@@ -760,9 +760,9 @@ async function loadLeaderboard(sortBy) {
         listEl.innerHTML = data.leaderboard.map((player, index) => `
           <div class="leaderboard-item">
             <div class="leaderboard-rank">#${index + 1}</div>
-            <div class="leaderboard-wallet">${player.displayAddress}</div>
+            <div class="leaderboard-wallet">${player.displayAddress || player.displayName || 'Player'}</div>
             <div class="leaderboard-stats">
-              <div class="leaderboard-stat"><span class="stat-label">Flips:</span> <span class="stat-value">${(player.totalFlips || 0).toLocaleString()}</span></div>
+              <div class="leaderboard-stat"><span class="stat-label">Flips:</span> <span class="stat-value">${(player.totalFlips ?? player.totalPlays ?? 0).toLocaleString()}</span></div>
               <div class="leaderboard-stat"><span class="stat-label">Won:</span> <span class="stat-value">${(player.totalWon || 0).toFixed(2)} ${getTokenLabel()}</span></div>
             </div>
           </div>

@@ -973,11 +973,13 @@ async function performSpin() {
 
     for (let i = 1; i <= 3; i++) {
         const reel = document.getElementById(`reel-${i}`);
-        const strip = reel.querySelector('.reel-strip');
+        const strip = reel && reel.querySelector('.reel-strip');
         if (reel && strip) {
             const currentTransform = strip.style.transform;
             const currentY = currentTransform ? parseFloat(currentTransform.match(/-?\d+\.?\d*/)?.[0] || '0') : 0;
             strip.style.setProperty('--spin-start', `${currentY}px`);
+            strip.style.transition = 'none';
+            reel.classList.remove('stopping');
             reel.classList.add('spinning');
         }
     }
@@ -990,7 +992,6 @@ async function performSpin() {
         calculateWin(results, costPerSpin);
         isSpinning = false;
         loadGameStats();
-        loadLeaderboard('spins');
         updateDisplay();
         updateButtonStates();
         updateSpinButtonText();
@@ -1021,7 +1022,9 @@ function updateSpinButtonText() {
 // Stop Reel - position a specific symbol index from the reel strip in the center
 function stopReel(reelNum, targetPosition) {
     const reel = document.getElementById(`reel-${reelNum}`);
+    if (!reel) return;
     const strip = reel.querySelector('.reel-strip');
+    if (!strip) return;
     
     reel.classList.remove('spinning');
     reel.classList.add('stopping');
@@ -1613,18 +1616,20 @@ async function loadLeaderboard(sortBy = 'spins') {
             } else {
                 listEl.innerHTML = data.leaderboard.map((player, index) => {
                     const rank = index + 1;
-                    const winRate = player.winRate.toFixed(2);
-                    const totalWon = player.totalWon.toFixed(2);
-                    const totalWagered = player.totalWagered.toFixed(2);
+                    const winRate = (player.winRate || 0).toFixed(2);
+                    const totalWon = (player.totalWon || 0).toFixed(2);
+                    const totalWagered = (player.totalWagered || 0).toFixed(2);
+                    const totalSpins = player.totalSpins ?? player.totalPlays ?? 0;
+                    const displayName = player.displayAddress || player.displayName || 'Player';
                     
                     return `
                         <div class="leaderboard-item">
                             <div class="leaderboard-rank">#${rank}</div>
-                            <div class="leaderboard-wallet">${player.displayAddress}</div>
+                            <div class="leaderboard-wallet">${displayName}</div>
                             <div class="leaderboard-stats">
                                 <div class="leaderboard-stat">
                                     <span class="stat-label">Spins:</span>
-                                    <span class="stat-value">${player.totalSpins.toLocaleString()}</span>
+                                    <span class="stat-value">${totalSpins.toLocaleString()}</span>
                                 </div>
                                 <div class="leaderboard-stat">
                                     <span class="stat-label">Won:</span>

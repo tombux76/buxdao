@@ -11,7 +11,7 @@ function toBux(raw) {
   return Number(raw || 0) / 10 ** TOKEN_DECIMALS;
 }
 
-function formatEntry(row, index) {
+function formatEntry(row, index, gameType) {
   const wallet = row.wallet_address;
   const totalWagered = toBux(row.total_wagered);
   const totalWon = toBux(row.total_won);
@@ -20,10 +20,11 @@ function formatEntry(row, index) {
   const displayName =
     row.discord_username || `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
 
-  return {
+  const entry = {
     rank: index + 1,
     walletAddress: wallet,
     displayName,
+    displayAddress: displayName,
     discordUsername: row.discord_username || null,
     discordImage: row.discord_image || null,
     totalPlays,
@@ -31,6 +32,15 @@ function formatEntry(row, index) {
     totalWon,
     winRate,
   };
+
+  if (gameType === "slots" || gameType === "roulette" || gameType === "all") {
+    entry.totalSpins = totalPlays;
+  }
+  if (gameType === "coinflip" || gameType === "all") {
+    entry.totalFlips = totalPlays;
+  }
+
+  return entry;
 }
 
 function normalizeSort(sortBy) {
@@ -141,7 +151,7 @@ async function handler(req, res) {
         ? await queryAllGames(sql, sortBy, limit)
         : await querySingleGame(sql, gameType, sortBy, limit);
 
-    const leaderboard = (rows || []).map(formatEntry);
+    const leaderboard = (rows || []).map((row, index) => formatEntry(row, index, gameType));
 
     return json(res, 200, {
       leaderboard,
