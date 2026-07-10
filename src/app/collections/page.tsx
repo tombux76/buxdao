@@ -22,7 +22,7 @@ export default async function CollectionsPage() {
         title="5 main NFT families"
         description="Showcase powered by GraveMarket — buy and sell on their marketplace."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex flex-col gap-4">
         {collections.map((collection) => (
           <CollectionCard key={collection.id} collection={collection} />
         ))}
