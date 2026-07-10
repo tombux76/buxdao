@@ -11,11 +11,11 @@ type LiveProductStripProps = {
 function ProductTile({ product }: { product: LiveProduct }) {
   return (
     <div
-      className={`tile-border flex h-full w-full items-center gap-3 rounded-xl bg-bg-surface/80 px-4 py-3 ${
+      className={`glass-panel flex h-full w-full items-center gap-3 rounded-xl border border-border/70 bg-bg-surface/80 px-4 py-3 transition hover:border-border-strong ${
         product.status === "soon" ? "opacity-70" : ""
       }`}
     >
-      <div className="tile-border relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-bg-deep">
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/70 bg-bg-deep">
         {product.thumbnail ? (
           <Image
             src={product.thumbnail}

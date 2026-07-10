@@ -6,6 +6,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { Coins, Gift, Wallet } from "lucide-react";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
+import { Card } from "@/components/ui/Card";
 import { collectionConfigs } from "@/content/site";
 import { useHolderRewards } from "@/hooks/useHolderRewards";
 import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
@@ -120,63 +121,77 @@ export function RewardsDashboard() {
 
   if (!discordReady) {
     return (
-      <div className="tile-border rounded-xl bg-bg-deep/50 p-6 text-center">
+      <Card className="p-6 text-center">
         <p className="text-sm text-muted">Sign in with Discord on the Holder Hub to view daily rewards.</p>
         <a href="/hub" className="mt-4 inline-block text-sm text-accent-cyan hover:underline">
           Go to Holder Hub →
         </a>
-      </div>
+      </Card>
     );
   }
 
   if (loading) {
     return (
-      <div className="tile-border rounded-xl bg-bg-deep/50 p-6">
+      <Card className="p-6">
         <p className="text-sm text-muted">Loading rewards…</p>
-      </div>
+      </Card>
     );
   }
 
   if (error && !state) {
     return (
-      <div className="tile-border rounded-xl bg-bg-deep/50 p-6">
+      <Card className="p-6">
         <p className="text-sm text-muted">{error}</p>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-5">
-          <div className="mb-2 flex items-center gap-2 text-xs uppercase text-muted">
-            <Gift className="h-4 w-4 text-accent-gold" />
-            Unclaimed
+      <Card glow="gold" className="overflow-hidden p-0">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+          <div className="rounded-xl border border-border/70 bg-bg-surface/30 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-gold/15 text-accent-gold">
+                <Gift className="h-4 w-4" strokeWidth={2} />
+              </span>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted">Unclaimed</p>
+                <p className="mt-0.5 font-mono text-2xl font-semibold text-accent-gold">
+                  {formatBux(state?.unclaimedBalanceBux ?? 0)}{" "}
+                  <span className="text-base">$BUX</span>
+                </p>
+              </div>
+            </div>
           </div>
-          <p className="font-mono text-3xl text-accent-gold">
-            {formatBux(state?.unclaimedBalanceBux ?? 0)} <span className="text-lg">$BUX</span>
-          </p>
-        </div>
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-5">
-          <div className="mb-2 flex items-center gap-2 text-xs uppercase text-muted">
-            <Coins className="h-4 w-4 text-accent-cyan" />
-            Total claimed
+          <div className="rounded-xl border border-border/70 bg-bg-surface/30 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-cyan/15 text-accent-cyan">
+                <Coins className="h-4 w-4" strokeWidth={2} />
+              </span>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted">Total claimed</p>
+                <p className="mt-0.5 font-mono text-2xl font-semibold">
+                  {formatBux(state?.totalClaimedBux ?? 0)}{" "}
+                  <span className="text-base text-muted">$BUX</span>
+                </p>
+              </div>
+            </div>
           </div>
-          <p className="font-mono text-3xl">
-            {formatBux(state?.totalClaimedBux ?? 0)} <span className="text-lg text-muted">$BUX</span>
-          </p>
         </div>
-      </div>
+      </Card>
 
-      <div className="tile-border rounded-xl bg-bg-deep/50 p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Wallet className="h-4 w-4 text-accent-purple" />
-            Claim to connected wallet
+      <Card glow="purple" className="overflow-hidden p-0">
+        <div className="border-b border-border/50 bg-bg-deep/30 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Wallet className="h-4 w-4 text-accent-purple" />
+              Claim to connected wallet
+            </div>
+            <WalletConnectButton className="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-border-strong" />
           </div>
-          <WalletConnectButton className="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-border-strong" />
         </div>
-
+        <div className="p-5">
         {!connected && (
           <p className="text-sm text-muted">Connect a wallet linked in your Hub to claim rewards.</p>
         )}
@@ -212,10 +227,14 @@ export function RewardsDashboard() {
         >
           {claiming ? "Claiming…" : "Claim $BUX"}
         </button>
-      </div>
+        </div>
+      </Card>
 
-      <div className="tile-border rounded-xl bg-bg-deep/50 p-5">
-        <h3 className="mb-3 text-sm font-semibold">Daily yields (wallet-held NFTs)</h3>
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-border/50 bg-bg-deep/30 px-5 py-4">
+          <h3 className="text-sm font-semibold">Daily yields (wallet-held NFTs)</h3>
+        </div>
+        <div className="p-5">
         <ul className="space-y-1 text-sm text-muted">
           {collectionConfigs.map((c) => (
             <li key={c.id}>
@@ -228,11 +247,15 @@ export function RewardsDashboard() {
           (30-day steps, resets on marketplace listing). GraveStake staked NFTs do not count — only
           wallet-held NFTs in Hub-linked wallets accrue.
         </p>
-      </div>
+        </div>
+      </Card>
 
       {state && state.recentAccruals.length > 0 && (
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-5">
-          <h3 className="mb-3 text-sm font-semibold">Recent accruals</h3>
+        <Card className="overflow-hidden p-0">
+          <div className="border-b border-border/50 bg-bg-deep/30 px-5 py-4">
+            <h3 className="text-sm font-semibold">Recent accruals</h3>
+          </div>
+          <div className="p-5">
           <ul className="space-y-2 text-sm">
             {state.recentAccruals.map((row) => (
               <li key={row.rewardDateEt} className="flex justify-between text-muted">
@@ -243,7 +266,8 @@ export function RewardsDashboard() {
               </li>
             ))}
           </ul>
-        </div>
+          </div>
+        </Card>
       )}
     </div>
   );

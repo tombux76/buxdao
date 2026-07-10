@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { DiscordLoginButton } from "@/components/hub/ProfileConnectActions";
 import { HubCashoutHeader, HubCashoutRules } from "@/components/hub/HubCashoutRules";
+import { Card } from "@/components/ui/Card";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
 import { cashoutContent, tokenConfig } from "@/content/site";
@@ -134,12 +135,12 @@ function StatTile({
 
 function CashoutShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="tile-border overflow-hidden rounded-2xl bg-bg-deep/50">
+    <Card glow="gold" className="overflow-hidden p-0">
       <div className="border-b border-border/50 bg-gradient-to-r from-accent-gold/5 via-transparent to-accent-purple/5 px-4 py-5 sm:px-6">
         <HubCashoutHeader />
       </div>
       <div className="space-y-5 p-4 sm:p-6">{children}</div>
-    </div>
+    </Card>
   );
 }
 

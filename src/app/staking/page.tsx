@@ -30,7 +30,11 @@ export default function StakingPage() {
       </Card>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {collections.map((collection) => (
-          <Card key={collection.id} className="p-5">
+          <Card
+            key={collection.id}
+            glow={collection.stakeLive ? "cyan" : "none"}
+            className="p-5"
+          >
             <div className="mb-4 flex items-center gap-3">
               <div className="tile-border relative h-14 w-14 overflow-hidden rounded-xl">
                 <Image

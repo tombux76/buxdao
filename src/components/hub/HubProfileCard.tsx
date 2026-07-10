@@ -2,6 +2,7 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { DisconnectButton } from "@/components/hub/ProfileConnectActions";
+import { Card } from "@/components/ui/Card";
 import { useHubProfiles } from "@/hooks/useHubProfiles";
 
 export function HubProfileCard() {
@@ -11,12 +12,12 @@ export function HubProfileCard() {
 
   if (!isAuthenticated) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-bg-deep/30 p-4">
+      <Card className="border border-dashed border-border p-4">
         <p className="text-sm text-muted">
           Your profile appears here after Discord login. Holdings, roles, claim balance, and cashout
           unlock as you connect and verify.
         </p>
-      </div>
+      </Card>
     );
   }
 
@@ -24,7 +25,8 @@ export function HubProfileCard() {
   const displayImage = discordProfile?.image;
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-[#5865F2]/30 bg-[#5865F2]/5 p-4">
+    <Card className="overflow-hidden p-0">
+      <div className="flex items-center gap-4 border border-[#5865F2]/30 bg-[#5865F2]/5 p-4">
       {displayImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -45,6 +47,7 @@ export function HubProfileCard() {
         title="Disconnect Discord"
         onClick={() => signOut({ callbackUrl: "/hub" })}
       />
-    </div>
+      </div>
+    </Card>
   );
 }

@@ -6,6 +6,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { DiscordLoginButton } from "@/components/hub/ProfileConnectActions";
+import { Card } from "@/components/ui/Card";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
 import { discordEngagement } from "@/content/site";
@@ -286,36 +287,38 @@ export function HubClaimSection() {
 
   if (!isAuthenticated) {
     return (
-      <div className="tile-border space-y-4 rounded-xl bg-bg-deep/50 p-4 sm:p-5">
-        <div>
-          <p className="text-xs uppercase text-muted">Claim rewards</p>
+      <Card glow="cyan" className="overflow-hidden p-0">
+        <div className="border-b border-border/50 bg-bg-deep/30 px-4 py-4 sm:px-5">
+          <p className="text-xs uppercase tracking-wide text-muted">Claim rewards</p>
           <p className="mt-1 text-sm text-muted">{discordEngagement.intro}</p>
         </div>
-        <div className="rounded-xl border border-border/80 bg-bg-deep/30 p-4 text-sm text-muted">
-          <p className="font-medium text-foreground">{discordEngagement.eligibility.title}</p>
-          <ul className="mt-2 space-y-1.5">
-            {discordEngagement.eligibility.items.map((item) => (
-              <li key={item} className="flex gap-2">
-                <span className="text-accent-purple">•</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="rounded-xl border border-border/80 bg-bg-deep/30 p-4 text-sm text-muted">
+            <p className="font-medium text-foreground">{discordEngagement.eligibility.title}</p>
+            <ul className="mt-2 space-y-1.5">
+              {discordEngagement.eligibility.items.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span className="text-accent-purple">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <DiscordLoginButton fullWidth />
         </div>
-        <DiscordLoginButton fullWidth />
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="tile-border space-y-4 rounded-xl bg-bg-deep/50 p-4 sm:p-5">
-      <div>
-        <p className="text-xs uppercase text-muted">Claim rewards</p>
+    <Card glow="cyan" className="overflow-hidden p-0">
+      <div className="border-b border-border/50 bg-bg-deep/30 px-4 py-4 sm:px-5">
+        <p className="text-xs uppercase tracking-wide text-muted">Claim rewards</p>
         <p className="mt-1 text-sm text-muted">
           Separate from GraveStake staking. Earn via Discord engagement; admins can grant bonus credits.
         </p>
       </div>
-
+      <div className="space-y-4 p-4 sm:p-5">
       {loading && <p className="text-sm text-muted">Loading claim balance…</p>}
       {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -514,6 +517,7 @@ export function HubClaimSection() {
           )}
         </>
       )}
-    </div>
+      </div>
+    </Card>
   );
 }

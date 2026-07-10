@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { Coins, TrendingUp } from "lucide-react";
 import { DiscordRolesDisplay } from "@/components/hub/DiscordRolesDisplay";
 import { HubCashoutSection } from "@/components/hub/HubCashoutSection";
+import { Card } from "@/components/ui/Card";
 import { useHubRoles } from "@/hooks/useHubRoles";
 import { useLinkedWallets } from "@/hooks/useLinkedWallets";
 import { collectionConfigs } from "@/content/site";
@@ -45,7 +47,7 @@ function NftGrid({ nfts }: { nfts: HubNft[] }) {
         {visible.map((nft) => (
           <div
             key={nft.mint}
-            className="tile-border overflow-hidden rounded-xl bg-bg-deep/50"
+            className="overflow-hidden rounded-xl border border-border/70 bg-bg-surface/30"
           >
             <div className="relative aspect-square bg-bg-surface">
               {nft.image ? (
@@ -203,20 +205,34 @@ export function HubDashboard() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-4 sm:col-span-2">
+        <Card className="p-4 sm:col-span-2">
           <DiscordRolesDisplay roles={roles} loading={rolesLoading} error={rolesError} />
+        </Card>
+        <div className="rounded-xl border border-border/70 bg-bg-surface/30 p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-gold/15 text-accent-gold">
+              <Coins className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted">$BUX balance</p>
+              <p className="mt-0.5 font-mono text-lg font-semibold text-accent-gold">
+                {data ? formatBux(data.buxBalance) : "—"}
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
-          <p className="text-xs uppercase text-muted">$BUX balance</p>
-          <p className="mt-1 font-mono text-accent-gold">
-            {data ? formatBux(data.buxBalance) : "—"}
-          </p>
-        </div>
-        <div className="tile-border rounded-xl bg-bg-deep/50 p-4">
-          <p className="text-xs uppercase text-muted">Cashout value</p>
-          <p className="mt-1 font-mono text-accent-gold">
-            {data ? `${formatSol(data.cashoutSol)} SOL` : "—"}
-          </p>
+        <div className="rounded-xl border border-border/70 bg-bg-surface/30 p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-cyan/15 text-accent-cyan">
+              <TrendingUp className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted">Cashout value</p>
+              <p className="mt-0.5 font-mono text-lg font-semibold text-accent-gold">
+                {data ? `${formatSol(data.cashoutSol)} SOL` : "—"}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

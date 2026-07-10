@@ -320,7 +320,7 @@ export function MerchStore() {
               key={product.id}
               type="button"
               onClick={() => setSelectedProduct(product)}
-              className="tile-border overflow-hidden rounded-2xl bg-bg-surface text-left transition hover:ring-1 hover:ring-accent-gold/30"
+              className="glass-panel overflow-hidden rounded-2xl border border-border/70 bg-bg-surface text-left transition hover:border-accent-gold/30 hover:ring-1 hover:ring-accent-gold/20"
             >
               <div className="relative aspect-square bg-bg-deep">
                 <Image
