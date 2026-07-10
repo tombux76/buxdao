@@ -863,9 +863,6 @@
                 return sig;
             });
         }).then(function (sig) {
-            costPerChip = cost;
-            updateChipUI();
-            updateRouletteButtonStates();
             return fetch('/api/save-game', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -886,7 +883,9 @@
             if (result.saveData && typeof result.saveData.chipsBalance === 'number') {
                 chipBalance = result.saveData.chipsBalance;
             }
+            costPerChip = cost;
             updateBalance();
+            updateChipUI();
             updatePopups();
             updateRouletteButtonStates();
             var costPromise = window.CasinoFees && window.CasinoFees.formatBuxWithUsd
