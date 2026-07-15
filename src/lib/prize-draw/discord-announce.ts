@@ -67,7 +67,11 @@ export async function postPrizeDrawAnnouncement(params: {
       Authorization: `Bot ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ embeds: [embed] }),
+    body: JSON.stringify({
+      content: "@everyone",
+      embeds: [embed],
+      allowed_mentions: { parse: ["everyone"] },
+    }),
     cache: "no-store",
   });
 
