@@ -3,7 +3,7 @@ const HELIUS_API = "https://api.helius.xyz";
 
 let roundRobinIndex = 0;
 
-/** All configured Helius keys (primary, secondary, optional comma-separated extras). */
+/** Collect configured Helius keys (1–3 numbered envs, optional comma-separated extras). */
 export function getHeliusApiKeys(): string[] {
   const keys: string[] = [];
   const add = (value: string | undefined) => {
@@ -15,6 +15,7 @@ export function getHeliusApiKeys(): string[] {
 
   add(process.env.HELIUS_API_KEY);
   add(process.env.HELIUS_API_KEY_2);
+  add(process.env.HELIUS_API_KEY_3);
 
   const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
   for (const entry of extras) {
@@ -24,12 +25,30 @@ export function getHeliusApiKeys(): string[] {
   return keys;
 }
 
+/**
+ * Rotate key order once per calendar month so a different key is preferred first,
+ * then keep round-robin / failover across the full set for the rest of the month.
+ */
+export function getOrderedHeliusApiKeys(): string[] {
+  const keys = getHeliusApiKeys();
+  if (keys.length <= 1) {
+    return keys;
+  }
+
+  const monthOffset = new Date().getUTCMonth() % keys.length;
+  if (monthOffset === 0) {
+    return keys;
+  }
+
+  return [...keys.slice(monthOffset), ...keys.slice(0, monthOffset)];
+}
+
 export function hasHeliusApiKey(): boolean {
   return getHeliusApiKeys().length > 0;
 }
 
 export function getHeliusRpcUrl(apiKey?: string): string {
-  const key = apiKey ?? getHeliusApiKeys()[0];
+  const key = apiKey ?? getOrderedHeliusApiKeys()[0];
   if (!key) {
     throw new Error("HELIUS_API_KEY is not configured");
   }
@@ -37,7 +56,7 @@ export function getHeliusRpcUrl(apiKey?: string): string {
 }
 
 export function getHeliusRpcUrlCandidates(): string[] {
-  return getHeliusApiKeys().map((key) => getHeliusRpcUrl(key));
+  return getOrderedHeliusApiKeys().map((key) => getHeliusRpcUrl(key));
 }
 
 export type HeliusRpcOptions = {
@@ -60,6 +79,7 @@ function shouldFailoverMessage(message: string): boolean {
     lower.includes("quota") ||
     lower.includes("credit") ||
     lower.includes("exceeded") ||
+    lower.includes("max usage") ||
     lower.includes("too many requests")
   );
 }
@@ -138,13 +158,13 @@ class HeliusRpcError extends Error {
   }
 }
 
-/** JSON-RPC against mainnet.helius-rpc.com with round-robin keys and failover on quota/rate limits. */
+/** JSON-RPC against mainnet.helius-rpc.com with monthly key preference, round-robin, and failover. */
 export async function heliusRpc<T>(
   method: string,
   params: unknown,
   options: HeliusRpcOptions = {},
 ): Promise<T | null> {
-  const keys = getHeliusApiKeys();
+  const keys = getOrderedHeliusApiKeys();
   if (keys.length === 0) {
     if (options.softFail) {
       return null;
@@ -192,7 +212,7 @@ export async function heliusRestFetch(
   init: RequestInit = {},
   options: HeliusRestFetchOptions = {},
 ): Promise<Response> {
-  const keys = getHeliusApiKeys();
+  const keys = getOrderedHeliusApiKeys();
   if (keys.length === 0) {
     if (options.softFail) {
       return new Response(null, { status: 503 });

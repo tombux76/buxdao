@@ -35,16 +35,32 @@ function getRpcCandidates() {
   add(process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
   add(process.env.SLOTS_RPC_URL);
 
-  if (process.env.HELIUS_API_KEY) {
-    add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY)}`);
-  }
-  if (process.env.HELIUS_API_KEY_2) {
-    add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(process.env.HELIUS_API_KEY_2)}`);
-  }
+  const heliusKeys = [];
+  const addKey = (value) => {
+    const trimmed = value?.trim();
+    if (trimmed && !heliusKeys.includes(trimmed)) {
+      heliusKeys.push(trimmed);
+    }
+  };
+  addKey(process.env.HELIUS_API_KEY);
+  addKey(process.env.HELIUS_API_KEY_2);
+  addKey(process.env.HELIUS_API_KEY_3);
 
   const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
   for (const entry of extras) {
-    add(entry);
+    addKey(entry);
+  }
+
+  // Prefer a different Helius key each calendar month, then fall through the rest.
+  if (heliusKeys.length > 0) {
+    const monthOffset = new Date().getUTCMonth() % heliusKeys.length;
+    const ordered =
+      monthOffset === 0
+        ? heliusKeys
+        : [...heliusKeys.slice(monthOffset), ...heliusKeys.slice(0, monthOffset)];
+    for (const key of ordered) {
+      add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`);
+    }
   }
 
   add("https://api.mainnet-beta.solana.com");
