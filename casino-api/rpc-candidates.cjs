@@ -43,8 +43,9 @@ function getRpcCandidates() {
     }
   };
   addKey(process.env.HELIUS_API_KEY);
-  addKey(process.env.HELIUS_API_KEY_2);
-  addKey(process.env.HELIUS_API_KEY_3);
+  for (let i = 2; i <= 10; i += 1) {
+    addKey(process.env[`HELIUS_API_KEY_${i}`]);
+  }
 
   const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
   for (const entry of extras) {

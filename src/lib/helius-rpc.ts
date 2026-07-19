@@ -3,7 +3,7 @@ const HELIUS_API = "https://api.helius.xyz";
 
 let roundRobinIndex = 0;
 
-/** Collect configured Helius keys (1–3 numbered envs, optional comma-separated extras). */
+/** Collect configured Helius keys (primary + numbered HELIUS_API_KEY_2…_10, optional extras). */
 export function getHeliusApiKeys(): string[] {
   const keys: string[] = [];
   const add = (value: string | undefined) => {
@@ -14,8 +14,9 @@ export function getHeliusApiKeys(): string[] {
   };
 
   add(process.env.HELIUS_API_KEY);
-  add(process.env.HELIUS_API_KEY_2);
-  add(process.env.HELIUS_API_KEY_3);
+  for (let i = 2; i <= 10; i += 1) {
+    add(process.env[`HELIUS_API_KEY_${i}`]);
+  }
 
   const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
   for (const entry of extras) {
