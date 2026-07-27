@@ -191,18 +191,40 @@ export function PrizeDrawPage() {
 
       setDrawStep("confirming");
 
-      const confirmRes = await fetch("/api/empire-draw/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress, txSignature: signature }),
-      });
-      const confirm = (await confirmRes.json()) as {
+      let confirm: {
         error?: string;
         winner?: { discordUsername: string };
         txSignature?: string;
-      };
-      if (!confirmRes.ok) {
-        throw new Error(confirm.error ?? "Failed to confirm draw");
+      } | null = null;
+      let lastConfirmError = "Failed to confirm draw";
+
+      // Tokens already left the prize wallet — retry confirm so RPC/Neon flakes
+      // don't leave a paid draw without a DB record or Discord post.
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+        }
+        const confirmRes = await fetch("/api/empire-draw/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress, txSignature: signature }),
+        });
+        confirm = (await confirmRes.json()) as {
+          error?: string;
+          winner?: { discordUsername: string };
+          txSignature?: string;
+        };
+        if (confirmRes.ok) {
+          break;
+        }
+        lastConfirmError = confirm.error ?? "Failed to confirm draw";
+        confirm = null;
+      }
+
+      if (!confirm) {
+        throw new Error(
+          `${lastConfirmError} (tx ${signature.slice(0, 8)}… already sent — do not re-run the draw)`,
+        );
       }
 
       setRunResult(

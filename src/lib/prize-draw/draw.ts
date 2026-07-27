@@ -133,12 +133,30 @@ export async function confirmPrizeDraw(params: {
 
   const pool = getPool();
 
-  const existing = await pool.query<{ id: number }>(
-    `SELECT id FROM prize_draws WHERE tx_signature = $1`,
+  const existing = await pool.query<{
+    id: number;
+    winner_discord_username: string | null;
+    payout_wallet: string;
+    prize_usd_value: string | null;
+    eligible_pool_size: number;
+  }>(
+    `SELECT id, winner_discord_username, payout_wallet, prize_usd_value, eligible_pool_size
+     FROM prize_draws WHERE tx_signature = $1`,
     [params.txSignature],
   );
   if (existing.rows[0]) {
-    throw new Error("This transaction was already recorded as a draw");
+    const row = existing.rows[0];
+    return {
+      drawId: row.id,
+      txSignature: params.txSignature,
+      prizeAmount: PRIZE_EMPIRE_AMOUNT,
+      prizeUsdValue: row.prize_usd_value != null ? Number(row.prize_usd_value) : null,
+      eligiblePoolSize: row.eligible_pool_size,
+      winner: {
+        discordUsername: row.winner_discord_username ?? row.payout_wallet,
+        payoutWallet: row.payout_wallet,
+      },
+    };
   }
 
   const pendingResult = await pool.query<PendingRow>(

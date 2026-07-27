@@ -115,14 +115,23 @@ export async function getParsedTransactionWhenReady(
   const maxWaitMs = options?.maxWaitMs ?? 60_000;
   const pollMs = options?.pollMs ?? 2_000;
   const commitments: Finality[] = ["confirmed", "finalized"];
-  const candidates = getServerRpcUrlCandidates();
+  // Prefer public mainnet early — paid RPCs (Helius/QuikNode) often 429/timeout and
+  // burn the Vercel budget before we ever see the tx.
+  const candidates = [
+    "https://api.mainnet-beta.solana.com",
+    ...getServerRpcUrlCandidates().filter((url) => !url.includes("api.mainnet-beta.solana.com")),
+  ];
   const deadline = Date.now() + maxWaitMs;
   let lastError: Error | null = null;
+  const fetchTimeoutMs = 4_000;
 
   while (Date.now() < deadline) {
     for (const url of candidates) {
       try {
-        const connection = createConnection(url);
+        const connection = new Connection(url, {
+          commitment: "confirmed",
+          fetch: createFastFetch(fetchTimeoutMs),
+        });
         for (const commitment of commitments) {
           const tx = await connection.getParsedTransaction(signature, {
             maxSupportedTransactionVersion: 0,
