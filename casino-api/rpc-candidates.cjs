@@ -52,13 +52,19 @@ function getRpcCandidates() {
     addKey(entry);
   }
 
-  // Prefer a different Helius key each calendar month, then fall through the rest.
+  // Prefer primary HELIUS_API_KEY first; rotate only among numbered/extra backups monthly.
   if (heliusKeys.length > 0) {
-    const monthOffset = new Date().getUTCMonth() % heliusKeys.length;
-    const ordered =
-      monthOffset === 0
-        ? heliusKeys
-        : [...heliusKeys.slice(monthOffset), ...heliusKeys.slice(0, monthOffset)];
+    const primary = heliusKeys[0];
+    const rest = heliusKeys.slice(1);
+    let ordered = heliusKeys;
+    if (rest.length > 1) {
+      const monthOffset = new Date().getUTCMonth() % rest.length;
+      const orderedRest =
+        monthOffset === 0
+          ? rest
+          : [...rest.slice(monthOffset), ...rest.slice(0, monthOffset)];
+      ordered = [primary, ...orderedRest];
+    }
     for (const key of ordered) {
       add(`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(key)}`);
     }
