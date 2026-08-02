@@ -3,6 +3,8 @@ const HELIUS_API = "https://api.helius.xyz";
 
 const BLACKLIST_TTL_MS = 10 * 60 * 1000;
 
+let roundRobinIndex = 0;
+
 /** Keys that recently hit quota / auth errors — skipped until TTL expires. */
 const keyBlacklist = new Map<string, number>();
 
@@ -20,6 +22,26 @@ function isKeyBlacklisted(apiKey: string): boolean {
 
 function blacklistKey(apiKey: string): void {
   keyBlacklist.set(apiKey, Date.now() + BLACKLIST_TTL_MS);
+}
+
+/** Mark a key (or Helius RPC URL containing api-key=) as exhausted for the blacklist TTL. */
+export function markHeliusKeyExhausted(apiKeyOrUrl: string): void {
+  const trimmed = apiKeyOrUrl.trim();
+  if (!trimmed) {
+    return;
+  }
+  try {
+    if (trimmed.includes("api-key=")) {
+      const key = new URL(trimmed).searchParams.get("api-key");
+      if (key) {
+        blacklistKey(key);
+      }
+      return;
+    }
+  } catch {
+    // fall through — treat as raw key
+  }
+  blacklistKey(trimmed);
 }
 
 /** Collect configured Helius keys (primary + numbered HELIUS_API_KEY_2…_10, optional extras). */
@@ -46,8 +68,8 @@ export function getHeliusApiKeys(): string[] {
 }
 
 /**
- * Prefer the primary HELIUS_API_KEY first (the one operators rotate when capped),
- * then rotate only among numbered/extra keys by calendar month.
+ * Rotate key order once per calendar month so a different key is preferred first,
+ * then keep round-robin / failover across the full set for the rest of the month.
  */
 export function getOrderedHeliusApiKeys(): string[] {
   const keys = getHeliusApiKeys();
@@ -55,20 +77,18 @@ export function getOrderedHeliusApiKeys(): string[] {
     return keys;
   }
 
-  const primary = keys[0]!;
-  const rest = keys.slice(1);
-  if (rest.length <= 1) {
+  const monthOffset = new Date().getUTCMonth() % keys.length;
+  if (monthOffset === 0) {
     return keys;
   }
 
-  const monthOffset = new Date().getUTCMonth() % rest.length;
-  const orderedRest =
-    monthOffset === 0 ? rest : [...rest.slice(monthOffset), ...rest.slice(0, monthOffset)];
-
-  return [primary, ...orderedRest];
+  return [...keys.slice(monthOffset), ...keys.slice(0, monthOffset)];
 }
 
-/** Ordered keys with recently-exhausted ones pushed to the end. */
+/**
+ * Monthly-preferred order with recently-exhausted keys pushed to the end so
+ * rotation still works while quota-capped keys are skipped quickly.
+ */
 function getUsableHeliusApiKeys(): string[] {
   const ordered = getOrderedHeliusApiKeys();
   const ready: string[] = [];
@@ -89,7 +109,7 @@ export function hasHeliusApiKey(): boolean {
 }
 
 export function getHeliusRpcUrl(apiKey?: string): string {
-  const key = apiKey ?? getOrderedHeliusApiKeys()[0];
+  const key = apiKey ?? getUsableHeliusApiKeys()[0];
   if (!key) {
     throw new Error("HELIUS_API_KEY is not configured");
   }
@@ -123,6 +143,15 @@ function shouldFailoverMessage(message: string): boolean {
     lower.includes("max usage") ||
     lower.includes("too many requests")
   );
+}
+
+function nextKeyStartIndex(keyCount: number): number {
+  if (keyCount <= 1) {
+    return 0;
+  }
+  const start = roundRobinIndex % keyCount;
+  roundRobinIndex += 1;
+  return start;
 }
 
 async function heliusRpcWithKey<T>(
@@ -192,7 +221,7 @@ class HeliusRpcError extends Error {
   }
 }
 
-/** JSON-RPC against mainnet.helius-rpc.com with primary-first order, round-robin backups, and failover. */
+/** JSON-RPC against mainnet.helius-rpc.com with monthly key preference, round-robin, and failover. */
 export async function heliusRpc<T>(
   method: string,
   params: unknown,
@@ -206,7 +235,9 @@ export async function heliusRpc<T>(
     throw new Error("HELIUS_API_KEY is not configured");
   }
 
-  const start = 0;
+  // Round-robin within non-blacklisted keys; blacklisted stay at the end as last resort.
+  const readyCount = keys.filter((key) => !isKeyBlacklisted(key)).length || keys.length;
+  const start = nextKeyStartIndex(readyCount);
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < keys.length; attempt += 1) {
@@ -255,10 +286,12 @@ export async function heliusRestFetch(
   }
 
   const base = (options.baseUrl ?? HELIUS_API).replace(/\/+$/, "");
+  const readyCount = keys.filter((key) => !isKeyBlacklisted(key)).length || keys.length;
+  const start = nextKeyStartIndex(readyCount);
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < keys.length; attempt += 1) {
-    const apiKey = keys[attempt]!;
+    const apiKey = keys[(start + attempt) % keys.length]!;
     const url = new URL(`${base}${path.startsWith("/") ? path : `/${path}`}`);
     url.searchParams.set("api-key", apiKey);
     for (const [key, value] of Object.entries(options.searchParams ?? {})) {

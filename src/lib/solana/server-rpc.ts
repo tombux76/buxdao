@@ -4,6 +4,7 @@ import {
   type Finality,
   type ParsedTransactionWithMeta,
 } from "@solana/web3.js";
+import { markHeliusKeyExhausted } from "@/lib/helius-rpc";
 import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const RPC_TIMEOUT_MS = 8_000;
@@ -13,6 +14,30 @@ function rpcHost(url: string): string {
     return new URL(url).host;
   } catch {
     return "unknown";
+  }
+}
+
+function shouldMarkHeliusExhausted(url: string, message: string): boolean {
+  if (!url.includes("helius-rpc.com")) {
+    return false;
+  }
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("429") ||
+    lower.includes("401") ||
+    lower.includes("402") ||
+    lower.includes("403") ||
+    lower.includes("rate limit") ||
+    lower.includes("max usage") ||
+    lower.includes("quota") ||
+    lower.includes("too many requests")
+  );
+}
+
+function noteRpcFailure(url: string, error: Error): void {
+  console.error("[server-rpc]", rpcHost(url), error.message);
+  if (shouldMarkHeliusExhausted(url, error.message)) {
+    markHeliusKeyExhausted(url);
   }
 }
 
@@ -49,7 +74,7 @@ export async function withServerConnection<T>(
       return await fn(connection);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.error("[server-rpc]", rpcHost(url), lastError.message);
+      noteRpcFailure(url, lastError);
     }
   }
 
@@ -96,7 +121,7 @@ export async function getWalletBalanceSol(wallet: string): Promise<number> {
       return lamports / LAMPORTS_PER_SOL;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.error("[server-rpc] getBalance", rpcHost(url), lastError.message);
+      noteRpcFailure(url, lastError);
     }
   }
 
@@ -150,7 +175,7 @@ export async function getParsedTransactionWhenReady(
         if (lastError.message === "Transaction failed on-chain") {
           throw lastError;
         }
-        console.error("[server-rpc] getParsedTransaction", rpcHost(url), lastError.message);
+        noteRpcFailure(url, lastError);
       }
     }
 
