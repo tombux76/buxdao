@@ -10,10 +10,27 @@ export type BuxTokenAccountSlice = {
   amount: number;
 };
 
-function decodeOwnerAndAmount(dataBase64: string): { owner: string; amount: number } | null {
+function accountDataToBuffer(raw: unknown): Buffer | null {
+  if (Buffer.isBuffer(raw)) {
+    return raw;
+  }
+  if (raw instanceof Uint8Array) {
+    return Buffer.from(raw);
+  }
+  if (Array.isArray(raw) && typeof raw[0] === "string") {
+    return Buffer.from(raw[0], "base64");
+  }
+  if (typeof raw === "string") {
+    return Buffer.from(raw, "base64");
+  }
+  return null;
+}
+
+function decodeOwnerAndAmount(raw: unknown): { owner: string; amount: number } | null {
   try {
-    const buf = Buffer.from(dataBase64, "base64");
-    if (buf.length < 40) {
+    const buf = accountDataToBuffer(raw);
+    // dataSlice returns owner(32) + amount(8) = 40 bytes
+    if (!buf || buf.length < 40) {
       return null;
     }
     const owner = new PublicKey(buf.subarray(0, 32)).toBase58();
@@ -25,7 +42,7 @@ function decodeOwnerAndAmount(dataBase64: string): { owner: string; amount: numb
 }
 
 /**
- * All non-zero $BUX token accounts via standard JSON-RPC (QuikNode → public → Helius).
+ * All non-zero $BUX token accounts via standard JSON-RPC (public → QuikNode → Helius).
  * Does not depend on Helius DAS credits.
  */
 export async function fetchAllBuxTokenAccountsViaRpc(): Promise<BuxTokenAccountSlice[]> {
@@ -47,12 +64,7 @@ export async function fetchAllBuxTokenAccountsViaRpc(): Promise<BuxTokenAccountS
 
   const accounts: BuxTokenAccountSlice[] = [];
   for (const item of result) {
-    const raw = item.account.data;
-    const dataBase64 = Array.isArray(raw) ? raw[0] : typeof raw === "string" ? raw : null;
-    if (!dataBase64) {
-      continue;
-    }
-    const decoded = decodeOwnerAndAmount(dataBase64);
+    const decoded = decodeOwnerAndAmount(item.account.data);
     if (!decoded || decoded.amount === 0) {
       continue;
     }
@@ -70,15 +82,18 @@ export async function fetchWalletBuxBalanceViaRpc(wallet: string): Promise<numbe
   const mint = new PublicKey(tokenConfig.mint);
   const owner = new PublicKey(wallet);
 
-  return withServerConnection(async (connection) => {
-    const response = await connection.getParsedTokenAccountsByOwner(owner, { mint });
-    let total = 0;
-    for (const { account } of response.value) {
-      const amount = account.data.parsed?.info?.tokenAmount?.uiAmount;
-      if (typeof amount === "number") {
-        total += amount;
+  return withServerConnection(
+    async (connection) => {
+      const response = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+      let total = 0;
+      for (const { account } of response.value) {
+        const amount = account.data.parsed?.info?.tokenAmount?.uiAmount;
+        if (typeof amount === "number") {
+          total += amount;
+        }
       }
-    }
-    return total;
-  });
+      return total;
+    },
+    { timeoutMs: 20_000 },
+  );
 }

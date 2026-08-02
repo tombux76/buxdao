@@ -8,7 +8,6 @@ import { markHeliusKeyExhausted } from "@/lib/helius-rpc";
 import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const RPC_TIMEOUT_MS = 8_000;
-const HEAVY_RPC_TIMEOUT_MS = 30_000;
 
 function rpcHost(url: string): string {
   try {
