@@ -8,6 +8,7 @@ import { markHeliusKeyExhausted } from "@/lib/helius-rpc";
 import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const RPC_TIMEOUT_MS = 8_000;
+const HEAVY_RPC_TIMEOUT_MS = 30_000;
 
 function rpcHost(url: string): string {
   try {
@@ -55,22 +56,24 @@ function createFastFetch(timeoutMs: number): typeof fetch {
   };
 }
 
-function createConnection(url: string): Connection {
+function createConnection(url: string, timeoutMs = RPC_TIMEOUT_MS): Connection {
   return new Connection(url, {
     commitment: "confirmed",
-    fetch: createFastFetch(RPC_TIMEOUT_MS),
+    fetch: createFastFetch(timeoutMs),
   });
 }
 
 export async function withServerConnection<T>(
   fn: (connection: Connection) => Promise<T>,
+  options?: { timeoutMs?: number },
 ): Promise<T> {
+  const timeoutMs = options?.timeoutMs ?? RPC_TIMEOUT_MS;
   const candidates = getServerRpcUrlCandidates();
   let lastError: Error | null = null;
 
   for (const url of candidates) {
     try {
-      const connection = createConnection(url);
+      const connection = createConnection(url, timeoutMs);
       return await fn(connection);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));

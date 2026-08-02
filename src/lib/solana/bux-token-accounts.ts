@@ -31,16 +31,18 @@ function decodeOwnerAndAmount(dataBase64: string): { owner: string; amount: numb
 export async function fetchAllBuxTokenAccountsViaRpc(): Promise<BuxTokenAccountSlice[]> {
   const mint = tokenConfig.mint;
 
-  const result = await withServerConnection((connection) =>
-    connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
-      encoding: "base64",
-      commitment: "confirmed",
-      filters: [
-        { dataSize: 165 },
-        { memcmp: { offset: 0, bytes: mint } },
-      ],
-      dataSlice: { offset: 32, length: 40 },
-    }),
+  const result = await withServerConnection(
+    (connection) =>
+      connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
+        encoding: "base64",
+        commitment: "confirmed",
+        filters: [
+          { dataSize: 165 },
+          { memcmp: { offset: 0, bytes: mint } },
+        ],
+        dataSlice: { offset: 32, length: 40 },
+      }),
+    { timeoutMs: 30_000 },
   );
 
   const accounts: BuxTokenAccountSlice[] = [];
