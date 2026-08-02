@@ -97,7 +97,11 @@ export async function GET() {
       walletCount: wallets.length,
     };
 
-    holdingsCache.set(userId, { key: cacheKey, expires: Date.now() + CACHE_TTL_MS, payload });
+    const nftCount = Object.values(collections).reduce((sum, list) => sum + list.length, 0);
+    // Don't cache empty NFT results — Helius soft-fails must not stick for a minute.
+    if (nftCount > 0 || buxBalance > 0) {
+      holdingsCache.set(userId, { key: cacheKey, expires: Date.now() + CACHE_TTL_MS, payload });
+    }
 
     return NextResponse.json(payload);
   } catch {

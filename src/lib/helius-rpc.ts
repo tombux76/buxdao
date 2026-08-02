@@ -178,10 +178,21 @@ async function heliusRpcWithKey<T>(
 
   try {
     const response = await fetch(getHeliusRpcUrl(apiKey), fetchInit);
-    const payload = (await response.json()) as {
+    let payload: {
       result?: T;
       error?: { message?: string; code?: number };
-    };
+    } = {};
+    try {
+      payload = (await response.json()) as typeof payload;
+    } catch {
+      if (!response.ok || shouldFailoverHttp(response.status)) {
+        blacklistKey(apiKey);
+        const error = new HeliusRpcError(`Helius RPC failed (${response.status})`, response.status);
+        error.failover = true;
+        throw error;
+      }
+      throw new HeliusRpcError("Invalid Helius RPC response");
+    }
 
     if (!response.ok) {
       const message = payload.error?.message ?? `Helius RPC failed (${response.status})`;
@@ -235,9 +246,9 @@ export async function heliusRpc<T>(
     throw new Error("HELIUS_API_KEY is not configured");
   }
 
-  // Round-robin within non-blacklisted keys; blacklisted stay at the end as last resort.
-  const readyCount = keys.filter((key) => !isKeyBlacklisted(key)).length || keys.length;
-  const start = nextKeyStartIndex(readyCount);
+  // Always try usable keys in order (ready first). Round-robin start was skipping
+  // working keys when softFail aborted mid-failover on non-HeliusRpcError.
+  const start = 0;
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < keys.length; attempt += 1) {
@@ -246,8 +257,13 @@ export async function heliusRpc<T>(
       return await heliusRpcWithKey<T>(apiKey, method, params, options);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      const failover = error instanceof HeliusRpcError && error.failover;
+      const failover =
+        (error instanceof HeliusRpcError && error.failover) ||
+        /429|rate limit|max usage|quota|HTTP 40[123]/i.test(lastError.message);
       if (attempt < keys.length - 1 && failover) {
+        if (!(error instanceof HeliusRpcError)) {
+          blacklistKey(apiKey);
+        }
         continue;
       }
       if (options.softFail) {

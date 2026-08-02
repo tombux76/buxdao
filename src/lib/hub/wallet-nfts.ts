@@ -22,7 +22,7 @@ async function heliusRpcSoft<T>(method: string, params: unknown): Promise<T | nu
   if (!hasHeliusApiKey()) {
     return null;
   }
-  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 12_000 });
+  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 15_000 });
 }
 
 function parseNftNumber(name: string): number | null {
@@ -61,7 +61,10 @@ async function fetchAssetsByOwner(wallet: string): Promise<DasAsset[]> {
       limit: 1000,
       displayOptions: { showFungible: false, showNativeBalance: false },
     });
-    const batch = result?.items ?? [];
+    if (!result) {
+      break;
+    }
+    const batch = result.items ?? [];
     items.push(...batch);
     if (batch.length < 1000) {
       break;
@@ -70,6 +73,31 @@ async function fetchAssetsByOwner(wallet: string): Promise<DasAsset[]> {
   }
 
   return items;
+}
+
+/** Fetch DAS assets by mint id in small batches — avoids scanning whole collections. */
+async function fetchAssetsByIds(mints: string[]): Promise<DasAsset[]> {
+  if (mints.length === 0) {
+    return [];
+  }
+
+  const assets: DasAsset[] = [];
+  const chunkSize = 100;
+
+  for (let i = 0; i < mints.length; i += chunkSize) {
+    const ids = mints.slice(i, i + chunkSize);
+    const batch = await heliusRpcSoft<Array<DasAsset | null>>("getAssetBatch", { ids });
+    if (!batch) {
+      continue;
+    }
+    for (const asset of batch) {
+      if (asset?.id) {
+        assets.push(asset);
+      }
+    }
+  }
+
+  return assets;
 }
 
 async function fetchStakedNftsForWallet(
@@ -85,34 +113,7 @@ async function fetchStakedNftsForWallet(
     .filter(([, depositor]) => depositor === wallet)
     .map(([mint]) => mint);
 
-  if (userMints.length === 0) {
-    return [];
-  }
-
-  const mintSet = new Set(userMints);
-  const assets: DasAsset[] = [];
-  let page = 1;
-
-  while (page <= 50) {
-    const result = await heliusRpcSoft<{ items?: DasAsset[] }>("getAssetsByGroup", {
-      groupKey: "collection",
-      groupValue: config.collectionMint,
-      page,
-      limit: 1000,
-    });
-    const batch = result?.items ?? [];
-    for (const asset of batch) {
-      if (asset.id && mintSet.has(asset.id)) {
-        assets.push(asset);
-      }
-    }
-    if (batch.length < 1000) {
-      break;
-    }
-    page += 1;
-  }
-
-  return assets;
+  return fetchAssetsByIds(userMints);
 }
 
 function sortNfts(nfts: HubNft[]): HubNft[] {
@@ -144,11 +145,16 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
     collectionConfigs.map((c) => [c.collectionMint, c] as const),
   );
 
-  const [walletAssets, buxBalance, ...stakedByCollection] = await Promise.all([
+  // Wallet NFTs first (one DAS call). Staked lookups use mint ids only — do not
+  // scan entire collections (that was burning Helius credits and soft-failing to []).
+  const [walletAssets, buxBalance] = await Promise.all([
     fetchAssetsByOwner(wallet),
     fetchBuxBalance(wallet),
-    ...collectionConfigs.map((config) => fetchStakedNftsForWallet(wallet, config)),
   ]);
+
+  const stakedByCollection = await Promise.all(
+    collectionConfigs.map((config) => fetchStakedNftsForWallet(wallet, config)),
+  );
 
   const collections: Record<string, HubNft[]> = Object.fromEntries(
     collectionConfigs.map((c) => [c.id, [] as HubNft[]]),
