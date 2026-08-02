@@ -1,6 +1,7 @@
 import { hasHeliusApiKey, heliusRestFetch } from "@/lib/helius-rpc";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const USER_TX_CACHE_TTL_MS = 60_000;
 
 type HeliusTransfer = {
   fromUserAccount?: string;
@@ -16,24 +17,29 @@ type HeliusParsedTx = {
 };
 
 const depositorCache = new Map<string, { at: number; map: Map<string, string> }>();
+const userTxCache = new Map<string, { at: number; txs: HeliusParsedTx[] }>();
 
-/** Map NFT mint -> wallet that deposited into a GraveStake staking wallet. */
-export async function fetchStakingDepositors(stakingWallet: string): Promise<Map<string, string>> {
-  const cacheKey = stakingWallet.toLowerCase();
-  const cached = depositorCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return cached.map;
-  }
+function isNftTransfer(transfer: HeliusTransfer): boolean {
+  return Boolean(
+    transfer.mint &&
+      (transfer.tokenStandard?.includes("NonFungible") || transfer.tokenAmount === 1),
+  );
+}
 
-  const depositors = new Map<string, string>();
+async function fetchAddressTransactions(
+  address: string,
+  maxPages: number,
+): Promise<HeliusParsedTx[]> {
   if (!hasHeliusApiKey()) {
-    return depositors;
+    return [];
   }
 
+  const txs: HeliusParsedTx[] = [];
   let before: string | undefined;
-  for (let page = 0; page < 30; page++) {
+
+  for (let page = 0; page < maxPages; page += 1) {
     const response = await heliusRestFetch(
-      `/v0/addresses/${stakingWallet}/transactions`,
+      `/v0/addresses/${address}/transactions`,
       {},
       {
         searchParams: {
@@ -49,36 +55,112 @@ export async function fetchStakingDepositors(stakingWallet: string): Promise<Map
       break;
     }
 
-    let txs: HeliusParsedTx[];
+    let batch: HeliusParsedTx[];
     try {
-      txs = (await response.json()) as HeliusParsedTx[];
+      batch = (await response.json()) as HeliusParsedTx[];
     } catch {
       break;
     }
 
-    if (!Array.isArray(txs) || txs.length === 0) {
+    if (!Array.isArray(batch) || batch.length === 0) {
       break;
     }
 
-    for (const tx of txs) {
-      for (const transfer of tx.tokenTransfers ?? []) {
-        if (
-          transfer.toUserAccount === stakingWallet &&
-          transfer.fromUserAccount &&
-          transfer.mint &&
-          (transfer.tokenStandard?.includes("NonFungible") || transfer.tokenAmount === 1)
-        ) {
-          depositors.set(transfer.mint, transfer.fromUserAccount);
-        }
+    txs.push(...batch);
+    before = batch[batch.length - 1]?.signature;
+    if (!before || batch.length < 100) {
+      break;
+    }
+  }
+
+  return txs;
+}
+
+/** Cached enhanced tx history for a wallet (newest first). */
+export async function fetchWalletTransactionHistory(
+  wallet: string,
+  maxPages = 40,
+): Promise<HeliusParsedTx[]> {
+  const cacheKey = wallet.toLowerCase();
+  const cached = userTxCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < USER_TX_CACHE_TTL_MS) {
+    return cached.txs;
+  }
+  const txs = await fetchAddressTransactions(wallet, maxPages);
+  userTxCache.set(cacheKey, { at: Date.now(), txs });
+  return txs;
+}
+
+/** Map NFT mint -> wallet that deposited into a GraveStake staking wallet. */
+export async function fetchStakingDepositors(stakingWallet: string): Promise<Map<string, string>> {
+  const cacheKey = stakingWallet.toLowerCase();
+  const cached = depositorCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.map;
+  }
+
+  const depositors = new Map<string, string>();
+  const txs = await fetchAddressTransactions(stakingWallet, 50);
+
+  for (const tx of txs) {
+    for (const transfer of tx.tokenTransfers ?? []) {
+      if (
+        transfer.toUserAccount === stakingWallet &&
+        transfer.fromUserAccount &&
+        isNftTransfer(transfer) &&
+        transfer.mint
+      ) {
+        depositors.set(transfer.mint, transfer.fromUserAccount);
       }
-    }
-
-    before = txs[txs.length - 1]?.signature;
-    if (!before || txs.length < 100) {
-      break;
     }
   }
 
   depositorCache.set(cacheKey, { at: Date.now(), map: depositors });
   return depositors;
+}
+
+/**
+ * Mints the user still has staked in a pool, derived from the user's own tx history
+ * (deposit to pool / withdraw from pool) rather than scanning the entire pool history.
+ */
+export function stakedMintsFromUserHistory(params: {
+  userWallet: string;
+  stakingWallet: string;
+  txs: HeliusParsedTx[];
+  currentlyStakedMints: Set<string>;
+}): string[] {
+  const { userWallet, stakingWallet, txs, currentlyStakedMints } = params;
+  const held = new Set<string>();
+
+  // Chronological order so final set reflects net currently-attributed deposits.
+  for (const tx of [...txs].reverse()) {
+    for (const transfer of tx.tokenTransfers ?? []) {
+      if (!isNftTransfer(transfer) || !transfer.mint) {
+        continue;
+      }
+      if (transfer.fromUserAccount === userWallet && transfer.toUserAccount === stakingWallet) {
+        held.add(transfer.mint);
+      }
+      if (transfer.fromUserAccount === stakingWallet && transfer.toUserAccount === userWallet) {
+        held.delete(transfer.mint);
+      }
+    }
+  }
+
+  return [...held].filter((mint) => currentlyStakedMints.has(mint));
+}
+
+export async function fetchUserStakedMints(params: {
+  userWallet: string;
+  stakingWallet: string;
+  currentlyStakedMints: Set<string>;
+  txs?: HeliusParsedTx[];
+}): Promise<string[]> {
+  const txs = params.txs ?? (await fetchWalletTransactionHistory(params.userWallet));
+  return stakedMintsFromUserHistory({
+    userWallet: params.userWallet,
+    stakingWallet: params.stakingWallet,
+    txs,
+    currentlyStakedMints: params.currentlyStakedMints,
+  });
 }

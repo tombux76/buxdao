@@ -1,5 +1,9 @@
 import { collectionConfigs, type CollectionConfig } from "@/content/site";
-import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
+import {
+  fetchStakingDepositors,
+  fetchUserStakedMints,
+  fetchWalletTransactionHistory,
+} from "@/lib/bux/staking-attribution";
 
 import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
 import { heliusRpc, hasHeliusApiKey } from "@/lib/helius-rpc";
@@ -75,6 +79,12 @@ async function fetchAssetsByOwner(wallet: string): Promise<DasAsset[]> {
   return items;
 }
 
+function filterAssetsByCollection(assets: DasAsset[], collectionMint: string): DasAsset[] {
+  return assets.filter((asset) =>
+    asset.grouping?.some((g) => g.group_key === "collection" && g.group_value === collectionMint),
+  );
+}
+
 /** Fetch DAS assets by mint id in small batches — avoids scanning whole collections. */
 async function fetchAssetsByIds(mints: string[]): Promise<DasAsset[]> {
   if (mints.length === 0) {
@@ -103,17 +113,61 @@ async function fetchAssetsByIds(mints: string[]): Promise<DasAsset[]> {
 async function fetchStakedNftsForWallet(
   wallet: string,
   config: CollectionConfig,
+  userTxs?: Awaited<ReturnType<typeof fetchWalletTransactionHistory>>,
 ): Promise<DasAsset[]> {
   if (!config.stakingWallet || !config.stakeLive) {
     return [];
   }
 
-  const depositorMap = await fetchStakingDepositors(config.stakingWallet);
-  const userMints = [...depositorMap.entries()]
-    .filter(([, depositor]) => depositor === wallet)
-    .map(([mint]) => mint);
+  const poolAssets = filterAssetsByCollection(
+    await fetchAssetsByOwner(config.stakingWallet),
+    config.collectionMint,
+  );
+  const currentlyStakedMints = new Set(
+    poolAssets.map((asset) => asset.id).filter((id): id is string => Boolean(id)),
+  );
+  if (currentlyStakedMints.size === 0) {
+    return [];
+  }
 
-  return fetchAssetsByIds(userMints);
+  // Prefer the user's own deposit/withdraw history — works even when the pool
+  // has more tx history than we can paginate under Helius rate limits.
+  const fromUserHistory = await fetchUserStakedMints({
+    userWallet: wallet,
+    stakingWallet: config.stakingWallet,
+    currentlyStakedMints,
+    txs: userTxs,
+  });
+
+  let userMints = fromUserHistory;
+
+  // Fallback: pool-side depositor map (recent deposits only when rate-limited).
+  if (userMints.length === 0) {
+    const depositorMap = await fetchStakingDepositors(config.stakingWallet);
+    userMints = [...depositorMap.entries()]
+      .filter(
+        ([mint, depositor]) =>
+          currentlyStakedMints.has(mint) && depositor.toLowerCase() === wallet.toLowerCase(),
+      )
+      .map(([mint]) => mint);
+  }
+
+  if (userMints.length === 0) {
+    return [];
+  }
+
+  const byId = new Map(poolAssets.map((asset) => [asset.id, asset]));
+  const fromPool = userMints
+    .map((mint) => byId.get(mint))
+    .filter((asset): asset is DasAsset => Boolean(asset));
+  if (fromPool.length === userMints.length) {
+    return fromPool;
+  }
+
+  // Rare: pool DAS page missed an asset — fetch by id.
+  const missing = userMints.filter((mint) => !byId.has(mint));
+  const fetched = await fetchAssetsByIds(missing);
+  return [...fromPool, ...fetched];
 }
 
 function sortNfts(nfts: HubNft[]): HubNft[] {
@@ -145,15 +199,15 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
     collectionConfigs.map((c) => [c.collectionMint, c] as const),
   );
 
-  // Wallet NFTs first (one DAS call). Staked lookups use mint ids only — do not
-  // scan entire collections (that was burning Helius credits and soft-failing to []).
-  const [walletAssets, buxBalance] = await Promise.all([
+  // Wallet NFTs + one user tx history fetch. Staked lookups use pool DAS + that history.
+  const [walletAssets, buxBalance, userTxs] = await Promise.all([
     fetchAssetsByOwner(wallet),
     fetchBuxBalance(wallet),
+    fetchWalletTransactionHistory(wallet),
   ]);
 
   const stakedByCollection = await Promise.all(
-    collectionConfigs.map((config) => fetchStakedNftsForWallet(wallet, config)),
+    collectionConfigs.map((config) => fetchStakedNftsForWallet(wallet, config, userTxs)),
   );
 
   const collections: Record<string, HubNft[]> = Object.fromEntries(
