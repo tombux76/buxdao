@@ -34,6 +34,8 @@ function getRpcCandidates() {
   add(process.env.SOLANA_RPC_URL);
   add(process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
   add(process.env.SLOTS_RPC_URL);
+  // Public before Helius so JSON-RPC works when Helius keys are credit-exhausted.
+  add("https://api.mainnet-beta.solana.com");
 
   const heliusKeys = [];
   const addKey = (value) => {
@@ -64,7 +66,6 @@ function getRpcCandidates() {
     }
   }
 
-  add("https://api.mainnet-beta.solana.com");
   return urls;
 }
 

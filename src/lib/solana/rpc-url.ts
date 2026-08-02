@@ -13,12 +13,12 @@ export function getServerRpcUrlCandidates(): string[] {
 
   addUnique(urls, process.env.SOLANA_RPC_URL);
   addUnique(urls, process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
+  // Public mainnet before Helius — exhausted Helius keys 429 and burn the request budget.
+  addUnique(urls, "https://api.mainnet-beta.solana.com");
 
   for (const heliusUrl of getHeliusRpcUrlCandidates()) {
     addUnique(urls, heliusUrl);
   }
-
-  addUnique(urls, "https://api.mainnet-beta.solana.com");
 
   return urls;
 }

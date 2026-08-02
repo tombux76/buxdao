@@ -1,9 +1,9 @@
-import { collectionConfigs, tokenConfig, type CollectionConfig } from "@/content/site";
+import { collectionConfigs, type CollectionConfig } from "@/content/site";
 import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
 import { heliusRpc, hasHeliusApiKey } from "@/lib/helius-rpc";
+import { fetchWalletBuxBalanceViaRpc } from "@/lib/solana/bux-token-accounts";
 
 export type HubNft = {
   mint: string;
@@ -22,7 +22,7 @@ async function heliusRpcSoft<T>(method: string, params: unknown): Promise<T | nu
   if (!hasHeliusApiKey()) {
     return null;
   }
-  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 30_000 });
+  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 12_000 });
 }
 
 function parseNftNumber(name: string): number | null {
@@ -131,45 +131,12 @@ function sortNfts(nfts: HubNft[]): HubNft[] {
 }
 
 async function fetchBuxBalance(wallet: string): Promise<number> {
-  const mint = tokenConfig.mint;
-  const result = await heliusRpcSoft<{ account: { data: string | [string, string] } }[]>(
-    "getProgramAccounts",
-    [
-      TOKEN_PROGRAM_ID.toBase58(),
-      {
-        encoding: "base64",
-        commitment: "confirmed",
-        filters: [
-          { dataSize: 165 },
-          { memcmp: { offset: 0, bytes: mint } },
-          { memcmp: { offset: 32, bytes: wallet } },
-        ],
-      },
-    ],
-  );
-
-  if (!result?.length) {
+  try {
+    return await fetchWalletBuxBalanceViaRpc(wallet);
+  } catch (error) {
+    console.error("[hub] BUX balance RPC failed:", error);
     return 0;
   }
-
-  let total = 0;
-  for (const item of result) {
-    const raw = item.account?.data;
-    if (!raw) {
-      continue;
-    }
-    const dataBase64 = Array.isArray(raw) ? raw[0] : raw;
-    try {
-      const buf = Buffer.from(dataBase64, "base64");
-      if (buf.length >= 72) {
-        total += Number(buf.readBigUInt64LE(64));
-      }
-    } catch {
-      // skip
-    }
-  }
-
-  return total / 1e9;
 }
 
 export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletHoldings> {

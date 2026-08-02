@@ -160,7 +160,7 @@ async function heliusRpcWithKey<T>(
   params: unknown,
   options: HeliusRpcOptions,
 ): Promise<T | null> {
-  const timeoutMs = options.timeoutMs ?? 60_000;
+  const timeoutMs = options.timeoutMs ?? 12_000;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 

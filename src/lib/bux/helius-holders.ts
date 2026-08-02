@@ -1,36 +1,17 @@
-import { PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { collectionConfigs, tokenConfig, type CollectionConfig } from "@/content/site";
 import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
+import {
+  fetchAllBuxTokenAccountsViaRpc,
+  type BuxTokenAccountSlice,
+} from "@/lib/solana/bux-token-accounts";
 import { heliusRpc, hasHeliusApiKey } from "@/lib/helius-rpc";
-const BUX_DECIMALS = 9;
-
-type TokenAccountSlice = {
-  pubkey: string;
-  owner: string;
-  amount: number;
-};
 
 type NftOwnerItem = {
   id?: string;
   ownership?: { owner?: string };
 };
 
-function decodeTokenAccountOwnerAndAmount(dataBase64: string): { owner: string; amount: number } | null {
-  try {
-    const buf = Buffer.from(dataBase64, "base64");
-    if (buf.length < 40) {
-      return null;
-    }
-    const owner = new PublicKey(buf.subarray(0, 32)).toBase58();
-    const amount = Number(buf.readBigUInt64LE(32));
-    return { owner, amount };
-  } catch {
-    return null;
-  }
-}
-
-async function heliusRpcSoft<T>(method: string, params: unknown, timeoutMs = 30_000): Promise<T | null> {
+async function heliusRpcSoft<T>(method: string, params: unknown, timeoutMs = 12_000): Promise<T | null> {
   if (!hasHeliusApiKey()) {
     return null;
   }
@@ -44,48 +25,13 @@ export type RawHolder = {
   totalNfts: number;
 };
 
-export async function fetchAllBuxTokenAccounts(): Promise<TokenAccountSlice[]> {
-  const mint = tokenConfig.mint;
-  const result = await heliusRpcSoft<{ account: { data: string | [string, string] } }[]>(
-    "getProgramAccounts",
-    [
-      TOKEN_PROGRAM_ID.toBase58(),
-      {
-        encoding: "base64",
-        commitment: "confirmed",
-        filters: [
-          { dataSize: 165 },
-          { memcmp: { offset: 0, bytes: mint } },
-        ],
-        dataSlice: { offset: 32, length: 40 },
-      },
-    ],
-    45_000,
-  );
-
-  if (!result) {
+export async function fetchAllBuxTokenAccounts(): Promise<BuxTokenAccountSlice[]> {
+  try {
+    return await fetchAllBuxTokenAccountsViaRpc();
+  } catch (error) {
+    console.error("[bux-holders] getProgramAccounts failed:", error);
     return [];
   }
-
-  const accounts: TokenAccountSlice[] = [];
-  for (const item of result) {
-    const raw = item.account?.data;
-    if (!raw) {
-      continue;
-    }
-    const dataBase64 = Array.isArray(raw) ? raw[0] : raw;
-    const decoded = decodeTokenAccountOwnerAndAmount(dataBase64);
-    if (!decoded || decoded.amount === 0) {
-      continue;
-    }
-    accounts.push({
-      pubkey: "",
-      owner: decoded.owner,
-      amount: decoded.amount / 10 ** BUX_DECIMALS,
-    });
-  }
-
-  return accounts;
 }
 
 async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<Map<string, number>> {
