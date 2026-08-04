@@ -134,6 +134,59 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type RawParsedTx = {
+  meta?: ParsedTransactionWithMeta["meta"];
+  transaction?: ParsedTransactionWithMeta["transaction"];
+  blockTime?: number | null;
+  slot?: number;
+};
+
+async function fetchParsedTransactionRaw(
+  url: string,
+  signature: string,
+  commitment: Finality,
+  timeoutMs: number,
+): Promise<ParsedTransactionWithMeta | null> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getTransaction",
+      params: [
+        signature,
+        {
+          encoding: "jsonParsed",
+          commitment,
+          maxSupportedTransactionVersion: 0,
+        },
+      ],
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    result?: RawParsedTx | null;
+    error?: { message?: string };
+  };
+
+  if (payload.error) {
+    throw new Error(payload.error.message ?? "RPC error");
+  }
+
+  if (!payload.result?.meta) {
+    return null;
+  }
+
+  return payload.result as ParsedTransactionWithMeta;
+}
+
 /** Poll RPC endpoints until a parsed transaction is visible (confirmed, then finalized). */
 export async function getParsedTransactionWhenReady(
   signature: string,
@@ -150,34 +203,26 @@ export async function getParsedTransactionWhenReady(
   ];
   const deadline = Date.now() + maxWaitMs;
   let lastError: Error | null = null;
-  const fetchTimeoutMs = 4_000;
+  const fetchTimeoutMs = 12_000;
 
   while (Date.now() < deadline) {
     for (const url of candidates) {
-      try {
-        const connection = new Connection(url, {
-          commitment: "confirmed",
-          fetch: createFastFetch(fetchTimeoutMs),
-        });
-        for (const commitment of commitments) {
-          const tx = await connection.getParsedTransaction(signature, {
-            maxSupportedTransactionVersion: 0,
-            commitment,
-          });
-
+      for (const commitment of commitments) {
+        try {
+          const tx = await fetchParsedTransactionRaw(url, signature, commitment, fetchTimeoutMs);
           if (tx?.meta?.err) {
             throw new Error("Transaction failed on-chain");
           }
           if (tx?.meta) {
             return tx;
           }
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          if (lastError.message === "Transaction failed on-chain") {
+            throw lastError;
+          }
+          noteRpcFailure(url, lastError);
         }
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        if (lastError.message === "Transaction failed on-chain") {
-          throw lastError;
-        }
-        noteRpcFailure(url, lastError);
       }
     }
 

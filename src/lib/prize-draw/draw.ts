@@ -42,6 +42,56 @@ function assertPrizeWallet(walletAddress: string): void {
   }
 }
 
+async function ensureDiscordAnnouncedColumn(): Promise<void> {
+  const pool = getPool();
+  await pool.query(
+    `ALTER TABLE prize_draws ADD COLUMN IF NOT EXISTS discord_announced_at TIMESTAMPTZ`,
+  );
+}
+
+async function announcePrizeDrawWithRetries(params: {
+  winnerDiscordUsername: string;
+  payoutWallet: string;
+  prizeUsdValue: number | null;
+  txSignature: string;
+  eligiblePoolSize: number;
+}): Promise<void> {
+  let lastError: Error | null = null;
+  const tokenImageUrl = await fetchEmpireTokenImage().catch(() => null);
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
+    }
+    try {
+      await postPrizeDrawAnnouncement({
+        winnerDiscordUsername: params.winnerDiscordUsername,
+        payoutWallet: params.payoutWallet,
+        prizeAmount: PRIZE_EMPIRE_AMOUNT,
+        prizeUsdValue: params.prizeUsdValue,
+        txSignature: params.txSignature,
+        eligiblePoolSize: params.eligiblePoolSize,
+        tokenImageUrl,
+      });
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error("[prize-draw] Discord announce attempt failed:", lastError.message);
+    }
+  }
+
+  throw lastError ?? new Error("Discord announcement failed");
+}
+
+async function markDiscordAnnounced(txSignature: string): Promise<void> {
+  const pool = getPool();
+  await pool.query(
+    `UPDATE prize_draws SET discord_announced_at = COALESCE(discord_announced_at, now())
+     WHERE tx_signature = $1`,
+    [txSignature],
+  );
+}
+
 /**
  * Picks a random eligible holder and stashes a pending draw. No tokens move here —
  * the prize-wallet owner signs the EMPIRE transfer client-side, then calls confirm.
@@ -131,6 +181,7 @@ export async function confirmPrizeDraw(params: {
     throw new Error("Invalid transaction signature");
   }
 
+  await ensureDiscordAnnouncedColumn();
   const pool = getPool();
 
   const existing = await pool.query<{
@@ -139,14 +190,17 @@ export async function confirmPrizeDraw(params: {
     payout_wallet: string;
     prize_usd_value: string | null;
     eligible_pool_size: number;
+    discord_announced_at: Date | string | null;
   }>(
-    `SELECT id, winner_discord_username, payout_wallet, prize_usd_value, eligible_pool_size
+    `SELECT id, winner_discord_username, payout_wallet, prize_usd_value, eligible_pool_size,
+            discord_announced_at
      FROM prize_draws WHERE tx_signature = $1`,
     [params.txSignature],
   );
+
   if (existing.rows[0]) {
     const row = existing.rows[0];
-    return {
+    const result: ConfirmPrizeDrawResult = {
       drawId: row.id,
       txSignature: params.txSignature,
       prizeAmount: PRIZE_EMPIRE_AMOUNT,
@@ -157,6 +211,20 @@ export async function confirmPrizeDraw(params: {
         payoutWallet: row.payout_wallet,
       },
     };
+
+    // Site may already show the winner while Discord still failed — finish announce on retry.
+    if (!row.discord_announced_at) {
+      await announcePrizeDrawWithRetries({
+        winnerDiscordUsername: result.winner.discordUsername,
+        payoutWallet: result.winner.payoutWallet,
+        prizeUsdValue: result.prizeUsdValue,
+        txSignature: params.txSignature,
+        eligiblePoolSize: result.eligiblePoolSize,
+      });
+      await markDiscordAnnounced(params.txSignature);
+    }
+
+    return result;
   }
 
   const pendingResult = await pool.query<PendingRow>(
@@ -221,20 +289,16 @@ export async function confirmPrizeDraw(params: {
     client.release();
   }
 
-  try {
-    const tokenImageUrl = await fetchEmpireTokenImage();
-    await postPrizeDrawAnnouncement({
-      winnerDiscordUsername: pending.winner_discord_username ?? pending.payout_wallet,
-      payoutWallet: pending.payout_wallet,
-      prizeAmount: PRIZE_EMPIRE_AMOUNT,
-      prizeUsdValue,
-      txSignature: params.txSignature,
-      eligiblePoolSize: pending.eligible_pool_size,
-      tokenImageUrl,
-    });
-  } catch (error) {
-    console.error("[prize-draw] Discord announcement failed:", error);
-  }
+  // DB is committed first so /empire-draw updates even if Discord flakes; client
+  // retries will re-enter via the existing-signature path until Discord is marked done.
+  await announcePrizeDrawWithRetries({
+    winnerDiscordUsername: pending.winner_discord_username ?? pending.payout_wallet,
+    payoutWallet: pending.payout_wallet,
+    prizeUsdValue,
+    txSignature: params.txSignature,
+    eligiblePoolSize: pending.eligible_pool_size,
+  });
+  await markDiscordAnnounced(params.txSignature);
 
   return {
     drawId,

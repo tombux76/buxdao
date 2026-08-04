@@ -64,7 +64,7 @@ export async function verifyEmpirePrizeTransfer(params: {
   // Poll across RPC candidates — confirm often runs before the tx is indexed,
   // and Helius keys frequently 429; public RPC is a fallback in the candidate list.
   const tx = await getParsedTransactionWhenReady(params.signature, {
-    maxWaitMs: 25_000,
+    maxWaitMs: 35_000,
     pollMs: 1_500,
   });
 

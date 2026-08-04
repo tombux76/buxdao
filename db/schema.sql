@@ -434,6 +434,7 @@ CREATE TABLE IF NOT EXISTS prize_draws (
   tx_signature TEXT NOT NULL,
   eligible_pool_size INTEGER NOT NULL,
   drawn_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  discord_announced_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
