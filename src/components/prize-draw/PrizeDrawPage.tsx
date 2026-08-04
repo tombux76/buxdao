@@ -140,6 +140,67 @@ export function PrizeDrawPage() {
     void loadStatus();
   }, [loadStatus]);
 
+  // If the tab died after signing, resume confirm/finalize from the saved signature.
+  useEffect(() => {
+    if (!connected || !walletAddress || walletAddress !== status?.prizeWallet) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = sessionStorage.getItem("empire-draw-pending-tx");
+        if (!raw) {
+          return;
+        }
+        const saved = JSON.parse(raw) as {
+          signature?: string;
+          walletAddress?: string;
+          at?: number;
+        };
+        if (
+          !saved.signature ||
+          saved.walletAddress !== walletAddress ||
+          !saved.at ||
+          Date.now() - saved.at > 2 * 60 * 60 * 1000
+        ) {
+          return;
+        }
+        setDrawStep("confirming");
+        const confirmRes = await fetch("/api/empire-draw/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress, txSignature: saved.signature }),
+        });
+        if (confirmRes.ok) {
+          if (!cancelled) {
+            sessionStorage.removeItem("empire-draw-pending-tx");
+            setRunResult(`Winner recorded · tx ${saved.signature.slice(0, 8)}…`);
+            await loadStatus();
+          }
+          return;
+        }
+        const finalizeRes = await fetch("/api/empire-draw/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress }),
+        });
+        if (finalizeRes.ok && !cancelled) {
+          sessionStorage.removeItem("empire-draw-pending-tx");
+          await loadStatus();
+        }
+      } catch {
+        // ignore resume errors
+      } finally {
+        if (!cancelled) {
+          setDrawStep("idle");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, walletAddress, status?.prizeWallet, loadStatus]);
+
   async function handleRunDraw() {
     if (!sendTransaction || !walletAddress) {
       setError("Connect the prize wallet first");
@@ -188,6 +249,14 @@ export function PrizeDrawPage() {
       transaction.feePayer = owner;
 
       const signature = await sendTransaction(transaction, connection);
+      try {
+        sessionStorage.setItem(
+          "empire-draw-pending-tx",
+          JSON.stringify({ signature, walletAddress, at: Date.now() }),
+        );
+      } catch {
+        // ignore
+      }
 
       setDrawStep("confirming");
 
@@ -221,10 +290,34 @@ export function PrizeDrawPage() {
         confirm = null;
       }
 
+      // Browser may have lost the confirm race — server scans chain for the pending payout.
       if (!confirm) {
-        throw new Error(
-          `${lastConfirmError} (tx ${signature.slice(0, 8)}… already sent — do not re-run the draw)`,
-        );
+        const finalizeRes = await fetch("/api/empire-draw/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress }),
+        });
+        const finalize = (await finalizeRes.json()) as {
+          error?: string;
+          draws?: Array<{ winner?: string; txSignature?: string }>;
+        };
+        if (finalizeRes.ok && (finalize.draws?.length ?? 0) > 0) {
+          const draw = finalize.draws![0]!;
+          confirm = {
+            winner: { discordUsername: draw.winner ?? prepare.winner.discordUsername },
+            txSignature: draw.txSignature ?? signature,
+          };
+        } else if (!confirm) {
+          throw new Error(
+            `${lastConfirmError} (tx ${signature.slice(0, 8)}… already sent — do not re-run the draw)`,
+          );
+        }
+      }
+
+      try {
+        sessionStorage.removeItem("empire-draw-pending-tx");
+      } catch {
+        // ignore
       }
 
       setRunResult(

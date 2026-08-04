@@ -1,3 +1,9 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/empire-draw/finalize",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

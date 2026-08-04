@@ -157,6 +157,7 @@ export async function preparePrizeDraw(params: {
 }
 
 type PendingRow = {
+  prepared_by_user_id?: number;
   winner_user_id: number;
   winner_discord_id: string | null;
   winner_discord_username: string | null;
@@ -166,21 +167,11 @@ type PendingRow = {
   eligible_pool_size: number;
 };
 
-/**
- * Verifies the prize-wallet-signed EMPIRE transfer on-chain, records the draw,
- * clears the pending row, and announces the winner in Discord.
- */
-export async function confirmPrizeDraw(params: {
-  userId: string;
-  walletAddress: string;
+async function recordAndAnnounceDraw(params: {
+  pending: PendingRow;
+  drawnByUserId: string | number;
   txSignature: string;
 }): Promise<ConfirmPrizeDrawResult> {
-  assertPrizeWallet(params.walletAddress);
-
-  if (!isValidTxSignature(params.txSignature)) {
-    throw new Error("Invalid transaction signature");
-  }
-
   await ensureDiscordAnnouncedColumn();
   const pool = getPool();
 
@@ -211,8 +202,6 @@ export async function confirmPrizeDraw(params: {
         payoutWallet: row.payout_wallet,
       },
     };
-
-    // Site may already show the winner while Discord still failed — finish announce on retry.
     if (!row.discord_announced_at) {
       await announcePrizeDrawWithRetries({
         winnerDiscordUsername: result.winner.discordUsername,
@@ -223,26 +212,13 @@ export async function confirmPrizeDraw(params: {
       });
       await markDiscordAnnounced(params.txSignature);
     }
-
     return result;
   }
 
-  const pendingResult = await pool.query<PendingRow>(
-    `SELECT winner_user_id, winner_discord_id, winner_discord_username, winner_discord_image,
-            payout_wallet, prize_amount_raw, eligible_pool_size
-     FROM prize_draw_pending WHERE prepared_by_user_id = $1`,
-    [params.userId],
-  );
-  const pending = pendingResult.rows[0];
-  if (!pending) {
-    throw new Error("No draw in progress — start again");
-  }
-
-  const amountRaw = BigInt(pending.prize_amount_raw);
-
+  const amountRaw = BigInt(params.pending.prize_amount_raw);
   await verifyEmpirePrizeTransfer({
     signature: params.txSignature,
-    recipientWallet: pending.payout_wallet,
+    recipientWallet: params.pending.payout_wallet,
     amountRaw,
   });
 
@@ -253,7 +229,6 @@ export async function confirmPrizeDraw(params: {
   let drawId = 0;
   try {
     await client.query("BEGIN");
-
     const inserted = await client.query<{ id: number }>(
       `INSERT INTO prize_draws (
          winner_user_id, winner_discord_id, winner_discord_username, winner_discord_image,
@@ -262,25 +237,23 @@ export async function confirmPrizeDraw(params: {
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id`,
       [
-        pending.winner_user_id,
-        pending.winner_discord_id,
-        pending.winner_discord_username,
-        pending.winner_discord_image,
-        pending.payout_wallet,
+        params.pending.winner_user_id,
+        params.pending.winner_discord_id,
+        params.pending.winner_discord_username,
+        params.pending.winner_discord_image,
+        params.pending.payout_wallet,
         amountRaw.toString(),
         empireUsdPrice,
         prizeUsdValue,
         params.txSignature,
-        pending.eligible_pool_size,
-        params.userId,
+        params.pending.eligible_pool_size,
+        params.drawnByUserId,
       ],
     );
     drawId = inserted.rows[0]?.id ?? 0;
-
-    await client.query(`DELETE FROM prize_draw_pending WHERE prepared_by_user_id = $1`, [
-      params.userId,
+    await client.query(`DELETE FROM prize_draw_pending WHERE payout_wallet = $1`, [
+      params.pending.payout_wallet,
     ]);
-
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -289,14 +262,12 @@ export async function confirmPrizeDraw(params: {
     client.release();
   }
 
-  // DB is committed first so /empire-draw updates even if Discord flakes; client
-  // retries will re-enter via the existing-signature path until Discord is marked done.
   await announcePrizeDrawWithRetries({
-    winnerDiscordUsername: pending.winner_discord_username ?? pending.payout_wallet,
-    payoutWallet: pending.payout_wallet,
+    winnerDiscordUsername: params.pending.winner_discord_username ?? params.pending.payout_wallet,
+    payoutWallet: params.pending.payout_wallet,
     prizeUsdValue,
     txSignature: params.txSignature,
-    eligiblePoolSize: pending.eligible_pool_size,
+    eligiblePoolSize: params.pending.eligible_pool_size,
   });
   await markDiscordAnnounced(params.txSignature);
 
@@ -305,10 +276,171 @@ export async function confirmPrizeDraw(params: {
     txSignature: params.txSignature,
     prizeAmount: PRIZE_EMPIRE_AMOUNT,
     prizeUsdValue,
-    eligiblePoolSize: pending.eligible_pool_size,
+    eligiblePoolSize: params.pending.eligible_pool_size,
     winner: {
-      discordUsername: pending.winner_discord_username ?? pending.payout_wallet,
-      payoutWallet: pending.payout_wallet,
+      discordUsername: params.pending.winner_discord_username ?? params.pending.payout_wallet,
+      payoutWallet: params.pending.payout_wallet,
     },
   };
+}
+
+async function findMatchingPrizeTransferSignature(params: {
+  recipientWallet: string;
+  amountRaw: bigint;
+  createdAfterMs: number;
+}): Promise<string | null> {
+  const rpcUrl = "https://api.mainnet-beta.solana.com";
+  const sigRes = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getSignaturesForAddress",
+      params: [PRIZE_WALLET, { limit: 20 }],
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  const sigPayload = (await sigRes.json()) as {
+    result?: Array<{ signature: string; blockTime?: number | null }>;
+    error?: { message?: string };
+  };
+  if (sigPayload.error) {
+    throw new Error(sigPayload.error.message ?? "Failed to list prize wallet signatures");
+  }
+
+  for (const entry of sigPayload.result ?? []) {
+    const blockMs = (entry.blockTime ?? 0) * 1000;
+    if (blockMs && blockMs + 60_000 < params.createdAfterMs) {
+      continue;
+    }
+    try {
+      await verifyEmpirePrizeTransfer({
+        signature: entry.signature,
+        recipientWallet: params.recipientWallet,
+        amountRaw: params.amountRaw,
+      });
+      return entry.signature;
+    } catch {
+      // not a match
+    }
+  }
+  return null;
+}
+
+/**
+ * Verifies the prize-wallet-signed EMPIRE transfer on-chain, records the draw,
+ * clears the pending row, and announces the winner in Discord.
+ */
+export async function confirmPrizeDraw(params: {
+  userId: string;
+  walletAddress: string;
+  txSignature: string;
+}): Promise<ConfirmPrizeDrawResult> {
+  assertPrizeWallet(params.walletAddress);
+
+  if (!isValidTxSignature(params.txSignature)) {
+    throw new Error("Invalid transaction signature");
+  }
+
+  const pool = getPool();
+  const pendingResult = await pool.query<PendingRow>(
+    `SELECT winner_user_id, winner_discord_id, winner_discord_username, winner_discord_image,
+            payout_wallet, prize_amount_raw, eligible_pool_size
+     FROM prize_draw_pending WHERE prepared_by_user_id = $1`,
+    [params.userId],
+  );
+  const pending = pendingResult.rows[0];
+
+  // Idempotent path when draw already recorded (pending may already be cleared).
+  if (!pending) {
+    await ensureDiscordAnnouncedColumn();
+    const existing = await pool.query<{
+      id: number;
+      winner_discord_username: string | null;
+      payout_wallet: string;
+      prize_usd_value: string | null;
+      eligible_pool_size: number;
+      discord_announced_at: Date | string | null;
+    }>(
+      `SELECT id, winner_discord_username, payout_wallet, prize_usd_value, eligible_pool_size,
+              discord_announced_at
+       FROM prize_draws WHERE tx_signature = $1`,
+      [params.txSignature],
+    );
+    if (!existing.rows[0]) {
+      throw new Error("No draw in progress — start again");
+    }
+    const row = existing.rows[0];
+    const result: ConfirmPrizeDrawResult = {
+      drawId: row.id,
+      txSignature: params.txSignature,
+      prizeAmount: PRIZE_EMPIRE_AMOUNT,
+      prizeUsdValue: row.prize_usd_value != null ? Number(row.prize_usd_value) : null,
+      eligiblePoolSize: row.eligible_pool_size,
+      winner: {
+        discordUsername: row.winner_discord_username ?? row.payout_wallet,
+        payoutWallet: row.payout_wallet,
+      },
+    };
+    if (!row.discord_announced_at) {
+      await announcePrizeDrawWithRetries({
+        winnerDiscordUsername: result.winner.discordUsername,
+        payoutWallet: result.winner.payoutWallet,
+        prizeUsdValue: result.prizeUsdValue,
+        txSignature: params.txSignature,
+        eligiblePoolSize: result.eligiblePoolSize,
+      });
+      await markDiscordAnnounced(params.txSignature);
+    }
+    return result;
+  }
+
+  return recordAndAnnounceDraw({
+    pending,
+    drawnByUserId: params.userId,
+    txSignature: params.txSignature,
+  });
+}
+
+/**
+ * Auto-finalize stuck draws: pending row exists and matching on-chain payout already landed.
+ * Does not require the browser tab to still be open after signing.
+ */
+export async function finalizePendingPrizeDraws(): Promise<{
+  finalized: ConfirmPrizeDrawResult[];
+  skipped: number;
+}> {
+  const pool = getPool();
+  const pendingResult = await pool.query<PendingRow & { prepared_by_user_id: number; created_at: Date }>(
+    `SELECT prepared_by_user_id, winner_user_id, winner_discord_id, winner_discord_username,
+            winner_discord_image, payout_wallet, prize_amount_raw, eligible_pool_size, created_at
+     FROM prize_draw_pending
+     ORDER BY created_at ASC`,
+  );
+
+  const finalized: ConfirmPrizeDrawResult[] = [];
+  let skipped = 0;
+
+  for (const pending of pendingResult.rows) {
+    const createdAfterMs = new Date(pending.created_at).getTime() - 5 * 60_000;
+    const signature = await findMatchingPrizeTransferSignature({
+      recipientWallet: pending.payout_wallet,
+      amountRaw: BigInt(pending.prize_amount_raw),
+      createdAfterMs,
+    });
+    if (!signature) {
+      skipped += 1;
+      continue;
+    }
+    const result = await recordAndAnnounceDraw({
+      pending,
+      drawnByUserId: pending.prepared_by_user_id,
+      txSignature: signature,
+    });
+    finalized.push(result);
+  }
+
+  return { finalized, skipped };
 }
