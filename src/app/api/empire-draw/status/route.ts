@@ -15,6 +15,7 @@ import {
 import { PRIZE_EMPIRE_AMOUNT, PRIZE_WALLET } from "@/lib/prize-draw/config";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function safe<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
   try {

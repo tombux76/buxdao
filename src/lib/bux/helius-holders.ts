@@ -1,4 +1,8 @@
 import { collectionConfigs, tokenConfig, type CollectionConfig } from "@/content/site";
+import {
+  loadNftHolderSnapshot,
+  saveNftHolderSnapshot,
+} from "@/lib/bux/nft-holder-snapshot";
 import { fetchStakingDepositors } from "@/lib/bux/staking-attribution";
 import {
   fetchAllBuxTokenAccountsViaRpc,
@@ -11,7 +15,7 @@ type NftOwnerItem = {
   ownership?: { owner?: string };
 };
 
-async function heliusRpcSoft<T>(method: string, params: unknown, timeoutMs = 12_000): Promise<T | null> {
+async function heliusRpcSoft<T>(method: string, params: unknown, timeoutMs = 20_000): Promise<T | null> {
   if (!hasHeliusApiKey()) {
     return null;
   }
@@ -47,6 +51,8 @@ async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<
     : null;
 
   let page = 1;
+  let dasFailed = false;
+  let sawItems = false;
   while (page <= 50) {
     const result = await heliusRpcSoft<{ items?: NftOwnerItem[] }>("getAssetsByGroup", {
       groupKey: "collection",
@@ -55,7 +61,15 @@ async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<
       limit: 1000,
     });
 
-    const items = result?.items ?? [];
+    if (!result) {
+      dasFailed = true;
+      break;
+    }
+
+    const items = result.items ?? [];
+    if (items.length > 0) {
+      sawItems = true;
+    }
     for (const item of items) {
       const onChainOwner = item.ownership?.owner;
       const mint = item.id;
@@ -85,6 +99,21 @@ async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<
     page += 1;
   }
 
+  if (sawItems && counts.size > 0) {
+    await saveNftHolderSnapshot(config.id, counts);
+    return counts;
+  }
+
+  if (dasFailed || counts.size === 0) {
+    const snapshot = await loadNftHolderSnapshot(config.id);
+    if (snapshot && snapshot.size > 0) {
+      console.warn(
+        `[bux-holders] using NFT snapshot for ${config.id} (live DAS ${dasFailed ? "failed" : "empty"})`,
+      );
+      return snapshot;
+    }
+  }
+
   return counts;
 }
 
@@ -111,12 +140,14 @@ export async function buildRawHolders(): Promise<RawHolder[]> {
     holder.buxBalance += account.amount;
   }
 
-  const nftResults = await Promise.all(
-    collectionConfigs.map(async (config) => ({
+  // Sequential DAS scans — parallel collection fetches 429 Helius and soft-fail to 0 NFTs.
+  const nftResults: { id: string; ownerCounts: Map<string, number> }[] = [];
+  for (const config of collectionConfigs) {
+    nftResults.push({
       id: config.id,
       ownerCounts: await fetchResolvedNftCountsByOwner(config),
-    })),
-  );
+    });
+  }
 
   for (const { id, ownerCounts } of nftResults) {
     for (const [owner, count] of ownerCounts) {

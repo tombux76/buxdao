@@ -440,6 +440,14 @@ CREATE TABLE IF NOT EXISTS prize_draws (
 
 CREATE INDEX IF NOT EXISTS idx_prize_draws_created_at ON prize_draws (created_at DESC);
 
+CREATE TABLE IF NOT EXISTS nft_holder_snapshots (
+  collection_id TEXT NOT NULL,
+  wallet TEXT NOT NULL,
+  nft_count INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (collection_id, wallet)
+);
+
 CREATE TABLE IF NOT EXISTS prize_draw_pending (
   prepared_by_user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   winner_user_id INTEGER NOT NULL REFERENCES users(id),

@@ -215,6 +215,14 @@ async function heliusRpcWithKey<T>(
     }
 
     return payload.result ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/abort|timeout|fetch failed|network/i.test(message)) {
+      const wrapped = new HeliusRpcError(message);
+      wrapped.failover = true;
+      throw wrapped;
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -259,14 +267,16 @@ export async function heliusRpc<T>(
       lastError = error instanceof Error ? error : new Error(String(error));
       const failover =
         (error instanceof HeliusRpcError && error.failover) ||
-        /429|rate limit|max usage|quota|HTTP 40[123]/i.test(lastError.message);
+        /429|rate limit|max usage|quota|HTTP 40[123]|abort|timeout|fetch failed|network/i.test(
+          lastError.message,
+        );
       if (attempt < keys.length - 1 && failover) {
-        if (!(error instanceof HeliusRpcError)) {
+        if (/429|rate limit|max usage|quota|HTTP 40[123]/i.test(lastError.message)) {
           blacklistKey(apiKey);
         }
         continue;
       }
-      if (options.softFail) {
+      if (options.softFail && (attempt >= keys.length - 1 || !failover)) {
         return null;
       }
       throw lastError;
