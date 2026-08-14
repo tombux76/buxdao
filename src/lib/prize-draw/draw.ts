@@ -322,8 +322,12 @@ async function findMatchingPrizeTransferSignature(params: {
         amountRaw: params.amountRaw,
       });
       return entry.signature;
-    } catch {
-      // not a match
+    } catch (error) {
+      console.error(
+        "[prize-draw] finalize candidate rejected",
+        entry.signature.slice(0, 8),
+        error instanceof Error ? error.message : error,
+      );
     }
   }
   return null;
