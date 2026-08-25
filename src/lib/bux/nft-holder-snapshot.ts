@@ -1,7 +1,5 @@
 import { getPool } from "@/lib/db";
 
-const SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
-
 let tableReady: Promise<void> | null = null;
 
 async function ensureSnapshotTable(): Promise<void> {
@@ -26,6 +24,10 @@ async function ensureSnapshotTable(): Promise<void> {
   return tableReady;
 }
 
+/**
+ * Load last-good NFT owner counts. Never expires — when live DAS fails, a
+ * stale snapshot is far better than collapsing the hub / leaderboard to 0.
+ */
 export async function loadNftHolderSnapshot(
   collectionId: string,
 ): Promise<Map<string, number> | null> {
@@ -49,8 +51,13 @@ export async function loadNftHolderSnapshot(
       (max, row) => (row.updated_at > max ? row.updated_at : max),
       rows[0]!.updated_at,
     );
-    if (Date.now() - new Date(newest).getTime() > SNAPSHOT_MAX_AGE_MS) {
-      return null;
+    const ageHours = Math.round(
+      (Date.now() - new Date(newest).getTime()) / (60 * 60 * 1000),
+    );
+    if (ageHours > 24) {
+      console.warn(
+        `[nft-snapshot] ${collectionId} is ${ageHours}h old — using anyway until DAS recovers`,
+      );
     }
     const counts = new Map<string, number>();
     for (const row of rows) {

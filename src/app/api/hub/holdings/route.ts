@@ -59,10 +59,13 @@ export async function GET() {
   }
 
   try {
-    const [perWallet, metrics] = await Promise.all([
-      Promise.all(wallets.map((wallet) => fetchHubWalletHoldings(wallet))),
-      fetchTokenMetrics(),
-    ]);
+    // Sequential per linked wallet — parallel DAS + staking lookups 429 Helius
+    // and soft-fail every wallet to empty grids at once.
+    const perWallet: Awaited<ReturnType<typeof fetchHubWalletHoldings>>[] = [];
+    for (const wallet of wallets) {
+      perWallet.push(await fetchHubWalletHoldings(wallet));
+    }
+    const metrics = await fetchTokenMetrics();
 
     const collections: Record<string, HubNft[]> = Object.fromEntries(
       collectionConfigs.map((c) => [c.id, [] as HubNft[]]),
@@ -98,8 +101,9 @@ export async function GET() {
     };
 
     const nftCount = Object.values(collections).reduce((sum, list) => sum + list.length, 0);
-    // Don't cache empty NFT results — Helius soft-fails must not stick for a minute.
-    if (nftCount > 0 || buxBalance > 0) {
+    // Never cache zero-NFT payloads — DAS soft-fails often still return BUX, and
+    // caching that sticks empty grids for a full minute.
+    if (nftCount > 0) {
       holdingsCache.set(userId, { key: cacheKey, expires: Date.now() + CACHE_TTL_MS, payload });
     }
 

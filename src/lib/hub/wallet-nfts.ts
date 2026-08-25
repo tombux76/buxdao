@@ -26,7 +26,13 @@ async function heliusRpcSoft<T>(method: string, params: unknown): Promise<T | nu
   if (!hasHeliusApiKey()) {
     return null;
   }
-  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 15_000 });
+  // First pass: normal timeout. On soft-fail (429/timeout), one longer retry
+  // across the key set — Hub empty grids are almost always transient DAS flakes.
+  const first = await heliusRpc<T>(method, params, { softFail: true, timeoutMs: 20_000 });
+  if (first != null) {
+    return first;
+  }
+  return heliusRpc<T>(method, params, { softFail: true, timeoutMs: 45_000 });
 }
 
 function parseNftNumber(name: string): number | null {

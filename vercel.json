@@ -4,6 +4,10 @@
     {
       "path": "/api/empire-draw/finalize",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/bux/refresh-nft-snapshots",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
