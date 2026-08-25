@@ -108,6 +108,91 @@ export function hasHeliusApiKey(): boolean {
   return getHeliusApiKeys().length > 0;
 }
 
+export type HeliusKeyProbeResult = {
+  /** Env slot name, e.g. HELIUS_API_KEY or HELIUS_API_KEY_2 */
+  slot: string;
+  /** Last 4 chars only — enough to match Helius dashboard without exposing the secret */
+  suffix: string;
+  ok: boolean;
+  httpStatus?: number;
+  error?: string;
+};
+
+/**
+ * Probe each configured key with a tiny DAS call. Never returns the raw key.
+ * Used to diagnose Vercel env without decrypting secrets in the dashboard.
+ */
+export async function probeHeliusApiKeys(): Promise<HeliusKeyProbeResult[]> {
+  const labeled: { slot: string; key: string }[] = [];
+  const add = (slot: string, value: string | undefined) => {
+    const trimmed = value?.trim();
+    if (trimmed && !labeled.some((entry) => entry.key === trimmed)) {
+      labeled.push({ slot, key: trimmed });
+    }
+  };
+
+  add("HELIUS_API_KEY", process.env.HELIUS_API_KEY);
+  for (let i = 2; i <= 10; i += 1) {
+    add(`HELIUS_API_KEY_${i}`, process.env[`HELIUS_API_KEY_${i}`]);
+  }
+  const extras = process.env.HELIUS_API_KEYS?.split(",") ?? [];
+  extras.forEach((entry, index) => {
+    add(`HELIUS_API_KEYS[${index}]`, entry);
+  });
+
+  const mint = "EPeeeDr21EPJ4GJgjuRJ8SHD4A2d59erMaTtWaTT2hqm";
+  const results: HeliusKeyProbeResult[] = [];
+
+  for (const { slot, key } of labeled) {
+    const suffix = key.length <= 4 ? "****" : key.slice(-4);
+    try {
+      const response = await fetch(getHeliusRpcUrl(key), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "probe",
+          method: "getAssetsByGroup",
+          params: { groupKey: "collection", groupValue: mint, page: 1, limit: 1 },
+        }),
+        signal: AbortSignal.timeout(15_000),
+        cache: "no-store",
+      });
+      const raw = await response.text();
+      let errorMsg: string | undefined;
+      try {
+        const payload = JSON.parse(raw) as { error?: { message?: string }; result?: unknown };
+        errorMsg = payload.error?.message;
+        const ok = response.ok && !payload.error && payload.result != null;
+        results.push({
+          slot,
+          suffix,
+          ok,
+          httpStatus: response.status,
+          error: ok ? undefined : errorMsg ?? `HTTP ${response.status}`,
+        });
+      } catch {
+        results.push({
+          slot,
+          suffix,
+          ok: false,
+          httpStatus: response.status,
+          error: raw.trim().slice(0, 120) || `HTTP ${response.status}`,
+        });
+      }
+    } catch (error) {
+      results.push({
+        slot,
+        suffix,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return results;
+}
+
 export function getHeliusRpcUrl(apiKey?: string): string {
   const key = apiKey ?? getUsableHeliusApiKeys()[0];
   if (!key) {

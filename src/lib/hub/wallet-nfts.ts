@@ -1,7 +1,6 @@
 import { collectionConfigs, type CollectionConfig } from "@/content/site";
 import {
   fetchStakingDepositors,
-  fetchUserStakedMints,
   fetchWalletTransactionHistory,
 } from "@/lib/bux/staking-attribution";
 
@@ -26,8 +25,6 @@ async function heliusRpcSoft<T>(method: string, params: unknown): Promise<T | nu
   if (!hasHeliusApiKey()) {
     return null;
   }
-  // First pass: normal timeout. On soft-fail (429/timeout), one longer retry
-  // across the key set — Hub empty grids are almost always transient DAS flakes.
   const first = await heliusRpc<T>(method, params, { softFail: true, timeoutMs: 20_000 });
   if (first != null) {
     return first;
@@ -55,21 +52,20 @@ async function assetToHubNft(asset: DasAsset, staked: boolean): Promise<HubNft |
   };
 }
 
-function collectionMintFor(asset: DasAsset): string | null {
-  const group = asset.grouping?.find((g) => g.group_key === "collection");
-  return group?.group_value ?? null;
-}
-
-async function fetchAssetsByOwner(wallet: string): Promise<DasAsset[]> {
+/** Unstaked NFTs for one collection — searchAssets is far cheaper than full-wallet DAS. */
+async function fetchUnstakedCollectionAssets(
+  wallet: string,
+  collectionMint: string,
+): Promise<DasAsset[]> {
   const items: DasAsset[] = [];
   let page = 1;
 
-  while (page <= 20) {
-    const result = await heliusRpcSoft<{ items?: DasAsset[]; total?: number }>("getAssetsByOwner", {
+  while (page <= 10) {
+    const result = await heliusRpcSoft<{ items?: DasAsset[] }>("searchAssets", {
       ownerAddress: wallet,
+      grouping: ["collection", collectionMint],
       page,
       limit: 1000,
-      displayOptions: { showFungible: false, showNativeBalance: false },
     });
     if (!result) {
       break;
@@ -85,13 +81,7 @@ async function fetchAssetsByOwner(wallet: string): Promise<DasAsset[]> {
   return items;
 }
 
-function filterAssetsByCollection(assets: DasAsset[], collectionMint: string): DasAsset[] {
-  return assets.filter((asset) =>
-    asset.grouping?.some((g) => g.group_key === "collection" && g.group_value === collectionMint),
-  );
-}
-
-/** Fetch DAS assets by mint id in small batches — avoids scanning whole collections. */
+/** Fetch DAS assets by mint id in small batches. */
 async function fetchAssetsByIds(mints: string[]): Promise<DasAsset[]> {
   if (mints.length === 0) {
     return [];
@@ -116,64 +106,69 @@ async function fetchAssetsByIds(mints: string[]): Promise<DasAsset[]> {
   return assets;
 }
 
+/**
+ * Staked NFTs for this wallet in a pool.
+ * Prefer user deposit/withdraw history + getAssetBatch ownership checks — do NOT
+ * require a full pool getAssetsByOwner scan (that 429s and previously zeroed Hub).
+ */
 async function fetchStakedNftsForWallet(
   wallet: string,
   config: CollectionConfig,
-  userTxs?: Awaited<ReturnType<typeof fetchWalletTransactionHistory>>,
+  userTxs: Awaited<ReturnType<typeof fetchWalletTransactionHistory>>,
 ): Promise<DasAsset[]> {
   if (!config.stakingWallet || !config.stakeLive) {
     return [];
   }
 
-  const poolAssets = filterAssetsByCollection(
-    await fetchAssetsByOwner(config.stakingWallet),
-    config.collectionMint,
-  );
-  const currentlyStakedMints = new Set(
-    poolAssets.map((asset) => asset.id).filter((id): id is string => Boolean(id)),
-  );
-  if (currentlyStakedMints.size === 0) {
-    return [];
+  const stakingWallet = config.stakingWallet;
+  const collectionMint = config.collectionMint;
+
+  // Net deposits still attributed to this wallet from their own tx history.
+  const held = new Set<string>();
+  for (const tx of [...userTxs].reverse()) {
+    for (const transfer of tx.tokenTransfers ?? []) {
+      const mint = transfer.mint;
+      if (!mint) {
+        continue;
+      }
+      const isNft =
+        transfer.tokenStandard?.includes("NonFungible") || transfer.tokenAmount === 1;
+      if (!isNft) {
+        continue;
+      }
+      if (transfer.fromUserAccount === wallet && transfer.toUserAccount === stakingWallet) {
+        held.add(mint);
+      }
+      if (transfer.fromUserAccount === stakingWallet && transfer.toUserAccount === wallet) {
+        held.delete(mint);
+      }
+    }
   }
 
-  // Prefer the user's own deposit/withdraw history — works even when the pool
-  // has more tx history than we can paginate under Helius rate limits.
-  const fromUserHistory = await fetchUserStakedMints({
-    userWallet: wallet,
-    stakingWallet: config.stakingWallet,
-    currentlyStakedMints,
-    txs: userTxs,
-  });
+  let candidateMints = [...held];
 
-  let userMints = fromUserHistory;
-
-  // Fallback: pool-side depositor map (recent deposits only when rate-limited).
-  if (userMints.length === 0) {
-    const depositorMap = await fetchStakingDepositors(config.stakingWallet);
-    userMints = [...depositorMap.entries()]
-      .filter(
-        ([mint, depositor]) =>
-          currentlyStakedMints.has(mint) && depositor.toLowerCase() === wallet.toLowerCase(),
-      )
+  // Fallback: recent pool depositor map when user history is empty/truncated.
+  if (candidateMints.length === 0) {
+    const depositorMap = await fetchStakingDepositors(stakingWallet);
+    candidateMints = [...depositorMap.entries()]
+      .filter(([, depositor]) => depositor.toLowerCase() === wallet.toLowerCase())
       .map(([mint]) => mint);
   }
 
-  if (userMints.length === 0) {
+  if (candidateMints.length === 0) {
     return [];
   }
 
-  const byId = new Map(poolAssets.map((asset) => [asset.id, asset]));
-  const fromPool = userMints
-    .map((mint) => byId.get(mint))
-    .filter((asset): asset is DasAsset => Boolean(asset));
-  if (fromPool.length === userMints.length) {
-    return fromPool;
-  }
-
-  // Rare: pool DAS page missed an asset — fetch by id.
-  const missing = userMints.filter((mint) => !byId.has(mint));
-  const fetched = await fetchAssetsByIds(missing);
-  return [...fromPool, ...fetched];
+  const assets = await fetchAssetsByIds(candidateMints);
+  return assets.filter((asset) => {
+    const owner = asset.ownership?.owner?.toLowerCase();
+    if (owner !== stakingWallet.toLowerCase()) {
+      return false;
+    }
+    return asset.grouping?.some(
+      (g) => g.group_key === "collection" && g.group_value === collectionMint,
+    );
+  });
 }
 
 function sortNfts(nfts: HubNft[]): HubNft[] {
@@ -201,47 +196,30 @@ async function fetchBuxBalance(wallet: string): Promise<number> {
 }
 
 export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletHoldings> {
-  const mintToConfig = new Map(
-    collectionConfigs.map((c) => [c.collectionMint, c] as const),
-  );
-
-  // Wallet NFTs + one user tx history fetch. Staked lookups use pool DAS + that history.
-  const [walletAssets, buxBalance, userTxs] = await Promise.all([
-    fetchAssetsByOwner(wallet),
+  const [buxBalance, userTxs] = await Promise.all([
     fetchBuxBalance(wallet),
     fetchWalletTransactionHistory(wallet),
   ]);
 
-  // Sequential staking lookups — parallel pool DAS scans burn Helius quota and
-  // soft-fail every collection to empty at once when a key is exhausted.
-  const stakedByCollection: DasAsset[][] = [];
-  for (const config of collectionConfigs) {
-    stakedByCollection.push(await fetchStakedNftsForWallet(wallet, config, userTxs));
-  }
-
   const collections: Record<string, HubNft[]> = Object.fromEntries(
     collectionConfigs.map((c) => [c.id, [] as HubNft[]]),
   );
-
   const seenMints = new Set<string>();
 
-  for (const asset of walletAssets) {
-    const collectionMint = collectionMintFor(asset);
-    const config = collectionMint ? mintToConfig.get(collectionMint) : undefined;
-    if (!config) {
-      continue;
+  // Sequential per collection — avoids blasting all keys with parallel DAS/REST.
+  for (const config of collectionConfigs) {
+    const unstaked = await fetchUnstakedCollectionAssets(wallet, config.collectionMint);
+    for (const asset of unstaked) {
+      const nft = await assetToHubNft(asset, false);
+      if (!nft || seenMints.has(nft.mint)) {
+        continue;
+      }
+      seenMints.add(nft.mint);
+      collections[config.id].push(nft);
     }
-    const nft = await assetToHubNft(asset, false);
-    if (!nft || seenMints.has(nft.mint)) {
-      continue;
-    }
-    seenMints.add(nft.mint);
-    collections[config.id].push(nft);
-  }
 
-  for (let index = 0; index < collectionConfigs.length; index += 1) {
-    const config = collectionConfigs[index];
-    for (const asset of stakedByCollection[index]) {
+    const staked = await fetchStakedNftsForWallet(wallet, config, userTxs);
+    for (const asset of staked) {
       const nft = await assetToHubNft(asset, true);
       if (!nft || seenMints.has(nft.mint)) {
         continue;
@@ -249,9 +227,7 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
       seenMints.add(nft.mint);
       collections[config.id].push(nft);
     }
-  }
 
-  for (const config of collectionConfigs) {
     collections[config.id] = sortNfts(collections[config.id]);
   }
 
