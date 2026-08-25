@@ -141,7 +141,9 @@ function shouldFailoverMessage(message: string): boolean {
     lower.includes("credit") ||
     lower.includes("exceeded") ||
     lower.includes("max usage") ||
-    lower.includes("too many requests")
+    lower.includes("too many requests") ||
+    lower.includes("usage limit") ||
+    lower.includes("payment required")
   );
 }
 
@@ -178,20 +180,28 @@ async function heliusRpcWithKey<T>(
 
   try {
     const response = await fetch(getHeliusRpcUrl(apiKey), fetchInit);
+    // Helius sometimes returns plain text ("max usage reached") with HTTP 200 —
+    // must read as text first or JSON parse fails without triggering key failover.
+    const raw = await response.text();
     let payload: {
       result?: T;
       error?: { message?: string; code?: number };
     } = {};
+
     try {
-      payload = (await response.json()) as typeof payload;
+      payload = JSON.parse(raw) as typeof payload;
     } catch {
-      if (!response.ok || shouldFailoverHttp(response.status)) {
-        blacklistKey(apiKey);
-        const error = new HeliusRpcError(`Helius RPC failed (${response.status})`, response.status);
+      const message = raw.trim() || `Helius RPC failed (${response.status})`;
+      const error = new HeliusRpcError(message, response.status);
+      if (
+        !response.ok ||
+        shouldFailoverHttp(response.status) ||
+        shouldFailoverMessage(message)
+      ) {
         error.failover = true;
-        throw error;
+        blacklistKey(apiKey);
       }
-      throw new HeliusRpcError("Invalid Helius RPC response");
+      throw error;
     }
 
     if (!response.ok) {
@@ -216,6 +226,9 @@ async function heliusRpcWithKey<T>(
 
     return payload.result ?? null;
   } catch (error) {
+    if (error instanceof HeliusRpcError) {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (/abort|timeout|fetch failed|network/i.test(message)) {
       const wrapped = new HeliusRpcError(message);

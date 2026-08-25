@@ -212,9 +212,12 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
     fetchWalletTransactionHistory(wallet),
   ]);
 
-  const stakedByCollection = await Promise.all(
-    collectionConfigs.map((config) => fetchStakedNftsForWallet(wallet, config, userTxs)),
-  );
+  // Sequential staking lookups — parallel pool DAS scans burn Helius quota and
+  // soft-fail every collection to empty at once when a key is exhausted.
+  const stakedByCollection: DasAsset[][] = [];
+  for (const config of collectionConfigs) {
+    stakedByCollection.push(await fetchStakedNftsForWallet(wallet, config, userTxs));
+  }
 
   const collections: Record<string, HubNft[]> = Object.fromEntries(
     collectionConfigs.map((c) => [c.id, [] as HubNft[]]),
