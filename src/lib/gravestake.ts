@@ -131,3 +131,52 @@ export const getStakingPoolsWithStats = cache(async (): Promise<StakingPoolWithS
     return { ...config, ...mapPoolStats(pool) };
   });
 });
+
+export type GravestakeWalletPosition = {
+  owner: string;
+  pool_pubkey: string;
+  asset_mint: string;
+  soft_staked?: boolean;
+  closed_at?: string | null;
+  collection_ref_key?: string;
+  slug?: string;
+};
+
+const walletPositionsCache = new Map<
+  string,
+  { at: number; positions: GravestakeWalletPosition[] }
+>();
+const WALLET_POSITIONS_TTL_MS = 60_000;
+
+/**
+ * Open GraveStake positions for a wallet across all pools.
+ * Soft-stake (modes 2/3) keeps NFTs in the user wallet; custody (mode 1) moves them
+ * to the pool — both appear here with asset_mint.
+ */
+export async function fetchGravestakeWalletPositions(
+  wallet: string,
+): Promise<GravestakeWalletPosition[]> {
+  const cacheKey = wallet.toLowerCase();
+  const cached = walletPositionsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < WALLET_POSITIONS_TTL_MS) {
+    return cached.positions;
+  }
+
+  try {
+    const res = await fetch(
+      `${GRAVESTAKE_API}/gravestake/wallets/${encodeURIComponent(wallet)}/positions`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) {
+      return cached?.positions ?? [];
+    }
+    const data = (await res.json()) as { positions?: GravestakeWalletPosition[] };
+    const positions = (data.positions ?? []).filter(
+      (row) => row.asset_mint && row.pool_pubkey && !row.closed_at,
+    );
+    walletPositionsCache.set(cacheKey, { at: Date.now(), positions });
+    return positions;
+  } catch {
+    return cached?.positions ?? [];
+  }
+}
