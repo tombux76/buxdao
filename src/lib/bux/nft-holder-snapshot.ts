@@ -25,8 +25,10 @@ async function ensureSnapshotTable(): Promise<void> {
 }
 
 /**
- * Load last-good NFT owner counts. Never expires — when live DAS fails, a
- * stale snapshot is far better than collapsing the hub / leaderboard to 0.
+ * Load last-good NFT owner counts for display fallbacks (top holders table).
+ * Not used for cashout or prize eligibility — those require live DAS ownership.
+ * Prefer a fresh scan via the refresh cron; stale is only better than blank zeros
+ * on the public leaderboard.
  */
 export async function loadNftHolderSnapshot(
   collectionId: string,

@@ -50,7 +50,8 @@ export async function buildEligiblePool(forceRefresh = false): Promise<PrizeDraw
   }
 
   const [rawHolders, { walletToUserId, userDiscord }] = await Promise.all([
-    buildRawHolders(),
+    // Live DAS only — never let a stale snapshot keep sold NFTs in the prize pool.
+    buildRawHolders({ allowSnapshot: false }),
     getWalletIdentityMaps(),
   ]);
 

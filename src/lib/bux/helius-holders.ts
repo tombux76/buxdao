@@ -38,7 +38,11 @@ export async function fetchAllBuxTokenAccounts(): Promise<BuxTokenAccountSlice[]
   }
 }
 
-async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<Map<string, number>> {
+async function fetchResolvedNftCountsByOwner(
+  config: CollectionConfig,
+  options: { allowSnapshot?: boolean } = {},
+): Promise<Map<string, number>> {
+  const allowSnapshot = options.allowSnapshot !== false;
   const counts = new Map<string, number>();
   const collectionMint = config.collectionMint;
   if (!collectionMint) {
@@ -104,7 +108,9 @@ async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<
     return counts;
   }
 
-  if (dasFailed || counts.size === 0) {
+  // Snapshots are display-only fallbacks (leaderboard). Never use them for
+  // cashout / prize eligibility — those must reflect live ownership.
+  if (allowSnapshot && (dasFailed || counts.size === 0)) {
     const snapshot = await loadNftHolderSnapshot(config.id);
     if (snapshot && snapshot.size > 0) {
       console.warn(
@@ -117,7 +123,14 @@ async function fetchResolvedNftCountsByOwner(config: CollectionConfig): Promise<
   return counts;
 }
 
-export async function buildRawHolders(): Promise<RawHolder[]> {
+export type BuildRawHoldersOptions = {
+  /** When false, skip Postgres snapshot fallback (live DAS only). Default true. */
+  allowSnapshot?: boolean;
+};
+
+export async function buildRawHolders(
+  options: BuildRawHoldersOptions = {},
+): Promise<RawHolder[]> {
   const holderMap = new Map<string, RawHolder>();
 
   function getOrCreate(wallet: string): RawHolder {
@@ -145,7 +158,9 @@ export async function buildRawHolders(): Promise<RawHolder[]> {
   for (const config of collectionConfigs) {
     nftResults.push({
       id: config.id,
-      ownerCounts: await fetchResolvedNftCountsByOwner(config),
+      ownerCounts: await fetchResolvedNftCountsByOwner(config, {
+        allowSnapshot: options.allowSnapshot,
+      }),
     });
   }
 
