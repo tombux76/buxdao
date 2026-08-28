@@ -8,6 +8,10 @@
     {
       "path": "/api/bux/refresh-nft-snapshots",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cashout/finalize",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

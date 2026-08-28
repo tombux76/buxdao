@@ -9,6 +9,30 @@ type ParsedSplInstruction = {
   info?: Record<string, unknown>;
 };
 
+function accountKeyToBase58(key: unknown): string {
+  if (typeof key === "string") {
+    return key;
+  }
+  if (key && typeof key === "object") {
+    const record = key as { pubkey?: unknown; toBase58?: () => string };
+    if (typeof record.toBase58 === "function") {
+      return record.toBase58();
+    }
+    const pubkey = record.pubkey;
+    if (typeof pubkey === "string") {
+      return pubkey;
+    }
+    if (
+      pubkey &&
+      typeof pubkey === "object" &&
+      typeof (pubkey as { toBase58?: () => string }).toBase58 === "function"
+    ) {
+      return (pubkey as { toBase58: () => string }).toBase58();
+    }
+  }
+  return String(key);
+}
+
 function parseAmountRaw(info: Record<string, unknown>): bigint | null {
   const tokenAmount = info.tokenAmount as { amount?: string } | undefined;
   if (tokenAmount?.amount) {
@@ -26,10 +50,7 @@ function accountAddressAtIndex(tx: ParsedTransactionWithMeta, accountIndex: numb
   if (!key) {
     return null;
   }
-  if (typeof key === "object" && key !== null && "pubkey" in key) {
-    return (key as { pubkey: PublicKey }).pubkey.toBase58();
-  }
-  return String(key);
+  return accountKeyToBase58(key);
 }
 
 function instructionMatchesTransfer(params: {
@@ -127,10 +148,7 @@ export async function verifyBuxTransferToTreasury(params: {
   }
 
   const feePayer = tx.transaction.message.accountKeys[0];
-  const feePayerAddress =
-    typeof feePayer === "object" && feePayer !== null && "pubkey" in feePayer
-      ? (feePayer as { pubkey: PublicKey }).pubkey.toBase58()
-      : String(feePayer);
+  const feePayerAddress = accountKeyToBase58(feePayer);
 
   if (feePayerAddress !== params.fromWallet) {
     throw new Error("$BUX transfer must be signed by your linked payout wallet");
