@@ -9,7 +9,7 @@ import {
 } from "@/lib/cashout/config";
 import { acquireCashoutLock, assertPendingFresh, isPendingExpired, releaseCashoutLock } from "@/lib/cashout/lock";
 import { withLiquidityPayoutLock } from "@/lib/cashout/liquidity-lock";
-import { assertProcessingPayoutStillFair, assertQuoteStillValid } from "@/lib/cashout/quote-guard";
+import { assertQuoteStillValid } from "@/lib/cashout/quote-guard";
 import {
   getCashoutFeeBps,
   quoteCashoutSol,
@@ -79,6 +79,7 @@ function mapCompletedRow(row: CompletedCashoutRow) {
 }
 
 async function assertConfirmEligibility(userId: string, row: PendingRow): Promise<void> {
+  // Pre-BUX checks only — once $BUX is on-chain we honor the locked quote (see confirmCashout).
   assertPendingFresh(new Date(row.created_at));
   await assertCashoutCooldownAllowed(userId);
 
@@ -88,6 +89,17 @@ async function assertConfirmEligibility(userId: string, row: PendingRow): Promis
   }
 
   await assertQuoteStillValid(userId, row);
+}
+
+async function loadPendingClaim(userId: string): Promise<PendingRow | null> {
+  const pool = getPool();
+  const pending = await pool.query<PendingRow>(
+    `SELECT payout_wallet, bux_amount_raw, sol_gross_lamports, fee_lamports, sol_net_lamports,
+            token_value_snapshot, fee_bps, bux_tx_signature, created_at
+     FROM cashout_pending_claims WHERE user_id = $1`,
+    [userId],
+  );
+  return pending.rows[0] ?? null;
 }
 
 async function loadCompletedByBuxTx(
@@ -202,8 +214,6 @@ async function resumeProcessingCashout(params: {
       fromWallet: params.payoutWallet,
       amountRaw: BigInt(claimed.bux_amount),
     });
-
-    await assertProcessingPayoutStillFair(params.userId, claimed.bux_amount, claimed.sol_amount);
 
     const solTxSignature = await withLiquidityPayoutLock(() =>
       sendLiquiditySolTransfer({
@@ -446,13 +456,7 @@ export async function confirmCashout(params: {
     throw new Error("This $BUX transfer was already used for a cashout");
   }
 
-  const pendingPreview = await pool.query<PendingRow>(
-    `SELECT payout_wallet, bux_amount_raw, sol_gross_lamports, fee_lamports, sol_net_lamports,
-            token_value_snapshot, fee_bps, bux_tx_signature, created_at
-     FROM cashout_pending_claims WHERE user_id = $1`,
-    [params.userId],
-  );
-  const previewRow = pendingPreview.rows[0];
+  const previewRow = await loadPendingClaim(params.userId);
   if (!previewRow) {
     throw new Error("No cashout in progress — start again from the Hub");
   }
@@ -460,15 +464,37 @@ export async function confirmCashout(params: {
     throw new Error("Payout wallet does not match the pending cashout");
   }
 
-  await assertConfirmEligibility(params.userId, previewRow);
-
   const amountRaw = BigInt(previewRow.bux_amount_raw);
 
+  // Verify $BUX on-chain first — after this we MUST complete SOL payout and honor the locked quote.
   await verifyBuxTransferToTreasury({
     signature: params.buxTxSignature,
     fromWallet: params.payoutWallet,
     amountRaw,
   });
+
+  // Stamp the pending row immediately so TTL cleanup cannot erase a verified transfer
+  // if SOL payout / Discord / client retry is interrupted.
+  await pool.query(
+    `UPDATE cashout_pending_claims
+     SET bux_tx_signature = $1
+     WHERE user_id = $2 AND payout_wallet = $3`,
+    [params.buxTxSignature, params.userId, params.payoutWallet],
+  );
+
+  // Pre-BUX gates (NFT, rate, TTL) — skip once transfer is verified so Helius flakes cannot
+  // strand users who already sent $BUX.
+  if (!isPendingExpired(new Date(previewRow.created_at))) {
+    try {
+      await assertConfirmEligibility(params.userId, previewRow);
+    } catch (error) {
+      console.warn("[cashout] confirm eligibility skipped after verified $BUX:", error);
+    }
+  } else {
+    console.warn(
+      `[cashout] completing expired pending claim for user ${params.userId} — $BUX verified on-chain`,
+    );
+  }
 
   const client = await pool.connect();
 
@@ -497,8 +523,6 @@ export async function confirmCashout(params: {
     ) {
       throw new Error("Cashout quote changed — start again from the Hub");
     }
-
-    assertPendingFresh(new Date(row.created_at));
 
     await client.query(
       `INSERT INTO cashout_used_signatures (tx_signature, user_id) VALUES ($1, $2)`,
@@ -545,6 +569,59 @@ export async function confirmCashout(params: {
   }
 
   return paid;
+}
+
+export type FinalizeCashoutResult = {
+  finalized: { id: string; userId: string; solTxSignature: string }[];
+  skipped: number;
+};
+
+/** Cron: complete SOL payouts stuck in processing/paying after $BUX was received. */
+export async function finalizePendingCashouts(limit = 10): Promise<FinalizeCashoutResult> {
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    user_id: string;
+    wallet_address: string;
+    bux_tx_signature: string;
+  }>(
+    `SELECT id, user_id, wallet_address, bux_tx_signature
+     FROM cashout_transactions
+     WHERE status IN ('processing', 'paying')
+       AND bux_tx_signature IS NOT NULL
+       AND tx_signature IS NULL
+       AND created_at < NOW() - INTERVAL '1 minute'
+     ORDER BY created_at ASC
+     LIMIT $1`,
+    [limit],
+  );
+
+  const finalized: FinalizeCashoutResult["finalized"] = [];
+  let skipped = 0;
+
+  for (const row of rows) {
+    try {
+      const result = await resumeProcessingCashout({
+        userId: String(row.user_id),
+        payoutWallet: row.wallet_address,
+        buxTxSignature: row.bux_tx_signature,
+      });
+      if (result?.solTxSignature) {
+        finalized.push({
+          id: row.id,
+          userId: String(row.user_id),
+          solTxSignature: result.solTxSignature,
+        });
+      } else {
+        skipped += 1;
+      }
+    } catch (error) {
+      skipped += 1;
+      console.error("[cashout/finalize] stuck payout", row.id, error);
+    }
+  }
+
+  return { finalized, skipped };
 }
 
 export async function cancelCashout(userId: string): Promise<void> {

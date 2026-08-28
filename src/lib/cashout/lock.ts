@@ -15,9 +15,12 @@ export function assertPendingFresh(createdAt: Date): void {
 
 export async function deleteExpiredPendingClaims(): Promise<void> {
   const pool = getPool();
+  // Only garbage-collect very old unused prepares. Never delete recent expired
+  // quotes — users who already sent $BUX may still need confirm/recover.
   await pool.query(
     `DELETE FROM cashout_pending_claims
-     WHERE created_at < NOW() - INTERVAL '${PENDING_CASHOUT_TTL_MINUTES} minutes'`,
+     WHERE created_at < NOW() - INTERVAL '7 days'
+       AND (bux_tx_signature IS NULL OR bux_tx_signature = '')`,
   );
 }
 

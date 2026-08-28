@@ -71,6 +71,43 @@ type PrepareCashoutResult = {
 
 type CashoutStep = "idle" | "ready" | "sending_bux" | "paying_sol" | "success";
 
+const CASHOUT_RESUME_KEY = "buxdao_cashout_resume";
+
+type CashoutResumeState = {
+  payoutWallet: string;
+  buxTxSignature: string;
+  amountBux: number;
+};
+
+function loadCashoutResume(): CashoutResumeState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = sessionStorage.getItem(CASHOUT_RESUME_KEY);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as CashoutResumeState;
+  } catch {
+    return null;
+  }
+}
+
+function saveCashoutResume(state: CashoutResumeState): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  sessionStorage.setItem(CASHOUT_RESUME_KEY, JSON.stringify(state));
+}
+
+function clearCashoutResume(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  sessionStorage.removeItem(CASHOUT_RESUME_KEY);
+}
+
 function formatBux(value: number): string {
   return Math.floor(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
@@ -186,6 +223,27 @@ export function HubCashoutSection() {
       return;
     }
 
+    const resume = loadCashoutResume();
+    if (resume && resume.payoutWallet === walletAddress) {
+      setBuxTxSignature(resume.buxTxSignature);
+      setPrepareData({
+        buxTreasuryWallet: tokenConfig.buxTreasuryWallet,
+        solPayoutWallet: tokenConfig.communityWallet,
+        mint: tokenConfig.mint,
+        payoutWallet: resume.payoutWallet,
+        amountRaw: "",
+        amountBux: resume.amountBux,
+        solGross: 0,
+        feeSol: 0,
+        solNet: 0,
+        feeBps: 0,
+        feePercent: 0,
+        tokenValue: 0,
+      });
+      setStep("paying_sol");
+      setCashoutError("Your $BUX transfer is on-chain. Retry the SOL payout below.");
+    }
+
     setLoading(true);
     setError(null);
     refreshEligibility()
@@ -212,6 +270,7 @@ export function HubCashoutSection() {
     if (step !== "success") {
       await fetch("/api/cashout/cancel", { method: "POST" }).catch(() => null);
     }
+    clearCashoutResume();
     setStep("idle");
     setPrepareData(null);
     setCashoutError(null);
@@ -269,6 +328,7 @@ export function HubCashoutSection() {
 
     setSolTxSignature(confirmBody.solTxSignature ?? null);
     setCompletedSolNet(confirmBody.solNet ?? prepareData?.solNet ?? null);
+    clearCashoutResume();
     setStep("success");
     setPrepareData(null);
     const next = await refreshEligibility().catch(() => null);
@@ -284,6 +344,7 @@ export function HubCashoutSection() {
 
     setStep("sending_bux");
     setCashoutError(null);
+    let sentSignature: string | null = null;
 
     try {
       const mint = new PublicKey(prepareData.mint || tokenConfig.mint);
@@ -310,12 +371,28 @@ export function HubCashoutSection() {
       transaction.feePayer = owner;
 
       const signature = await sendTransaction(transaction, connection);
+      sentSignature = signature;
       setBuxTxSignature(signature);
       setStep("paying_sol");
+      // Persist immediately — confirm may fail while $BUX is already on-chain.
+      saveCashoutResume({
+        payoutWallet: walletAddress,
+        buxTxSignature: signature,
+        amountBux: prepareData.amountBux,
+      });
 
       await handleConfirmCashout(signature);
     } catch (err) {
-      setStep(buxTxSignature ? "paying_sol" : "ready");
+      const resumeSig = sentSignature ?? buxTxSignature;
+      setStep(resumeSig ? "paying_sol" : "ready");
+      if (resumeSig) {
+        setBuxTxSignature(resumeSig);
+        saveCashoutResume({
+          payoutWallet: walletAddress,
+          buxTxSignature: resumeSig,
+          amountBux: prepareData.amountBux,
+        });
+      }
       setCashoutError(err instanceof Error ? err.message : "Cashout failed");
     }
   }
