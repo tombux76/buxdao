@@ -178,6 +178,45 @@ export async function buildRawHolders(
   return Array.from(holderMap.values());
 }
 
+/**
+ * NFT counts from Postgres snapshots only — no Helius DAS / staking history.
+ * Used by EMPIRE draw prepare so picking a winner does not hang on live scans.
+ */
+export async function buildNftHoldersFromSnapshots(): Promise<RawHolder[]> {
+  const holderMap = new Map<string, RawHolder>();
+
+  function getOrCreate(wallet: string): RawHolder {
+    let holder = holderMap.get(wallet);
+    if (!holder) {
+      holder = {
+        wallet,
+        buxBalance: 0,
+        nftCounts: Object.fromEntries(collectionConfigs.map((c) => [c.id, 0])),
+        totalNfts: 0,
+      };
+      holderMap.set(wallet, holder);
+    }
+    return holder;
+  }
+
+  for (const config of collectionConfigs) {
+    const snapshot = await loadNftHolderSnapshot(config.id);
+    if (!snapshot || snapshot.size === 0) {
+      continue;
+    }
+    for (const [owner, count] of snapshot) {
+      if (isHiddenWallet(owner) || count <= 0) {
+        continue;
+      }
+      const holder = getOrCreate(owner);
+      holder.nftCounts[config.id] = (holder.nftCounts[config.id] ?? 0) + count;
+      holder.totalNfts += count;
+    }
+  }
+
+  return Array.from(holderMap.values());
+}
+
 export function isHiddenWallet(wallet: string): boolean {
   return isExemptWallet(wallet) || isStakingWallet(wallet);
 }

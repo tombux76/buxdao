@@ -102,7 +102,7 @@ export async function preparePrizeDraw(params: {
 }): Promise<PreparePrizeDrawResult> {
   assertPrizeWallet(params.walletAddress);
 
-  const entries = await buildEligiblePool(true);
+  const entries = await buildEligiblePool(false);
   if (entries.length === 0) {
     throw new Error("No eligible holders — nobody qualifies for the draw yet");
   }

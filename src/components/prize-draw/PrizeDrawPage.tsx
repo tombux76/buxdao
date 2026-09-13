@@ -223,6 +223,7 @@ export function PrizeDrawPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress }),
+        signal: AbortSignal.timeout(60_000),
       });
       const prepare = (await prepareRes.json()) as PrepareResult;
       if (!prepareRes.ok) {
@@ -338,7 +339,11 @@ export function PrizeDrawPage() {
       );
       await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Draw failed");
+      if (err instanceof DOMException && err.name === "TimeoutError") {
+        setError("Timed out picking a winner — try again in a moment");
+      } else {
+        setError(err instanceof Error ? err.message : "Draw failed");
+      }
     } finally {
       setDrawStep("idle");
     }

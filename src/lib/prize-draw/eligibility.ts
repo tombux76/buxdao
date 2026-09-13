@@ -1,5 +1,9 @@
 import { getPool } from "@/lib/db";
-import { buildRawHolders, isHiddenWallet } from "@/lib/bux/helius-holders";
+import {
+  buildNftHoldersFromSnapshots,
+  buildRawHolders,
+  isHiddenWallet,
+} from "@/lib/bux/helius-holders";
 import { getWalletIdentityMaps } from "@/lib/bux/discord";
 import {
   getFirstLinkedWalletAddress,
@@ -49,11 +53,16 @@ export async function buildEligiblePool(forceRefresh = false): Promise<PrizeDraw
     return cachedPool;
   }
 
-  const [rawHolders, { walletToUserId, userDiscord }] = await Promise.all([
-    // Live DAS only — never let a stale snapshot keep sold NFTs in the prize pool.
-    buildRawHolders({ allowSnapshot: false }),
-    getWalletIdentityMaps(),
-  ]);
+  // Prefer NFT snapshots (cron-refreshed) so prepare never blocks on live DAS /
+  // staking-history scans. Fall back to live+snapshot holders if snapshots empty.
+  let rawHolders = await buildNftHoldersFromSnapshots();
+  const snapshotNftWallets = rawHolders.filter((h) => h.totalNfts > 0).length;
+  if (snapshotNftWallets === 0) {
+    console.warn("[prize-draw] NFT snapshots empty — falling back to live holder scan");
+    rawHolders = await buildRawHolders({ allowSnapshot: true });
+  }
+
+  const { walletToUserId, userDiscord } = await getWalletIdentityMaps();
 
   const nftsByUser = new Map<number, number>();
   for (const holder of rawHolders) {
