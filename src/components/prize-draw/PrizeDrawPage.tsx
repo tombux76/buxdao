@@ -72,7 +72,7 @@ type PrepareResult = {
   error?: string;
 };
 
-type DrawStep = "idle" | "sending" | "confirming";
+type DrawStep = "idle" | "preparing" | "sending" | "confirming";
 
 const EMPIRE_IMAGE = "/brand/empire.png";
 
@@ -216,7 +216,7 @@ export function PrizeDrawPage() {
 
     setRunResult(null);
     setError(null);
-    setDrawStep("sending");
+    setDrawStep("preparing");
 
     try {
       const prepareRes = await fetch("/api/empire-draw/prepare", {
@@ -238,7 +238,17 @@ export function PrizeDrawPage() {
       const toAta = await getAssociatedTokenAddress(mint, recipient);
 
       const transaction = new Transaction();
-      const destInfo = await connection.getAccountInfo(toAta);
+      // Bound the ATA lookup — a hung RPC here used to leave the UI on
+      // "Approve transfer…" forever with no wallet prompt.
+      let destInfo: Awaited<ReturnType<typeof connection.getAccountInfo>> = null;
+      try {
+        destInfo = await Promise.race([
+          connection.getAccountInfo(toAta),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
+        ]);
+      } catch {
+        destInfo = null;
+      }
       if (!destInfo) {
         transaction.add(createAssociatedTokenAccountInstruction(owner, toAta, recipient, mint));
       }
@@ -248,6 +258,7 @@ export function PrizeDrawPage() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = owner;
 
+      setDrawStep("sending");
       const signature = await sendTransaction(transaction, connection);
       try {
         sessionStorage.setItem(
@@ -603,11 +614,13 @@ export function PrizeDrawPage() {
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent-purple px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-purple/90 disabled:opacity-50"
           >
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
-            {drawStep === "sending"
-              ? "Approve transfer in wallet…"
-              : drawStep === "confirming"
-                ? "Confirming on-chain…"
-                : "Run draw"}
+            {drawStep === "preparing"
+              ? "Picking winner…"
+              : drawStep === "sending"
+                ? "Approve transfer in wallet…"
+                : drawStep === "confirming"
+                  ? "Confirming on-chain…"
+                  : "Run draw"}
           </button>
         </Card>
       )}
