@@ -9,11 +9,11 @@ import {
   type BuxTokenAccountSlice,
 } from "@/lib/solana/bux-token-accounts";
 import { heliusRpc, hasHeliusApiKey } from "@/lib/helius-rpc";
-
-type NftOwnerItem = {
-  id?: string;
-  ownership?: { owner?: string };
-};
+import type { DasAsset } from "@/lib/discord/helius";
+import {
+  markCollectionAssetsComplete,
+  saveCollectionAssets,
+} from "@/lib/hub/collection-assets";
 
 async function heliusRpcSoft<T>(method: string, params: unknown, timeoutMs = 20_000): Promise<T | null> {
   if (!hasHeliusApiKey()) {
@@ -58,7 +58,7 @@ async function fetchResolvedNftCountsByOwner(
   let dasFailed = false;
   let sawItems = false;
   while (page <= 50) {
-    const result = await heliusRpcSoft<{ items?: NftOwnerItem[] }>("getAssetsByGroup", {
+    const result = await heliusRpcSoft<{ items?: DasAsset[] }>("getAssetsByGroup", {
       groupKey: "collection",
       groupValue: collectionMint,
       page,
@@ -73,6 +73,7 @@ async function fetchResolvedNftCountsByOwner(
     const items = result.items ?? [];
     if (items.length > 0) {
       sawItems = true;
+      await saveCollectionAssets(config.id, items);
     }
     for (const item of items) {
       const onChainOwner = item.ownership?.owner;
@@ -101,6 +102,10 @@ async function fetchResolvedNftCountsByOwner(
       break;
     }
     page += 1;
+  }
+
+  if (sawItems && !dasFailed) {
+    await markCollectionAssetsComplete(config.id);
   }
 
   if (sawItems && counts.size > 0) {

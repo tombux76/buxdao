@@ -50,7 +50,7 @@ function decodeOwnerAndAmount(raw: unknown): { owner: string; amount: number } |
   }
 }
 
-async function jsonRpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
+export async function jsonRpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,7 +87,7 @@ async function jsonRpc<T>(url: string, method: string, params: unknown[]): Promi
   return payload.result;
 }
 
-async function withRpcFallback<T>(fn: (url: string) => Promise<T>): Promise<T> {
+export async function withRpcFallback<T>(fn: (url: string) => Promise<T>): Promise<T> {
   const candidates = getServerRpcUrlCandidates();
   let lastError: Error | null = null;
 
@@ -138,6 +138,36 @@ export async function fetchAllBuxTokenAccountsViaRpc(): Promise<BuxTokenAccountS
   }
 
   return accounts;
+}
+
+/** Mints of every NFT-shaped (amount 1, decimals 0) classic SPL token account the wallet holds. */
+export async function fetchWalletNftMintsViaRpc(wallet: string): Promise<string[]> {
+  const result = await withRpcFallback((url) =>
+    jsonRpc<{
+      value: {
+        account: {
+          data: {
+            parsed?: {
+              info?: { mint?: string; tokenAmount?: { amount?: string; decimals?: number } };
+            };
+          };
+        };
+      }[];
+    }>(url, "getTokenAccountsByOwner", [
+      wallet,
+      { programId: TOKEN_PROGRAM_ID.toBase58() },
+      { encoding: "jsonParsed", commitment: "confirmed" },
+    ]),
+  );
+
+  const mints: string[] = [];
+  for (const item of result.value ?? []) {
+    const info = item.account?.data?.parsed?.info;
+    if (info?.mint && info.tokenAmount?.decimals === 0 && info.tokenAmount.amount === "1") {
+      mints.push(info.mint);
+    }
+  }
+  return mints;
 }
 
 /** $BUX balance for one wallet via raw JSON-RPC (not Helius-only). */

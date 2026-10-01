@@ -2,7 +2,16 @@ import { collectionConfigs } from "@/content/site";
 import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
 import { heliusRpc, hasHeliusApiKey } from "@/lib/helius-rpc";
 import { fetchGravestakeWalletPositions } from "@/lib/gravestake";
-import { fetchWalletBuxBalanceViaRpc } from "@/lib/solana/bux-token-accounts";
+import {
+  loadCachedCollectionIds,
+  loadCollectionAssetsByMints,
+  saveCollectionAssets,
+  type CachedCollectionAsset,
+} from "@/lib/hub/collection-assets";
+import {
+  fetchWalletBuxBalanceViaRpc,
+  fetchWalletNftMintsViaRpc,
+} from "@/lib/solana/bux-token-accounts";
 
 export type HubNft = {
   mint: string;
@@ -101,6 +110,22 @@ async function fetchAssetsByIds(mints: string[]): Promise<DasAsset[]> {
   return assets;
 }
 
+async function cachedToHubNft(entry: CachedCollectionAsset, staked: boolean): Promise<HubNft> {
+  return {
+    mint: entry.mint,
+    name: entry.name,
+    number: parseNftNumber(entry.name),
+    image: await resolveAssetImage({
+      id: entry.mint,
+      content: {
+        links: entry.image ? { image: entry.image } : undefined,
+        json_uri: entry.jsonUri ?? undefined,
+      },
+    }),
+    staked,
+  };
+}
+
 function sortNfts(nfts: HubNft[]): HubNft[] {
   return [...nfts].sort((a, b) => {
     if (a.number != null && b.number != null) {
@@ -132,9 +157,14 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
       .map((c) => [c.stakingWallet!.toLowerCase(), c] as const),
   );
 
-  const [buxBalance, positions] = await Promise.all([
+  const [buxBalance, positions, walletMints, cachedCollectionIds] = await Promise.all([
     fetchBuxBalance(wallet),
     fetchGravestakeWalletPositions(wallet),
+    fetchWalletNftMintsViaRpc(wallet).catch((error) => {
+      console.error("[hub] token account RPC failed, falling back to DAS:", error);
+      return null;
+    }),
+    loadCachedCollectionIds(),
   ]);
 
   // Mints actively staked in each of our pools (soft-stake + custody).
@@ -155,9 +185,56 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
   );
   const seenMints = new Set<string>();
 
+  // Live ownership from on-chain token accounts; names/images from the Postgres catalog.
+  let cached = new Map<string, CachedCollectionAsset>();
+  if (walletMints) {
+    const allStaked = [...stakedMintsByCollection.values()].flatMap((s) => [...s]);
+    try {
+      cached = await loadCollectionAssetsByMints([...new Set([...walletMints, ...allStaked])]);
+    } catch (error) {
+      console.error("[hub] collection asset cache load failed:", error);
+    }
+  }
+  const walletMintSet = new Set(walletMints ?? []);
+
   for (const config of collectionConfigs) {
     const stakedMints = stakedMintsByCollection.get(config.id) ?? new Set<string>();
+
+    if (walletMints && cachedCollectionIds.has(config.id)) {
+      const mints = [...new Set([...walletMintSet, ...stakedMints])].filter(
+        (mint) => cached.get(mint)?.collectionId === config.id || stakedMints.has(mint),
+      );
+      const uncachedStaked: string[] = [];
+      for (const mint of mints) {
+        const entry = cached.get(mint);
+        if (!entry) {
+          uncachedStaked.push(mint);
+          continue;
+        }
+        if (seenMints.has(mint)) {
+          continue;
+        }
+        seenMints.add(mint);
+        collections[config.id].push(await cachedToHubNft(entry, stakedMints.has(mint)));
+      }
+      if (uncachedStaked.length > 0) {
+        const assets = await fetchAssetsByIds(uncachedStaked);
+        await saveCollectionAssets(config.id, assets);
+        for (const asset of assets) {
+          const nft = await assetToHubNft(asset, true);
+          if (!nft || seenMints.has(nft.mint)) {
+            continue;
+          }
+          seenMints.add(nft.mint);
+          collections[config.id].push(nft);
+        }
+      }
+      collections[config.id] = sortNfts(collections[config.id]);
+      continue;
+    }
+
     const inWallet = await fetchWalletCollectionAssets(wallet, config.collectionMint);
+    await saveCollectionAssets(config.id, inWallet);
 
     for (const asset of inWallet) {
       const nft = await assetToHubNft(asset, stakedMints.has(asset.id!));
@@ -172,6 +249,7 @@ export async function fetchHubWalletHoldings(wallet: string): Promise<HubWalletH
     const missingStaked = [...stakedMints].filter((mint) => !seenMints.has(mint));
     if (missingStaked.length > 0) {
       const assets = await fetchAssetsByIds(missingStaked);
+      await saveCollectionAssets(config.id, assets);
       for (const asset of assets) {
         const nft = await assetToHubNft(asset, true);
         if (!nft || seenMints.has(nft.mint)) {
