@@ -172,7 +172,7 @@ async function holdingsFromChain(
 
   const deadline = Date.now() + IMAGE_BUDGET_MS;
   const newCatalogRows: CachedCollectionAsset[] = [];
-  const nfts = await mapWithConcurrency(entries, 16, async (entry) => {
+  const nfts = await mapWithConcurrency(entries, 8, async (entry) => {
     let image = catalog.get(entry.mint)?.image ?? null;
     if (!image && entry.uri && Date.now() < deadline) {
       image = await resolveAssetImage({ id: entry.mint, content: { json_uri: entry.uri } });

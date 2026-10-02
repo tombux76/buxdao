@@ -47,7 +47,6 @@ async function fetchMetadataImage(jsonUri: string): Promise<string | null> {
   try {
     const response = await fetch(jsonUri, { signal: controller.signal, cache: "force-cache" });
     if (!response.ok) {
-      METADATA_IMAGE_CACHE.set(jsonUri, null);
       return null;
     }
 
@@ -59,7 +58,6 @@ async function fetchMetadataImage(jsonUri: string): Promise<string | null> {
     METADATA_IMAGE_CACHE.set(jsonUri, image);
     return image;
   } catch {
-    METADATA_IMAGE_CACHE.set(jsonUri, null);
     return null;
   } finally {
     clearTimeout(timeout);
