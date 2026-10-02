@@ -51,14 +51,20 @@ function directImage(asset: DasAsset): string | null {
 
 /** Mint → name/image catalog. Static per mint, so the Hub can render without Helius DAS. */
 export async function saveCollectionAssets(collectionId: string, assets: DasAsset[]): Promise<void> {
-  const rows = assets
-    .filter((a) => a.id)
-    .map((a) => ({
-      mint: a.id!,
-      name: a.content?.metadata?.name?.trim() || "Unknown",
-      image: directImage(a),
-      jsonUri: a.content?.json_uri?.trim() || null,
-    }));
+  await saveCatalogEntries(
+    assets
+      .filter((a) => a.id)
+      .map((a) => ({
+        mint: a.id!,
+        collectionId,
+        name: a.content?.metadata?.name?.trim() || "Unknown",
+        image: directImage(a),
+        jsonUri: a.content?.json_uri?.trim() || null,
+      })),
+  );
+}
+
+export async function saveCatalogEntries(rows: CachedCollectionAsset[]): Promise<void> {
   if (rows.length === 0) {
     return;
   }
@@ -73,7 +79,7 @@ export async function saveCollectionAssets(collectionId: string, assets: DasAsse
       for (const row of chunk) {
         const o = params.length;
         values.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, now())`);
-        params.push(row.mint, collectionId, row.name, row.image, row.jsonUri);
+        params.push(row.mint, row.collectionId, row.name, row.image, row.jsonUri);
       }
       await pool.query(
         `INSERT INTO collection_assets (mint, collection_id, name, image, json_uri, updated_at)
