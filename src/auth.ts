@@ -32,14 +32,64 @@ if (process.env.AUTH_TWITTER_ID && process.env.AUTH_TWITTER_SECRET) {
   );
 }
 
+// Discord sends the browser to AUTH_URL (https://buxdao.com). Vercel then 308s
+// that to www.buxdao.com. SameSite=Lax cookies are dropped on that second hop,
+// so the OAuth state cookie never arrives and Auth.js shows error=Configuration.
+const crossSiteCookie = { sameSite: "none" as const, secure: true };
+
+function canonicalOrigin(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl);
+    if (url.hostname === "buxdao.com") {
+      url.hostname = "www.buxdao.com";
+    }
+    return url.origin;
+  } catch {
+    return baseUrl;
+  }
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: BuxdaoPostgresAdapter(getPool()),
   providers,
   trustHost: true,
+  cookies:
+    process.env.NODE_ENV === "production"
+      ? {
+          sessionToken: { options: crossSiteCookie },
+          callbackUrl: { options: crossSiteCookie },
+          state: { options: crossSiteCookie },
+          pkceCodeVerifier: { options: crossSiteCookie },
+          nonce: { options: crossSiteCookie },
+        }
+      : undefined,
   pages: {
     signIn: "/hub",
   },
   callbacks: {
+    redirect({ url, baseUrl }) {
+      const origin = canonicalOrigin(baseUrl);
+      if (url.startsWith("/")) {
+        return `${origin}${url}`;
+      }
+      try {
+        const target = new URL(url);
+        const base = new URL(baseUrl);
+        if (
+          target.hostname === base.hostname ||
+          target.hostname === "buxdao.com" ||
+          target.hostname === "www.buxdao.com"
+        ) {
+          if (target.hostname === "buxdao.com") {
+            target.hostname = "www.buxdao.com";
+          }
+          return target.toString();
+        }
+      } catch {
+        // Fall through to the canonical origin.
+      }
+      return origin;
+    },
     session({ session, user }) {
       if (session.user) {
         session.user.id = String(user.id);
