@@ -11,6 +11,9 @@ import { ensureRewardAccount } from "@/lib/holder-rewards/accounts";
 
 const providers: Provider[] = [
   Discord({
+    // Discord now returns iss=https://discord.com on the callback. Auth.js
+    // otherwise expects https://authjs.dev and rejects the login.
+    issuer: "https://discord.com",
     authorization: { params: { scope: "identify" } },
   }),
 ];
