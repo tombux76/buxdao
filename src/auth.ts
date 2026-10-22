@@ -49,10 +49,47 @@ function canonicalOrigin(baseUrl: string): string {
   }
 }
 
+function authErrorText(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error).slice(0, 4000);
+  }
+  const cause = error.cause;
+  let causeText = "";
+  if (cause instanceof Error) {
+    causeText = `${cause.name}: ${cause.message}`;
+  } else if (cause != null) {
+    try {
+      causeText = JSON.stringify(cause);
+    } catch {
+      causeText = String(cause);
+    }
+  }
+  return `${error.name}: ${error.message}${causeText ? ` | ${causeText}` : ""}`.slice(0, 4000);
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: BuxdaoPostgresAdapter(getPool()),
   providers,
   trustHost: true,
+  logger: {
+    error(error) {
+      console.error("[auth]", error);
+      const message = authErrorText(error);
+      void (async () => {
+        const pool = getPool();
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS auth_error_log (
+            id SERIAL PRIMARY KEY,
+            message TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        `);
+        await pool.query(`INSERT INTO auth_error_log (message) VALUES ($1)`, [message]);
+      })().catch((logError) => {
+        console.error("[auth] failed to store error", logError);
+      });
+    },
+  },
   cookies:
     process.env.NODE_ENV === "production"
       ? {
