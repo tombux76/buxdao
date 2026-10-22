@@ -2,6 +2,7 @@ import { cache } from "react";
 import { collectionConfigs, type CollectionConfig } from "@/content/site";
 import { fetchGraveMarketCollectionStats } from "@/lib/gravemarket";
 import { fetchCollectionSupply } from "@/lib/helius";
+import { fetchMagicEdenStats, formatSol } from "@/lib/magic-eden";
 function formatCount(value?: number | null): string {
   if (value == null || Number.isNaN(value)) {
     return "—";
@@ -37,14 +38,18 @@ function withStats(
 }
 
 async function enrichCollection(config: CollectionConfig): Promise<CollectionWithStats> {
-  const [graveMarketStats, heliusSupply] = await Promise.all([
+  const [graveMarketStats, heliusSupply, magicEdenStats] = await Promise.all([
     fetchGraveMarketCollectionStats(config.id),
     fetchCollectionSupply(config.collectionMint),
+    fetchMagicEdenStats(config.magicEdenSymbol),
   ]);
+
+  const magicEdenFloor = formatSol(magicEdenStats?.floorPrice);
 
   if (graveMarketStats) {
     return withStats(config, {
       ...graveMarketStats,
+      floor: graveMarketStats.floor === "— SOL" ? magicEdenFloor : graveMarketStats.floor,
       supply:
         graveMarketStats.supply === "—"
           ? formatCount(heliusSupply)
@@ -53,6 +58,7 @@ async function enrichCollection(config: CollectionConfig): Promise<CollectionWit
   }
 
   return withStats(config, {
+    floor: magicEdenFloor,
     supply: formatCount(heliusSupply),
   });
 }
