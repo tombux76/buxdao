@@ -32,9 +32,14 @@ if (process.env.AUTH_TWITTER_ID && process.env.AUTH_TWITTER_SECRET) {
   );
 }
 
-// Discord sends the browser to AUTH_URL (https://buxdao.com). Vercel then 308s
-// that to www.buxdao.com. SameSite=Lax cookies are dropped on that second hop,
-// so the OAuth state cookie never arrives and Auth.js shows error=Configuration.
+// AUTH_URL is the apex host. Vercel 308s every apex request to www, and that
+// extra hop drops the OAuth cookie on the way back from Discord. Send Discord
+// straight to www so the callback is one top-level request.
+const configuredAuthUrl = process.env.AUTH_URL?.replace(/\/$/, "");
+if (configuredAuthUrl === "https://buxdao.com") {
+  process.env.AUTH_URL = "https://www.buxdao.com";
+}
+
 const crossSiteCookie = { sameSite: "none" as const, secure: true };
 
 function canonicalOrigin(baseUrl: string): string {
