@@ -8,6 +8,7 @@ import {
 } from "@/lib/discord/config";
 import { lookupNftByNumber } from "@/lib/discord/collection-index";
 import {
+  lookupHowRareNftByNumber,
   lookupNftByRankFromHowRare,
   type HowRareNft,
 } from "@/lib/discord/howrare";
@@ -81,25 +82,30 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
     return { title: "Unknown collection", description: "That subcommand is not supported.", color: 0xff4d4d };
   }
 
+  // Prefer DAS index; when Helius is down, fall back to HowRare for ranked collections.
   const indexed = await lookupNftByNumber(collectionId, tokenId);
-  if (!indexed) {
+  const howRare =
+    indexed == null ? await lookupHowRareNftByNumber(collectionId, tokenId).catch(() => null) : null;
+  const mint = indexed?.mint ?? howRare?.mint;
+  if (!mint) {
     return {
       title: `${config.name} #${tokenId}`,
-      description: "NFT not found in this collection (on-chain index).",
+      description: "NFT not found in this collection.",
       ...collectionEmbedImage(config),
     };
   }
 
-  const display = await resolveNftDisplay(indexed.mint);
-  const owner = display.owner ?? indexed.owner;
-  const name = display.name || indexed.name;
-  const image = display.image ?? indexed.image;
+  const display = await resolveNftDisplay(mint);
+  const owner = display.owner ?? indexed?.owner ?? null;
+  const name = display.name || indexed?.name || `${config.name} #${tokenId}`;
+  const image = display.image ?? indexed?.image ?? null;
 
   return buildNftCommandEmbed(config, {
-    mint: indexed.mint,
+    mint,
     name,
     owner,
     image,
+    howRare: howRare ?? undefined,
   });
 }
 

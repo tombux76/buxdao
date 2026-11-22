@@ -35,6 +35,7 @@ type RankCacheEntry = {
   expiresAt: number;
   byRank: Map<number, HowRareNft>;
   byMint: Map<string, HowRareNft>;
+  byNumber: Map<number, HowRareNft>;
 };
 const rankCache = new Map<string, RankCacheEntry>();
 
@@ -60,10 +61,12 @@ function parseHowRareItem(item: HowRareOnlyRarityItem): HowRareNft | null {
   };
 }
 
-async function buildRankIndex(collectionId: string): Promise<Pick<RankCacheEntry, "byRank" | "byMint">> {
+async function buildRankIndex(
+  collectionId: string,
+): Promise<Pick<RankCacheEntry, "byRank" | "byMint" | "byNumber">> {
   const slug = HOWRARE_COLLECTION_SLUG[collectionId];
   if (!slug) {
-    return { byRank: new Map(), byMint: new Map() };
+    return { byRank: new Map(), byMint: new Map(), byNumber: new Map() };
   }
 
   const response = await fetch(`https://api.howrare.is/v0.1/collections/${slug}/only_rarity`, {
@@ -80,6 +83,7 @@ async function buildRankIndex(collectionId: string): Promise<Pick<RankCacheEntry
 
   const byRank = new Map<number, HowRareNft>();
   const byMint = new Map<string, HowRareNft>();
+  const byNumber = new Map<number, HowRareNft>();
   for (const item of payload.result?.data?.items ?? []) {
     const parsed = parseHowRareItem(item);
     if (!parsed) {
@@ -89,15 +93,20 @@ async function buildRankIndex(collectionId: string): Promise<Pick<RankCacheEntry
       byRank.set(parsed.rank, parsed);
     }
     byMint.set(parsed.mint, parsed);
+    if (!byNumber.has(parsed.number)) {
+      byNumber.set(parsed.number, parsed);
+    }
   }
-  return { byRank, byMint };
+  return { byRank, byMint, byNumber };
 }
 
 /** In-memory cache per warm instance (~1h). Used by `/rank` and `/nft` rarity. */
-async function getRankCacheEntry(collectionId: string): Promise<Pick<RankCacheEntry, "byRank" | "byMint">> {
+async function getRankCacheEntry(
+  collectionId: string,
+): Promise<Pick<RankCacheEntry, "byRank" | "byMint" | "byNumber">> {
   const cached = rankCache.get(collectionId);
   if (cached && cached.expiresAt > Date.now()) {
-    return { byRank: cached.byRank, byMint: cached.byMint };
+    return { byRank: cached.byRank, byMint: cached.byMint, byNumber: cached.byNumber };
   }
 
   const index = await buildRankIndex(collectionId);
@@ -133,4 +142,16 @@ export async function lookupHowRareNftByMint(
   }
   const { byMint } = await getRankCacheEntry(collectionId);
   return byMint.get(mint) ?? null;
+}
+
+/** Token id / name number → HowRare row (DAS-independent fallback for `/nft`). */
+export async function lookupHowRareNftByNumber(
+  collectionId: string,
+  tokenNumber: number,
+): Promise<HowRareNft | null> {
+  if (!HOWRARE_COLLECTION_SLUG[collectionId]) {
+    return null;
+  }
+  const { byNumber } = await getRankCacheEntry(collectionId);
+  return byNumber.get(tokenNumber) ?? null;
 }
