@@ -1,6 +1,6 @@
 import { collectionConfigs, type CollectionConfig } from "@/content/site";
-import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
-import { heliusRpc, markHeliusKeyExhausted } from "@/lib/helius-rpc";
+import { fetchAsset, resolveNftDisplay } from "@/lib/discord/helius";
+import { markHeliusKeyExhausted } from "@/lib/helius-rpc";
 import { buildActivityEmbed } from "@/lib/discord/nft-embed";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
 import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
@@ -151,14 +151,6 @@ async function fetchTransaction(signature: string): Promise<RpcTransaction | nul
   ]);
 }
 
-async function fetchAssetSoft(mint: string): Promise<DasAsset | null> {
-  try {
-    return await heliusRpc<DasAsset>("getAsset", { id: mint }, { softFail: true });
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Confirm mint belongs to the pool's collection.
  * Prefers DAS, then on-chain Metaplex metadata. If both are unavailable, allow —
@@ -168,7 +160,7 @@ async function resolveCollectionForMint(
   mint: string,
   expectedCollectionMint: string,
 ): Promise<boolean> {
-  const asset = await fetchAssetSoft(mint);
+  const asset = await fetchAsset(mint);
   const dasCollection = asset?.grouping?.find((group) => group.group_key === "collection")?.group_value;
   if (dasCollection) {
     return dasCollection === expectedCollectionMint;
@@ -191,28 +183,10 @@ async function resolveEmbedMeta(
   config: CollectionConfig,
   mint: string,
 ): Promise<{ name: string; image: string | null }> {
-  const live = await fetchAssetSoft(mint);
-  let name = live?.content?.metadata?.name?.trim() || null;
-  let image = await resolveAssetImage(live);
-
-  if (!name || !image) {
-    try {
-      const onChain = await fetchOnChainNftMetadata([mint]);
-      const meta = onChain.get(mint);
-      if (!name && meta?.name) {
-        name = meta.name;
-      }
-      if (!image && meta?.uri) {
-        image = await resolveAssetImage({ content: { json_uri: meta.uri } });
-      }
-    } catch {
-      // post without image / generic name
-    }
-  }
-
+  const display = await resolveNftDisplay(mint);
   return {
-    name: name || `${config.name} NFT`,
-    image,
+    name: display.name || `${config.name} NFT`,
+    image: display.image,
   };
 }
 
