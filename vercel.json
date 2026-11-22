@@ -10,6 +10,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/discord/howrare-sync",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cashout/finalize",
       "schedule": "*/5 * * * *"
     }
