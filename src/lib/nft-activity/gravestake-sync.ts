@@ -15,9 +15,10 @@ import { fetchOnChainNftMetadata } from "@/lib/solana/nft-metadata";
 import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const OVERLAP_SEC = 5 * 60;
-const INCREMENTAL_SIGNATURE_LIMIT = 25;
+const INCREMENTAL_SIGNATURE_LIMIT = 100;
 const BACKFILL_PAGE_SIZE = 100;
 const BACKFILL_MAX_PAGES = 200;
+const PUBLIC_RPC_HOST = "api.mainnet-beta.solana.com";
 
 /** Prefer QuickNode / configured RPC; public next; Helius last (quota-sensitive). */
 function getGravestakeRpcCandidates(): string[] {
@@ -28,7 +29,7 @@ function getGravestakeRpcCandidates(): string[] {
   for (const url of all) {
     if (url.includes("helius-rpc.com")) {
       helius.push(url);
-    } else if (url.includes("api.mainnet-beta.solana.com")) {
+    } else if (url.includes(PUBLIC_RPC_HOST)) {
       publicRpc.push(url);
     } else {
       preferred.push(url);
@@ -37,7 +38,11 @@ function getGravestakeRpcCandidates(): string[] {
   return [...preferred, ...publicRpc, ...helius];
 }
 
-/** Sticky URL for one sync run — once a candidate works, keep using it. */
+function isPublicRpc(url: string): boolean {
+  return url.includes(PUBLIC_RPC_HOST);
+}
+
+/** Sticky URL for one sync run — prefer paid RPC; never sticky to public (429s under load). */
 let stickyRpcUrl: string | null = null;
 
 type SignatureInfo = {
@@ -70,17 +75,26 @@ async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {
   let lastError: Error | null = null;
 
   for (const url of ordered) {
-    try {
-      const result = await jsonRpc<T>(url, method, params);
-      stickyRpcUrl = url;
-      return result;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (url === stickyRpcUrl) {
-        stickyRpcUrl = null;
-      }
-      if (url.includes("helius-rpc.com") && /429|max usage|rate limit|quota|HTTP 40[123]/i.test(lastError.message)) {
-        markHeliusKeyExhausted(url);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const result = await jsonRpc<T>(url, method, params);
+        if (!isPublicRpc(url)) {
+          stickyRpcUrl = url;
+        }
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (url === stickyRpcUrl) {
+          stickyRpcUrl = null;
+        }
+        if (url.includes("helius-rpc.com") && /429|max usage|rate limit|quota|HTTP 40[123]/i.test(lastError.message)) {
+          markHeliusKeyExhausted(url);
+        }
+        const retryable = /429|rate limit|timeout|fetch failed|ECONNRESET|ETIMEDOUT/i.test(lastError.message);
+        if (!retryable || attempt === 2) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
       }
     }
   }
@@ -277,53 +291,70 @@ export async function syncGravestakeActivity(): Promise<GravestakeActivitySyncRe
         .filter((entry) => !entry.err && entry.blockTime != null)
         .sort((a, b) => (a.blockTime ?? 0) - (b.blockTime ?? 0));
 
-      let maxBlockTime = sinceSec;
+      // Only advance the cursor past signatures we fully handled — never skip over RPC failures.
+      let syncedThrough = sinceSec;
+      let aborted = false;
 
       for (const entry of ordered) {
         const blockTime = entry.blockTime ?? 0;
-        if (blockTime > maxBlockTime) {
-          maxBlockTime = blockTime;
-        }
 
         if (blockTime <= sinceSec) {
           result.skipped += 1;
+          syncedThrough = Math.max(syncedThrough, blockTime);
           continue;
         }
 
         // Light pacing so public RPC fallback doesn't 429 mid-pool.
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        const tx = await fetchTransaction(entry.signature);
-        if (!tx) {
-          result.skipped += 1;
-          continue;
-        }
-
-        const parsed = parseGravestakeTransaction(entry.signature, blockTime, tx, poolWallet);
-        if (!parsed) {
-          result.skipped += 1;
-          continue;
-        }
-
-        result.eventsMatched += 1;
+        await new Promise((resolve) => setTimeout(resolve, 80));
 
         try {
-          const outcome = await processGravestakeEvent(config, parsed);
-          if (outcome === "posted") {
-            result.posted += 1;
-          } else {
-            result.skipped += 1;
+          const tx = await fetchTransaction(entry.signature);
+          if (!tx) {
+            result.errors.push(`${config.id}:${entry.signature}: empty transaction`);
+            aborted = true;
+            break;
           }
+
+          const parsed = parseGravestakeTransaction(entry.signature, blockTime, tx, poolWallet);
+          if (!parsed) {
+            result.skipped += 1;
+            syncedThrough = blockTime;
+            continue;
+          }
+
+          result.eventsMatched += 1;
+
+          try {
+            const outcome = await processGravestakeEvent(config, parsed);
+            if (outcome === "posted") {
+              result.posted += 1;
+            } else {
+              result.skipped += 1;
+            }
+          } catch (error) {
+            result.errors.push(
+              `${config.id}:${entry.signature}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
+          syncedThrough = blockTime;
         } catch (error) {
           result.errors.push(
             `${config.id}:${entry.signature}: ${error instanceof Error ? error.message : String(error)}`,
           );
+          aborted = true;
+          break;
         }
       }
 
-      // Backfill only marks the pool caught up after a full pass (dedup prevents reposts on retry).
-      if (ordered.length > 0) {
-        await setLastGravestakeBlockTime(config.id, new Date(maxBlockTime * 1000));
+      if (ordered.length > 0 && syncedThrough > sinceSec) {
+        await setLastGravestakeBlockTime(config.id, new Date(syncedThrough * 1000));
+      } else if (ordered.length > 0 && !aborted) {
+        // All signatures were at/before sinceSec — still bump so overlap window stays healthy.
+        const newest = ordered[ordered.length - 1]?.blockTime;
+        if (newest != null) {
+          await setLastGravestakeBlockTime(config.id, new Date(newest * 1000));
+        }
       }
     } catch (error) {
       result.errors.push(`${config.id}: ${error instanceof Error ? error.message : String(error)}`);
