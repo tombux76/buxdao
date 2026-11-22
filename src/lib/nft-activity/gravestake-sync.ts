@@ -1,6 +1,6 @@
-import { collectionConfigs } from "@/content/site";
-import { fetchAsset, resolveAssetImage } from "@/lib/discord/helius";
-import { heliusRpc } from "@/lib/helius-rpc";
+import { collectionConfigs, type CollectionConfig } from "@/content/site";
+import { resolveAssetImage, type DasAsset } from "@/lib/discord/helius";
+import { heliusRpc, markHeliusKeyExhausted } from "@/lib/helius-rpc";
 import { buildActivityEmbed } from "@/lib/discord/nft-embed";
 import { markActivityProcessed } from "@/lib/nft-activity/dedup";
 import { postActivityEmbed } from "@/lib/nft-activity/discord-poster";
@@ -10,12 +10,35 @@ import {
   hasGravestakeSyncState,
   setLastGravestakeBlockTime,
 } from "@/lib/nft-activity/gravestake-sync-state";
-import type { CollectionConfig } from "@/content/site";
+import { jsonRpc } from "@/lib/solana/bux-token-accounts";
+import { fetchOnChainNftMetadata } from "@/lib/solana/nft-metadata";
+import { getServerRpcUrlCandidates } from "@/lib/solana/rpc-url";
 
 const OVERLAP_SEC = 5 * 60;
 const INCREMENTAL_SIGNATURE_LIMIT = 25;
 const BACKFILL_PAGE_SIZE = 100;
 const BACKFILL_MAX_PAGES = 200;
+
+/** Prefer QuickNode / configured RPC; public next; Helius last (quota-sensitive). */
+function getGravestakeRpcCandidates(): string[] {
+  const all = getServerRpcUrlCandidates();
+  const preferred: string[] = [];
+  const publicRpc: string[] = [];
+  const helius: string[] = [];
+  for (const url of all) {
+    if (url.includes("helius-rpc.com")) {
+      helius.push(url);
+    } else if (url.includes("api.mainnet-beta.solana.com")) {
+      publicRpc.push(url);
+    } else {
+      preferred.push(url);
+    }
+  }
+  return [...preferred, ...publicRpc, ...helius];
+}
+
+/** Sticky URL for one sync run — once a candidate works, keep using it. */
+let stickyRpcUrl: string | null = null;
 
 type SignatureInfo = {
   signature: string;
@@ -38,9 +61,31 @@ function getLiveStakingCollections(): CollectionConfig[] {
   return collectionConfigs.filter((config) => config.stakeLive && config.stakingWallet);
 }
 
-async function heliusRpcStrict<T>(method: string, params: unknown): Promise<T> {
-  const result = await heliusRpc<T>(method, params);
-  return result as T;
+/** Standard Solana JSON-RPC with QuickNode / public / Helius failover — not DAS-dependent. */
+async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {
+  const candidates = getGravestakeRpcCandidates();
+  const ordered = stickyRpcUrl
+    ? [stickyRpcUrl, ...candidates.filter((url) => url !== stickyRpcUrl)]
+    : candidates;
+  let lastError: Error | null = null;
+
+  for (const url of ordered) {
+    try {
+      const result = await jsonRpc<T>(url, method, params);
+      stickyRpcUrl = url;
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (url === stickyRpcUrl) {
+        stickyRpcUrl = null;
+      }
+      if (url.includes("helius-rpc.com") && /429|max usage|rate limit|quota|HTTP 40[123]/i.test(lastError.message)) {
+        markHeliusKeyExhausted(url);
+      }
+    }
+  }
+
+  throw lastError ?? new Error("RPC unavailable");
 }
 
 async function fetchSignaturePage(
@@ -53,7 +98,7 @@ async function fetchSignaturePage(
     options.before = before;
   }
 
-  const result = await heliusRpcStrict<SignatureInfo[] | null>("getSignaturesForAddress", [
+  const result = await rpcCall<SignatureInfo[] | null>("getSignaturesForAddress", [
     poolWallet,
     options,
   ]);
@@ -86,19 +131,75 @@ async function fetchAllSignatures(poolWallet: string): Promise<SignatureInfo[]> 
 }
 
 async function fetchTransaction(signature: string): Promise<RpcTransaction | null> {
-  return heliusRpcStrict<RpcTransaction | null>("getTransaction", [
+  return rpcCall<RpcTransaction | null>("getTransaction", [
     signature,
     { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
   ]);
 }
 
+async function fetchAssetSoft(mint: string): Promise<DasAsset | null> {
+  try {
+    return await heliusRpc<DasAsset>("getAsset", { id: mint }, { softFail: true });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Confirm mint belongs to the pool's collection.
+ * Prefers DAS, then on-chain Metaplex metadata. If both are unavailable, allow —
+ * events are already scoped to that collection's GraveStake pool wallet.
+ */
 async function resolveCollectionForMint(
   mint: string,
   expectedCollectionMint: string,
 ): Promise<boolean> {
-  const asset = await fetchAsset(mint);
-  const collectionMint = asset?.grouping?.find((group) => group.group_key === "collection")?.group_value;
-  return collectionMint === expectedCollectionMint;
+  const asset = await fetchAssetSoft(mint);
+  const dasCollection = asset?.grouping?.find((group) => group.group_key === "collection")?.group_value;
+  if (dasCollection) {
+    return dasCollection === expectedCollectionMint;
+  }
+
+  try {
+    const onChain = await fetchOnChainNftMetadata([mint]);
+    const meta = onChain.get(mint);
+    if (meta?.collection) {
+      return meta.collection === expectedCollectionMint;
+    }
+  } catch {
+    // fall through — trust pool-scoped polling
+  }
+
+  return true;
+}
+
+async function resolveEmbedMeta(
+  config: CollectionConfig,
+  mint: string,
+): Promise<{ name: string; image: string | null }> {
+  const live = await fetchAssetSoft(mint);
+  let name = live?.content?.metadata?.name?.trim() || null;
+  let image = await resolveAssetImage(live);
+
+  if (!name || !image) {
+    try {
+      const onChain = await fetchOnChainNftMetadata([mint]);
+      const meta = onChain.get(mint);
+      if (!name && meta?.name) {
+        name = meta.name;
+      }
+      if (!image && meta?.uri) {
+        image = await resolveAssetImage({ content: { json_uri: meta.uri } });
+      }
+    } catch {
+      // post without image / generic name
+    }
+  }
+
+  return {
+    name: name || `${config.name} NFT`,
+    image,
+  };
 }
 
 async function processGravestakeEvent(
@@ -119,9 +220,7 @@ async function processGravestakeEvent(
     return "duplicate";
   }
 
-  const live = await fetchAsset(event.mint);
-  const name = live?.content?.metadata?.name?.trim() || `${config.name} NFT`;
-  const image = await resolveAssetImage(live);
+  const { name, image } = await resolveEmbedMeta(config, event.mint);
   const owner = event.eventType === "stake" ? config.stakingWallet ?? null : event.staker;
 
   const embed = await buildActivityEmbed(config, {
@@ -140,6 +239,8 @@ async function processGravestakeEvent(
 }
 
 export async function syncGravestakeActivity(): Promise<GravestakeActivitySyncResult> {
+  stickyRpcUrl = null;
+
   const result: GravestakeActivitySyncResult = {
     poolsPolled: 0,
     signaturesFetched: 0,
@@ -188,6 +289,9 @@ export async function syncGravestakeActivity(): Promise<GravestakeActivitySyncRe
           result.skipped += 1;
           continue;
         }
+
+        // Light pacing so public RPC fallback doesn't 429 mid-pool.
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         const tx = await fetchTransaction(entry.signature);
         if (!tx) {
