@@ -1,4 +1,4 @@
-import { fetchGraveMarketCollectionStats } from "@/lib/gravemarket";
+import { getCollectionWithStats } from "@/lib/collections";
 import {
   COLLECTION_CHOICE_MAP,
   getAdminRoleIds,
@@ -171,7 +171,9 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
     return { title: "Collection not found", color: 0xff4d4d };
   }
 
-  const stats = await fetchGraveMarketCollectionStats(config.id);
+  const stats = await getCollectionWithStats(config.id);
+  const marketSourceLabel =
+    stats?.marketSource === "magic-eden" ? "Magic Eden" : "GraveMarket";
 
   const marketFields = stats
     ? [
@@ -182,7 +184,7 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
         { name: "Listed", value: stats.listed, inline: true },
         { name: "% listed", value: stats.percentListed, inline: true },
       ]
-    : [{ name: "Market data", value: "GraveMarket stats unavailable right now.", inline: false }];
+    : [{ name: "Market data", value: "Market stats unavailable right now.", inline: false }];
 
   return {
     title: config.name,
@@ -190,7 +192,7 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
     ...collectionEmbedImage(config),
     thumbnail: { url: collectionLogoUrl(config.logo) },
     fields: marketFields,
-    footer: { text: "Market data · GraveMarket" },
+    footer: { text: `Market data · ${marketSourceLabel}` },
   };
 }
 
