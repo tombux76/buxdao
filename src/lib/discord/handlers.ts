@@ -27,6 +27,47 @@ import { buildNftEmbed } from "@/lib/discord/nft-embed";
 import { resolveImageFromJsonUri, resolveNftDisplay } from "@/lib/discord/helius";
 import { resolveNftOwnerAndStake } from "@/lib/discord/nft-ownership";
 import { saveCatalogEntries } from "@/lib/hub/collection-assets";
+import { fetchMagicEdenTokenImage } from "@/lib/magic-eden";
+
+/** Raw Arweave often has no Content-Type — Discord's image proxy drops those embeds. */
+function isDiscordHostileImageUrl(url: string): boolean {
+  return /arweave\.(net|dev)/i.test(url);
+}
+
+async function resolveEmbedImage(params: {
+  mint: string;
+  collectionId: string;
+  name: string;
+  image: string | null;
+  jsonUri?: string | null;
+}): Promise<string | null> {
+  let image = params.image;
+
+  if (!image && params.jsonUri) {
+    image = await resolveImageFromJsonUri(params.jsonUri);
+  }
+
+  if (!image || isDiscordHostileImageUrl(image)) {
+    const meImage = await fetchMagicEdenTokenImage(params.mint);
+    if (meImage) {
+      image = meImage;
+    }
+  }
+
+  if (image && params.jsonUri) {
+    void saveCatalogEntries([
+      {
+        mint: params.mint,
+        collectionId: params.collectionId,
+        name: params.name,
+        image,
+        jsonUri: params.jsonUri,
+      },
+    ]);
+  }
+
+  return image;
+}
 import {
   getInvokerId,
   getOptionInt,
@@ -105,22 +146,13 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
   const ownership = await resolveNftOwnerAndStake(config, mint, display);
   const owner = ownership.owner ?? indexed?.owner ?? null;
   const name = display.name || indexed?.name || `${config.name} #${tokenId}`;
-  let image = display.image ?? indexed?.image ?? null;
-  // BitBots / MM3D often lack DAS image links — resolve from catalog/on-chain json_uri.
-  if (!image && indexed?.jsonUri) {
-    image = await resolveImageFromJsonUri(indexed.jsonUri);
-    if (image) {
-      void saveCatalogEntries([
-        {
-          mint,
-          collectionId: config.id,
-          name,
-          image,
-          jsonUri: indexed.jsonUri,
-        },
-      ]);
-    }
-  }
+  const image = await resolveEmbedImage({
+    mint,
+    collectionId: config.id,
+    name,
+    image: display.image ?? indexed?.image ?? null,
+    jsonUri: indexed?.jsonUri,
+  });
 
   return buildNftCommandEmbed(config, {
     mint,
@@ -161,12 +193,18 @@ async function handleRank(subcommand: string, rank: number): Promise<APIEmbed> {
   const display = await resolveNftDisplay(howRare.mint);
   const ownership = await resolveNftOwnerAndStake(config, howRare.mint, display);
   const name = display.name || `${config.name} #${howRare.number}`;
+  const image = await resolveEmbedImage({
+    mint: howRare.mint,
+    collectionId: config.id,
+    name,
+    image: display.image,
+  });
 
   return buildNftCommandEmbed(config, {
     mint: howRare.mint,
     name,
     owner: ownership.owner,
-    image: display.image,
+    image,
     howRare,
     staked: config.stakingWallet ? ownership.staked : null,
   });

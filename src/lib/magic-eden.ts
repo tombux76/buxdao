@@ -50,6 +50,25 @@ export async function fetchMagicEdenCollection(
   return meFetch<MagicEdenCollection>(`/collections/${meSymbol}`);
 }
 
+type MagicEdenToken = {
+  image?: string;
+  properties?: { files?: { uri?: string; type?: string }[] };
+};
+
+/** CDN image for a mint (often Pinata) — Discord-friendly vs raw Arweave. */
+export async function fetchMagicEdenTokenImage(mint: string): Promise<string | null> {
+  const token = await meFetch<MagicEdenToken>(`/tokens/${encodeURIComponent(mint)}`);
+  const fromImage = token?.image?.trim();
+  if (fromImage && /^https?:\/\//i.test(fromImage)) {
+    return fromImage;
+  }
+  const fromFile = token?.properties?.files?.find((f) => f.uri?.trim())?.uri?.trim();
+  if (fromFile && /^https?:\/\//i.test(fromFile)) {
+    return fromFile;
+  }
+  return null;
+}
+
 export function lamportsToSol(lamports: number): number {
   return lamports / LAMPORTS_PER_SOL;
 }
