@@ -8,6 +8,7 @@ export type IndexedNft = {
   number: number | null;
   rank: number | null;
   image: string | null;
+  jsonUri: string | null;
   owner: string | null;
 };
 
@@ -62,6 +63,7 @@ function assetToIndexed(asset: DasAsset): IndexedNft | null {
     number: parseNftNumber(name),
     rank: parseRankFromAttributes(asset.content?.metadata?.attributes),
     image: asset.content?.links?.image ?? null,
+    jsonUri: asset.content?.json_uri?.trim() || null,
     owner: asset.ownership?.owner ?? null,
   };
 }
@@ -127,6 +129,7 @@ export async function lookupNftByNumber(
     number: tokenNumber,
     rank: null,
     image: cached.image,
+    jsonUri: cached.jsonUri,
     owner: null,
   };
 }

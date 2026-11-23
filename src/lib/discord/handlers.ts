@@ -24,8 +24,9 @@ import {
   solscanWalletUrl,
 } from "@/lib/discord/embed-types";
 import { buildNftEmbed } from "@/lib/discord/nft-embed";
-import { resolveNftDisplay } from "@/lib/discord/helius";
+import { resolveImageFromJsonUri, resolveNftDisplay } from "@/lib/discord/helius";
 import { resolveNftOwnerAndStake } from "@/lib/discord/nft-ownership";
+import { saveCatalogEntries } from "@/lib/hub/collection-assets";
 import {
   getInvokerId,
   getOptionInt,
@@ -104,7 +105,22 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
   const ownership = await resolveNftOwnerAndStake(config, mint, display);
   const owner = ownership.owner ?? indexed?.owner ?? null;
   const name = display.name || indexed?.name || `${config.name} #${tokenId}`;
-  const image = display.image ?? indexed?.image ?? null;
+  let image = display.image ?? indexed?.image ?? null;
+  // BitBots / MM3D often lack DAS image links — resolve from catalog/on-chain json_uri.
+  if (!image && indexed?.jsonUri) {
+    image = await resolveImageFromJsonUri(indexed.jsonUri);
+    if (image) {
+      void saveCatalogEntries([
+        {
+          mint,
+          collectionId: config.id,
+          name,
+          image,
+          jsonUri: indexed.jsonUri,
+        },
+      ]);
+    }
+  }
 
   return buildNftCommandEmbed(config, {
     mint,

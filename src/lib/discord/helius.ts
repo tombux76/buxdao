@@ -48,33 +48,125 @@ function metadataFetchCandidates(jsonUri: string): string[] {
   const candidates = [trimmed];
   // Arweave can be slow/flaky on the primary host — try a common gateway too.
   if (trimmed.startsWith("https://arweave.net/")) {
-    candidates.push(`https://arweave.dev/${trimmed.slice("https://arweave.net/".length)}`);
+    const id = trimmed.slice("https://arweave.net/".length).split(/[/?#]/)[0] ?? "";
+    if (id) {
+      candidates.push(`https://arweave.dev/${id}`);
+    }
   }
   return candidates;
 }
 
-async function fetchMetadataImage(jsonUri: string): Promise<string | null> {
-  const cached = METADATA_IMAGE_CACHE.get(jsonUri);
+function absoluteRedirectUrl(current: string, location: string): string {
+  if (location.startsWith("//")) {
+    return `https:${location}`;
+  }
+  if (location.startsWith("/")) {
+    return new URL(location, current).href;
+  }
+  return location;
+}
+
+/** Parse Arweave's JSON redirect body when Accept: application/json strips Location. */
+async function redirectUrlFromResponse(
+  current: string,
+  response: Response,
+): Promise<string | null> {
+  const header = response.headers.get("location");
+  if (header) {
+    return absoluteRedirectUrl(current, header);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("json") && !contentType.includes("text")) {
+    return null;
+  }
+  try {
+    const text = await response.text();
+    const fromJson = (() => {
+      try {
+        const payload = JSON.parse(text) as { body?: unknown };
+        return typeof payload.body === "string" ? payload.body : text;
+      } catch {
+        return text;
+      }
+    })();
+    const match = fromJson.match(/\/\/[^\s"'<>]+/);
+    return match ? absoluteRedirectUrl(current, match[0]!) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Node fetch often fails to follow Arweave's protocol-relative `Location: //…` redirects. */
+async function fetchFollowingRedirects(
+  url: string,
+  init?: RequestInit,
+): Promise<{ response: Response; finalUrl: string }> {
+  let current = url;
+  for (let hop = 0; hop < 5; hop += 1) {
+    const response = await fetch(current, { ...init, redirect: "manual" });
+    if (response.status < 300 || response.status >= 400) {
+      return { response, finalUrl: current };
+    }
+    const next = await redirectUrlFromResponse(current, response);
+    if (!next) {
+      return { response, finalUrl: current };
+    }
+    current = next;
+  }
+  throw new Error(`Too many redirects for ${url}`);
+}
+
+/** Prefer Arweave tx-subdomain URLs so Discord's image proxy can load them. */
+async function canonicalizeMediaUrl(url: string): Promise<string> {
+  if (!/^https:\/\/arweave\.net\//i.test(url)) {
+    return url;
+  }
+  try {
+    const { finalUrl } = await fetchFollowingRedirects(url, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(8_000),
+    });
+    return finalUrl || url;
+  } catch {
+    return url;
+  }
+}
+
+/** Resolve `image` from an off-chain metadata JSON URI (Arweave / IPFS / HTTPS). */
+export async function resolveImageFromJsonUri(jsonUri: string): Promise<string | null> {
+  const trimmed = jsonUri.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const cached = METADATA_IMAGE_CACHE.get(trimmed);
   if (cached !== undefined) {
     return cached;
   }
 
-  for (const url of metadataFetchCandidates(jsonUri)) {
+  for (const url of metadataFetchCandidates(trimmed)) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
-      const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+      // Avoid Accept: application/json — arweave.net then returns a JSON 302 without Location.
+      const { response } = await fetchFollowingRedirects(url, {
+        signal: controller.signal,
+        cache: "no-store",
+        headers: { Accept: "*/*" },
+      });
       if (!response.ok) {
         continue;
       }
 
       const metadata = (await response.json()) as { image?: unknown };
-      const image =
+      const rawImage =
         typeof metadata.image === "string" && metadata.image.trim()
           ? normalizeImageUrl(metadata.image)
           : null;
-      if (image) {
-        METADATA_IMAGE_CACHE.set(jsonUri, image);
+      if (rawImage) {
+        const image = await canonicalizeMediaUrl(rawImage);
+        METADATA_IMAGE_CACHE.set(trimmed, image);
         return image;
       }
     } catch {
@@ -84,7 +176,7 @@ async function fetchMetadataImage(jsonUri: string): Promise<string | null> {
     }
   }
 
-  METADATA_IMAGE_CACHE.set(jsonUri, null);
+  METADATA_IMAGE_CACHE.set(trimmed, null);
   return null;
 }
 
@@ -104,7 +196,7 @@ export async function resolveAssetImage(asset: DasAsset | null | undefined): Pro
     return null;
   }
 
-  return fetchMetadataImage(jsonUri);
+  return resolveImageFromJsonUri(jsonUri);
 }
 
 /** Soft-fail DAS lookup — never throws when Helius is out of credits. */
