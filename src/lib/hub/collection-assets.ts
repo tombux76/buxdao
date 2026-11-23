@@ -158,3 +158,85 @@ export async function loadCachedCollectionIds(): Promise<Set<string>> {
     return new Set();
   }
 }
+
+function parseTokenNumberFromName(name: string): number | null {
+  const match = name.match(/#\s*(\d+)\s*$/);
+  if (match) {
+    return Number.parseInt(match[1]!, 10);
+  }
+  // e.g. Magic Eden "Celeb cat 61"
+  const trailing = name.match(/(?:^|[\s_-])(\d+)\s*$/);
+  if (trailing) {
+    return Number.parseInt(trailing[1]!, 10);
+  }
+  return null;
+}
+
+/** Discord `/nft` fallback when Helius DAS indexing is empty or down. */
+export async function lookupCollectionAssetByNumber(
+  collectionId: string,
+  tokenNumber: number,
+): Promise<CachedCollectionAsset | null> {
+  if (!Number.isFinite(tokenNumber) || tokenNumber <= 0) {
+    return null;
+  }
+  try {
+    await ensureTable();
+    const { rows } = await getPool().query<{
+      mint: string;
+      collection_id: string;
+      name: string;
+      image: string | null;
+      json_uri: string | null;
+    }>(
+      `SELECT mint, collection_id, name, image, json_uri
+       FROM collection_assets
+       WHERE collection_id = $1
+         AND name LIKE $2`,
+      [collectionId, `%#${tokenNumber}%`],
+    );
+    for (const row of rows) {
+      if (parseTokenNumberFromName(row.name) !== tokenNumber) {
+        continue;
+      }
+      return {
+        mint: row.mint,
+        collectionId: row.collection_id,
+        name: row.name,
+        image: row.image,
+        jsonUri: row.json_uri,
+      };
+    }
+
+    // Names without "#" (rare ME-style labels)
+    const { rows: loose } = await getPool().query<{
+      mint: string;
+      collection_id: string;
+      name: string;
+      image: string | null;
+      json_uri: string | null;
+    }>(
+      `SELECT mint, collection_id, name, image, json_uri
+       FROM collection_assets
+       WHERE collection_id = $1
+         AND name ~ ('(^|[[:space:]_-])' || $2::text || '[[:space:]]*$')`,
+      [collectionId, String(tokenNumber)],
+    );
+    for (const row of loose) {
+      if (parseTokenNumberFromName(row.name) !== tokenNumber) {
+        continue;
+      }
+      return {
+        mint: row.mint,
+        collectionId: row.collection_id,
+        name: row.name,
+        image: row.image,
+        jsonUri: row.json_uri,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("[collection-assets] lookup by number failed:", error);
+    return null;
+  }
+}

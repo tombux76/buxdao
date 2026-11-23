@@ -62,7 +62,7 @@ export async function resolveNftOwnerAndStake(
   let owner = known?.owner?.trim() || null;
   let delegate = known?.delegate?.trim() || null;
 
-  // Refresh from RPC when owner is missing, or when we still need a delegate check.
+  // RPC when DAS omitted owner (needed for truncated-wallet embed) or delegate (stake check).
   if (!owner || (poolLower && !delegate)) {
     const rpc = await fetchMintTokenOwnership(mint);
     if (rpc) {

@@ -1,5 +1,6 @@
 import { getCollectionConfig } from "@/lib/discord/config";
 import { type DasAsset, fetchAssetsByGroup } from "@/lib/discord/helius";
+import { lookupCollectionAssetByNumber } from "@/lib/hub/collection-assets";
 
 export type IndexedNft = {
   mint: string;
@@ -19,8 +20,15 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const indexCache = new Map<string, { expiresAt: number; index: CollectionIndex }>();
 
 function parseNftNumber(name: string): number | null {
-  const match = name.match(/#\s*(\d+)\s*$/);
-  return match ? Number.parseInt(match[1], 10) : null;
+  const hash = name.match(/#\s*(\d+)\s*$/);
+  if (hash) {
+    return Number.parseInt(hash[1]!, 10);
+  }
+  const trailing = name.match(/(?:^|[\s_-])(\d+)\s*$/);
+  if (trailing) {
+    return Number.parseInt(trailing[1]!, 10);
+  }
+  return null;
 }
 
 function parseRankFromAttributes(
@@ -85,14 +93,17 @@ async function buildCollectionIndex(collectionId: string): Promise<CollectionInd
 }
 
 /** In-memory cache per warm instance (~1h). Used by `/nft` and `/rank`. */
-export async function getCollectionIndex(collectionId: string): Promise<CollectionIndex> {
+async function getCollectionIndex(collectionId: string): Promise<CollectionIndex> {
   const cached = indexCache.get(collectionId);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.index;
   }
 
   const index = await buildCollectionIndex(collectionId);
-  indexCache.set(collectionId, { expiresAt: Date.now() + CACHE_TTL_MS, index });
+  // Never cache an empty DAS scan — softFail often returns [] when Helius is out of credits.
+  if (index.byNumber.size > 0 || index.byRank.size > 0) {
+    indexCache.set(collectionId, { expiresAt: Date.now() + CACHE_TTL_MS, index });
+  }
   return index;
 }
 
@@ -101,7 +112,23 @@ export async function lookupNftByNumber(
   tokenNumber: number,
 ): Promise<IndexedNft | null> {
   const index = await getCollectionIndex(collectionId);
-  return index.byNumber.get(tokenNumber) ?? null;
+  const fromDas = index.byNumber.get(tokenNumber);
+  if (fromDas) {
+    return fromDas;
+  }
+
+  const cached = await lookupCollectionAssetByNumber(collectionId, tokenNumber);
+  if (!cached) {
+    return null;
+  }
+  return {
+    mint: cached.mint,
+    name: cached.name,
+    number: tokenNumber,
+    rank: null,
+    image: cached.image,
+    owner: null,
+  };
 }
 
 export async function lookupNftByRank(

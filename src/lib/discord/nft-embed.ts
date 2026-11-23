@@ -33,12 +33,21 @@ const EVENT_LABELS: Record<NftActivityEventType, string> = {
 };
 
 export async function formatWalletField(wallet: string): Promise<string> {
-  const discordUsername = await lookupDiscordUsernameByWallet(wallet);
-  if (discordUsername) {
-    return `@${discordUsername.replace(/^@/, "")}`;
+  const trimmed = wallet.trim();
+  if (!trimmed) {
+    return "—";
   }
-  const label = shortWallet(wallet);
-  return `[${label}](${solscanWalletUrl(wallet)})`;
+  const label = shortWallet(trimmed);
+  const truncated = `[${label}](${solscanWalletUrl(trimmed)})`;
+  try {
+    const discordUsername = await lookupDiscordUsernameByWallet(trimmed);
+    if (discordUsername?.trim()) {
+      return `@${discordUsername.replace(/^@/, "").trim()}`;
+    }
+  } catch {
+    // Hub username lookup is optional — always fall back to truncated wallet.
+  }
+  return truncated;
 }
 
 async function resolveHowRareEntry(
