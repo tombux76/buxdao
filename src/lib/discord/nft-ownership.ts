@@ -1,5 +1,8 @@
 import type { CollectionConfig } from "@/content/site";
-import { lookupGravestakePositionByMint } from "@/lib/gravestake";
+import {
+  fetchGravestakeWalletPositions,
+  lookupGravestakePositionByMint,
+} from "@/lib/gravestake";
 import { withServerConnection } from "@/lib/solana/server-rpc";
 import { PublicKey } from "@solana/web3.js";
 
@@ -38,8 +41,8 @@ async function fetchMintTokenOwnership(mint: string): Promise<TokenOwnership | n
 
 /**
  * Resolve display owner + GraveStake status for Discord `/nft` and `/rank`.
- * Soft-stake: token stays in user wallet with pool as delegate.
- * Hard-stake: token owner is the pool wallet — prefer GraveStake position owner.
+ * Prefer GraveStake position (source of truth) — DAS often omits delegate when
+ * soft-staked, and RPC can fail while positions still know the staker.
  */
 export async function resolveNftOwnerAndStake(
   config: CollectionConfig,
@@ -49,27 +52,49 @@ export async function resolveNftOwnerAndStake(
   const pool = config.stakingWallet?.trim() || null;
   const poolLower = pool?.toLowerCase() ?? null;
 
+  if (pool) {
+    const position = await lookupGravestakePositionByMint(pool, mint);
+    if (position?.owner) {
+      return { owner: position.owner, staked: true };
+    }
+  }
+
   let owner = known?.owner?.trim() || null;
   let delegate = known?.delegate?.trim() || null;
 
-  if (!owner) {
+  // Refresh from RPC when owner is missing, or when we still need a delegate check.
+  if (!owner || (poolLower && !delegate)) {
     const rpc = await fetchMintTokenOwnership(mint);
     if (rpc) {
-      owner = rpc.owner;
-      delegate = rpc.delegate ?? delegate;
+      owner = owner ?? rpc.owner;
+      delegate = delegate ?? rpc.delegate;
     }
   }
 
   if (poolLower && owner?.toLowerCase() === poolLower) {
-    const position = await lookupGravestakePositionByMint(pool!, mint);
-    return {
-      owner: position?.owner ?? null,
-      staked: true,
-    };
+    // Hard custody — position list can miss rows past the API cap.
+    return { owner: null, staked: true };
   }
 
-  return {
-    owner,
-    staked: Boolean(poolLower && delegate?.toLowerCase() === poolLower),
-  };
+  if (poolLower && delegate?.toLowerCase() === poolLower) {
+    return { owner, staked: true };
+  }
+
+  // Soft-stake can be missing from the capped pool list; wallet positions are complete.
+  if (poolLower && owner) {
+    try {
+      const positions = await fetchGravestakeWalletPositions(owner);
+      const hit = positions.find(
+        (row) =>
+          row.asset_mint === mint && row.pool_pubkey.toLowerCase() === poolLower,
+      );
+      if (hit) {
+        return { owner, staked: true };
+      }
+    } catch {
+      // keep chain answer
+    }
+  }
+
+  return { owner, staked: false };
 }

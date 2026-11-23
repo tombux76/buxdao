@@ -11,10 +11,11 @@ function addUnique(urls: string[], url: string | undefined): void {
 export function getServerRpcUrlCandidates(): string[] {
   const urls: string[] = [];
 
-  // Public first for reliability — QuikNode has been flaky and Helius keys often 429.
-  addUnique(urls, "https://api.mainnet-beta.solana.com");
+  // Prefer configured RPC first (QuickNode / dedicated) — public often rate-limits
+  // getTokenLargestAccounts which Discord ownership fallbacks need.
   addUnique(urls, process.env.SOLANA_RPC_URL);
   addUnique(urls, process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
+  addUnique(urls, "https://api.mainnet-beta.solana.com");
 
   for (const heliusUrl of getHeliusRpcUrlCandidates()) {
     addUnique(urls, heliusUrl);
