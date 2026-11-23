@@ -1,5 +1,6 @@
 import { collectionConfigs } from "@/content/site";
 import { fetchGraveMarketFloorSol } from "@/lib/gravemarket";
+import { fetchOrbisFloorSol } from "@/lib/orbis";
 import { getWalletIdentityMaps } from "@/lib/bux/discord";
 import { buildRawHolders, isHiddenWallet } from "@/lib/bux/helius-holders";
 import { fetchTokenMetrics } from "@/lib/bux/metrics";
@@ -35,6 +36,10 @@ function formatValue(sol: number, usd: number): string {
 async function getFloorPrices(): Promise<Record<string, number>> {
   const entries = await Promise.all(
     collectionConfigs.map(async (config) => {
+      const orbis = await fetchOrbisFloorSol(config.collectionMint);
+      if (orbis != null && orbis > 0) {
+        return [config.id, orbis] as const;
+      }
       const floor = await fetchGraveMarketFloorSol(config.id);
       return [config.id, floor ?? 0] as const;
     }),

@@ -227,7 +227,11 @@ async function handleCollections(choice: string): Promise<APIEmbed> {
 
   const stats = await getCollectionWithStats(config.id);
   const marketSourceLabel =
-    stats?.marketSource === "magic-eden" ? "Magic Eden" : "GraveMarket";
+    stats?.marketSource === "orbis"
+      ? "Orbis"
+      : stats?.marketSource === "magic-eden"
+        ? "Magic Eden"
+        : "GraveMarket";
 
   const marketFields = stats
     ? [
