@@ -180,3 +180,71 @@ export async function fetchGravestakeWalletPositions(
     return cached?.positions ?? [];
   }
 }
+
+export type GravestakeMintPosition = {
+  owner: string;
+  softStaked: boolean;
+};
+
+type PoolPositionsCacheEntry = {
+  at: number;
+  byMint: Map<string, GravestakeMintPosition>;
+};
+
+const poolPositionsCache = new Map<string, PoolPositionsCacheEntry>();
+const POOL_POSITIONS_TTL_MS = 120_000;
+
+/**
+ * Open positions for a pool keyed by asset mint.
+ * API currently returns up to ~500 rows — use as a best-effort hard-stake owner lookup.
+ */
+async function fetchPoolPositionsByMint(
+  poolPubkey: string,
+): Promise<Map<string, GravestakeMintPosition>> {
+  const cacheKey = poolPubkey.toLowerCase();
+  const cached = poolPositionsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < POOL_POSITIONS_TTL_MS) {
+    return cached.byMint;
+  }
+
+  try {
+    const res = await fetch(
+      `${GRAVESTAKE_API}/gravestake/pools/${encodeURIComponent(poolPubkey)}/positions`,
+      { cache: "no-store", signal: AbortSignal.timeout(15_000) },
+    );
+    if (!res.ok) {
+      return cached?.byMint ?? new Map();
+    }
+    const data = (await res.json()) as {
+      positions?: Array<{
+        owner?: string;
+        asset_mint?: string;
+        soft_staked?: boolean;
+        closed_at?: string | null;
+      }>;
+    };
+    const byMint = new Map<string, GravestakeMintPosition>();
+    for (const row of data.positions ?? []) {
+      if (!row.asset_mint || !row.owner || row.closed_at) {
+        continue;
+      }
+      byMint.set(row.asset_mint, {
+        owner: row.owner,
+        softStaked: Boolean(row.soft_staked),
+      });
+    }
+    poolPositionsCache.set(cacheKey, { at: Date.now(), byMint });
+    return byMint;
+  } catch {
+    return cached?.byMint ?? new Map();
+  }
+}
+
+/** Best-effort open position for a mint in one of our GraveStake pools. */
+export async function lookupGravestakePositionByMint(
+  poolPubkey: string,
+  mint: string,
+): Promise<GravestakeMintPosition | null> {
+  const byMint = await fetchPoolPositionsByMint(poolPubkey);
+  return byMint.get(mint) ?? null;
+}

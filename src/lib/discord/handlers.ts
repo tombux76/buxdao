@@ -25,6 +25,7 @@ import {
 } from "@/lib/discord/embed-types";
 import { buildNftEmbed } from "@/lib/discord/nft-embed";
 import { resolveNftDisplay } from "@/lib/discord/helius";
+import { resolveNftOwnerAndStake } from "@/lib/discord/nft-ownership";
 import {
   getInvokerId,
   getOptionInt,
@@ -70,9 +71,13 @@ async function buildNftCommandEmbed(
     owner: string | null;
     image: string | null;
     howRare?: HowRareNft | null;
+    staked?: boolean | null;
   },
 ): Promise<APIEmbed> {
-  return buildNftEmbed(config, params);
+  return buildNftEmbed(config, {
+    ...params,
+    staked: params.staked ?? (config.stakingWallet ? false : null),
+  });
 }
 
 async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed> {
@@ -96,7 +101,8 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
   }
 
   const display = await resolveNftDisplay(mint);
-  const owner = display.owner ?? indexed?.owner ?? null;
+  const ownership = await resolveNftOwnerAndStake(config, mint, display);
+  const owner = ownership.owner ?? indexed?.owner ?? null;
   const name = display.name || indexed?.name || `${config.name} #${tokenId}`;
   const image = display.image ?? indexed?.image ?? null;
 
@@ -106,6 +112,7 @@ async function handleNft(subcommand: string, tokenId: number): Promise<APIEmbed>
     owner,
     image,
     howRare: howRare ?? undefined,
+    staked: config.stakingWallet ? ownership.staked : null,
   });
 }
 
@@ -136,14 +143,16 @@ async function handleRank(subcommand: string, rank: number): Promise<APIEmbed> {
   }
 
   const display = await resolveNftDisplay(howRare.mint);
+  const ownership = await resolveNftOwnerAndStake(config, howRare.mint, display);
   const name = display.name || `${config.name} #${howRare.number}`;
 
   return buildNftCommandEmbed(config, {
     mint: howRare.mint,
     name,
-    owner: display.owner,
+    owner: ownership.owner,
     image: display.image,
     howRare,
+    staked: config.stakingWallet ? ownership.staked : null,
   });
 }
 

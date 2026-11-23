@@ -3,7 +3,12 @@ import { fetchOnChainNftMetadata } from "@/lib/solana/nft-metadata";
 
 export type DasAsset = {
   id?: string;
-  ownership?: { owner?: string };
+  ownership?: {
+    owner?: string;
+    delegate?: string | null;
+    delegated?: boolean;
+    frozen?: boolean;
+  };
   content?: {
     metadata?: { name?: string; attributes?: { trait_type?: string; value?: string | number }[] };
     links?: { image?: string };
@@ -115,14 +120,20 @@ export async function fetchAsset(mint: string): Promise<DasAsset | null> {
 export async function resolveNftDisplay(
   mint: string,
   asset?: DasAsset | null,
-): Promise<{ name: string | null; image: string | null; owner: string | null }> {
+): Promise<{
+  name: string | null;
+  image: string | null;
+  owner: string | null;
+  delegate: string | null;
+}> {
   const live = asset === undefined ? await fetchAsset(mint) : asset;
   let name = live?.content?.metadata?.name?.trim() || null;
   let image = await resolveAssetImage(live);
   const owner = live?.ownership?.owner?.trim() || null;
+  const delegate = live?.ownership?.delegate?.trim() || null;
 
   if (name && image) {
-    return { name, image, owner };
+    return { name, image, owner, delegate };
   }
 
   try {
@@ -138,7 +149,7 @@ export async function resolveNftDisplay(
     // keep whatever we have
   }
 
-  return { name, image, owner };
+  return { name, image, owner, delegate };
 }
 
 export async function fetchAssetsByGroup(collectionMint: string): Promise<DasAsset[]> {

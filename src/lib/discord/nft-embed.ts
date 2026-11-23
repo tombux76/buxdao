@@ -6,6 +6,7 @@ import {
   graveMarketNftUrl,
   hexColorToEmbed,
   shortWallet,
+  solscanNftUrl,
   solscanTxUrl,
   solscanWalletUrl,
 } from "@/lib/discord/embed-types";
@@ -66,14 +67,25 @@ export async function buildNftEmbed(
     owner: string | null;
     image: string | null;
     howRare?: HowRareNft | null;
+    staked?: boolean | null;
     footerSuffix?: string;
   },
 ): Promise<APIEmbed> {
   const howRare = await resolveHowRareEntry(config.id, params.mint, params.howRare);
+  const mintLabel = shortWallet(params.mint);
   const fields = [
-    { name: "Mint", value: `\`${params.mint}\``, inline: false },
-    ...(params.owner ? [{ name: "Owner", value: await formatWalletField(params.owner), inline: true }] : []),
+    {
+      name: "Mint",
+      value: `[${mintLabel}](${solscanNftUrl(params.mint)})`,
+      inline: true,
+    },
+    ...(params.owner
+      ? [{ name: "Owner", value: await formatWalletField(params.owner), inline: true }]
+      : []),
     ...(howRare ? [{ name: "Rank", value: `#${howRare.rank}`, inline: true }] : []),
+    ...(params.staked != null
+      ? [{ name: "Staked", value: params.staked ? "✅" : "❌", inline: true }]
+      : []),
   ];
 
   const footerText = params.footerSuffix ? `BUXDAO · ${params.footerSuffix}` : "BUXDAO · GraveMarket";
@@ -146,7 +158,11 @@ export async function buildActivityEmbed(
     ...(params.priceLamports != null && params.priceLamports > 0
       ? [{ name: "Price", value: `${formatSol(params.priceLamports / 1e9)} SOL`, inline: true }]
       : []),
-    { name: "Mint", value: `\`${params.mint}\``, inline: false },
+    {
+      name: "Mint",
+      value: `[${shortWallet(params.mint)}](${solscanNftUrl(params.mint)})`,
+      inline: true,
+    },
   ];
 
   if (params.seller) {
