@@ -20,7 +20,7 @@ export default async function CollectionsPage() {
       <SectionHeader
         eyebrow="Collections"
         title="5 main NFT families"
-        description="Showcase powered by GraveMarket — buy and sell on their marketplace."
+        description="Recommended marketplaces — OrbisOnSol and GraveMarket."
       />
       <div className="flex flex-col gap-4">
         {collections.map((collection) => (

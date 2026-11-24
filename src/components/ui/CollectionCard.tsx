@@ -59,20 +59,36 @@ export function CollectionCard({ collection }: CollectionCardProps) {
               <h3 className="text-xl font-semibold sm:text-2xl">{collection.name}</h3>
               <p className="font-mono text-xs text-muted">{collection.id}</p>
             </div>
-            <a
-              href={collection.graveMarketUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Trade ${collection.name} on GraveMarket`}
-              className="tile-border shrink-0 overflow-hidden rounded-xl bg-bg-deep/80 px-2 py-1 transition hover:scale-[1.02]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/brand/gravemarket.png"
-                alt="GraveMarket"
-                className="h-9 w-auto max-w-full rounded-md object-contain sm:h-10"
-              />
-            </a>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <a
+                href={collection.orbisUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Trade ${collection.name} on Orbis`}
+                className="tile-border overflow-hidden rounded-xl bg-bg-deep/80 px-2 py-1 transition hover:scale-[1.02]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/brand/orbis.png"
+                  alt="Orbis"
+                  className="h-9 w-auto max-w-full rounded-md object-contain sm:h-10"
+                />
+              </a>
+              <a
+                href={collection.graveMarketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Trade ${collection.name} on GraveMarket`}
+                className="tile-border overflow-hidden rounded-xl bg-bg-deep/80 px-2 py-1 transition hover:scale-[1.02]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/brand/gravemarket.png"
+                  alt="GraveMarket"
+                  className="h-9 w-auto max-w-full rounded-md object-contain sm:h-10"
+                />
+              </a>
+            </div>
           </div>
 
           <StatRow

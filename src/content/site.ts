@@ -128,6 +128,7 @@ export type CollectionConfig = {
   logo: string;
   accent: string;
   gif: string;
+  orbisUrl: string;
   graveMarketUrl: string;
   graveStakeUrl: string;
   stakeLive: boolean;
@@ -150,6 +151,7 @@ export const collectionConfigs: CollectionConfig[] = [
     logo: "/collections/cat.PNG",
     accent: "#FFF44D",
     gif: "/gifs/catz.gif",
+    orbisUrl: "https://www.orbisonsol.io/marketplace/fcked-catz",
     graveMarketUrl: "https://gravemarket.io/collection/fcked-catz",
     graveStakeUrl: "https://gravestake.io/p/fcked-catz",
     stakeLive: true,
@@ -165,6 +167,7 @@ export const collectionConfigs: CollectionConfig[] = [
     logo: "/collections/monster.PNG",
     accent: "#4DFFFF",
     gif: "/gifs/mm.gif",
+    orbisUrl: "https://www.orbisonsol.io/marketplace/money-monsters",
     graveMarketUrl: "https://gravemarket.io/collection/money-monsters",
     graveStakeUrl: "https://gravestake.io/p/money-monsters",
     stakeLive: true,
@@ -180,6 +183,7 @@ export const collectionConfigs: CollectionConfig[] = [
     logo: "/collections/bot.PNG",
     accent: "#FF4D4D",
     gif: "/gifs/bitbot.gif",
+    orbisUrl: "https://www.orbisonsol.io/marketplace/ai-bitbots",
     graveMarketUrl: "https://gravemarket.io/collection/ai-bitbots",
     graveStakeUrl: "https://gravestake.io/p/ai-bitbots",
     stakeLive: true,
@@ -195,6 +199,7 @@ export const collectionConfigs: CollectionConfig[] = [
     logo: "/collections/monster.PNG",
     accent: "#4DFF4D",
     gif: "/gifs/mm3d.gif",
+    orbisUrl: "https://www.orbisonsol.io/marketplace/money-monsters-3d",
     graveMarketUrl: "https://gravemarket.io/collection/money-monsters-3d",
     graveStakeUrl: "https://gravestake.io/p/money-monsters-3d",
     stakeLive: true,
@@ -210,6 +215,7 @@ export const collectionConfigs: CollectionConfig[] = [
     logo: "/collections/celeb.PNG",
     accent: "#FF4DFF",
     gif: "/gifs/celebs.gif",
+    orbisUrl: "https://www.orbisonsol.io/marketplace/celebrity-catz",
     graveMarketUrl: "https://gravemarket.io/collection/celebrity-catz",
     graveStakeUrl: "https://gravestake.io/p/celebrity-catz",
     stakeLive: true,
