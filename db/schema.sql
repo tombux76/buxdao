@@ -415,6 +415,12 @@ CREATE TABLE IF NOT EXISTS gravemarket_activity_sync_state (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS orbis_activity_sync_state (
+  collection_slug TEXT PRIMARY KEY,
+  last_event_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS gravestake_activity_sync_state (
   collection_slug TEXT PRIMARY KEY,
   last_block_time TIMESTAMPTZ NOT NULL DEFAULT now(),

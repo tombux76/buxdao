@@ -127,6 +127,8 @@ export function formatMarketplaceLabel(source: string | null | undefined): strin
     FORM_FUNCTION: "Formfunction",
     METAPLEX: "Metaplex",
     GRAVE_MARKET: "GraveMarket",
+    ORBIS: "Orbis",
+    GOTM: "Orbis",
     PHANTOM: "Phantom",
     SYSTEM_PROGRAM: "Wallet",
   };
