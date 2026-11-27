@@ -23,7 +23,7 @@ import {
   DiscordLoginButton,
   HubWalletButton,
 } from "@/components/hub/ProfileConnectActions";
-import { getLatestBlockhashForWallet } from "@/lib/solana/browser-rpc";
+import { getLatestBlockhashDetailsForWallet } from "@/lib/solana/browser-rpc";
 import { prizeDrawContent, site } from "@/content/site";
 
 type Checklist = {
@@ -255,7 +255,7 @@ export function PrizeDrawPage() {
       }
       transaction.add(createTransferInstruction(fromAta, toAta, owner, amountRaw));
 
-      const blockhash = await getLatestBlockhashForWallet();
+      const { blockhash, lastValidBlockHeight } = await getLatestBlockhashDetailsForWallet();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = owner;
 
@@ -268,6 +268,21 @@ export function PrizeDrawPage() {
         );
       } catch {
         // ignore
+      }
+
+      // Wait for the signed tx to land before confirm — otherwise verify often
+      // races a dropped/expired blockhash and the UI looks like "nothing happened".
+      try {
+        await connection.confirmTransaction(
+          { signature, blockhash, lastValidBlockHeight },
+          "confirmed",
+        );
+      } catch (confirmErr) {
+        throw new Error(
+          `Wallet signed but the EMPIRE transfer did not confirm on-chain (${
+            confirmErr instanceof Error ? confirmErr.message : "unknown"
+          }). Check the prize wallet on Solscan before retrying — do not assume tokens moved.`,
+        );
       }
 
       setDrawStep("confirming");
@@ -343,6 +358,13 @@ export function PrizeDrawPage() {
         setError("Timed out picking a winner — try again in a moment");
       } else {
         setError(err instanceof Error ? err.message : "Draw failed");
+      }
+      // Refresh winners even on failure — confirm may have recorded the draw
+      // while Discord/RPC still returned an error to the browser.
+      try {
+        await loadStatus();
+      } catch {
+        // ignore
       }
     } finally {
       setDrawStep("idle");

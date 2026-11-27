@@ -23,8 +23,19 @@ async function browserRpc<T>(method: string, params: unknown[] = []): Promise<T>
 }
 
 export async function getLatestBlockhashForWallet(): Promise<string> {
-  const result = await browserRpc<{ value: { blockhash: string } }>("getLatestBlockhash", [
-    { commitment: "confirmed" },
-  ]);
-  return result.value.blockhash;
+  const { blockhash } = await getLatestBlockhashDetailsForWallet();
+  return blockhash;
+}
+
+export async function getLatestBlockhashDetailsForWallet(): Promise<{
+  blockhash: string;
+  lastValidBlockHeight: number;
+}> {
+  const result = await browserRpc<{
+    value: { blockhash: string; lastValidBlockHeight: number };
+  }>("getLatestBlockhash", [{ commitment: "confirmed" }]);
+  return {
+    blockhash: result.value.blockhash,
+    lastValidBlockHeight: result.value.lastValidBlockHeight,
+  };
 }

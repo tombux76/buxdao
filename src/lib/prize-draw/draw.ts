@@ -203,14 +203,22 @@ async function recordAndAnnounceDraw(params: {
       },
     };
     if (!row.discord_announced_at) {
-      await announcePrizeDrawWithRetries({
-        winnerDiscordUsername: result.winner.discordUsername,
-        payoutWallet: result.winner.payoutWallet,
-        prizeUsdValue: result.prizeUsdValue,
-        txSignature: params.txSignature,
-        eligiblePoolSize: result.eligiblePoolSize,
-      });
-      await markDiscordAnnounced(params.txSignature);
+      // Never fail a recorded draw because Discord is down — announce best-effort.
+      try {
+        await announcePrizeDrawWithRetries({
+          winnerDiscordUsername: result.winner.discordUsername,
+          payoutWallet: result.winner.payoutWallet,
+          prizeUsdValue: result.prizeUsdValue,
+          txSignature: params.txSignature,
+          eligiblePoolSize: result.eligiblePoolSize,
+        });
+        await markDiscordAnnounced(params.txSignature);
+      } catch (error) {
+        console.error(
+          "[prize-draw] Discord announce skipped after DB record:",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
     return result;
   }
@@ -262,14 +270,22 @@ async function recordAndAnnounceDraw(params: {
     client.release();
   }
 
-  await announcePrizeDrawWithRetries({
-    winnerDiscordUsername: params.pending.winner_discord_username ?? params.pending.payout_wallet,
-    payoutWallet: params.pending.payout_wallet,
-    prizeUsdValue,
-    txSignature: params.txSignature,
-    eligiblePoolSize: params.pending.eligible_pool_size,
-  });
-  await markDiscordAnnounced(params.txSignature);
+  // DB is committed — Discord must not roll back the UI success path.
+  try {
+    await announcePrizeDrawWithRetries({
+      winnerDiscordUsername: params.pending.winner_discord_username ?? params.pending.payout_wallet,
+      payoutWallet: params.pending.payout_wallet,
+      prizeUsdValue,
+      txSignature: params.txSignature,
+      eligiblePoolSize: params.pending.eligible_pool_size,
+    });
+    await markDiscordAnnounced(params.txSignature);
+  } catch (error) {
+    console.error(
+      "[prize-draw] Discord announce failed after recording draw:",
+      error instanceof Error ? error.message : error,
+    );
+  }
 
   return {
     drawId,
@@ -389,14 +405,21 @@ export async function confirmPrizeDraw(params: {
       },
     };
     if (!row.discord_announced_at) {
-      await announcePrizeDrawWithRetries({
-        winnerDiscordUsername: result.winner.discordUsername,
-        payoutWallet: result.winner.payoutWallet,
-        prizeUsdValue: result.prizeUsdValue,
-        txSignature: params.txSignature,
-        eligiblePoolSize: result.eligiblePoolSize,
-      });
-      await markDiscordAnnounced(params.txSignature);
+      try {
+        await announcePrizeDrawWithRetries({
+          winnerDiscordUsername: result.winner.discordUsername,
+          payoutWallet: result.winner.payoutWallet,
+          prizeUsdValue: result.prizeUsdValue,
+          txSignature: params.txSignature,
+          eligiblePoolSize: result.eligiblePoolSize,
+        });
+        await markDiscordAnnounced(params.txSignature);
+      } catch (error) {
+        console.error(
+          "[prize-draw] Discord announce skipped for existing draw:",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
     return result;
   }
